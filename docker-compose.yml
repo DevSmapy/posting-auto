@@ -1,0 +1,75 @@
+name: posting-auto
+
+# n8n / ollama 는 이미 외장 드라이브에서 별도 컨테이너로 운영 중.
+# 이 Compose는 MVP 보조 서비스(postgres, browserless)만 올린다.
+# (전체 스택이 필요하면 profiles: full 사용)
+#
+# 경로 기본값:
+#   WD_BLACK  → postgres / n8n 데이터, 일반 이미지(tar)
+#   Extreme SSD → ollama 이미지(tar) · 모델 데이터
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-n8n}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-n8n}
+    volumes:
+      - "${POSTGRES_DATA_PATH:-/Volumes/WD_BLACK/Careers/DockerData/posting-auto/postgres}:/var/lib/postgresql/data"
+      - ./init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-n8n} -d ${POSTGRES_DB:-n8n}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  browserless:
+    image: ghcr.io/browserless/chromium:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      CONCURRENT: 5
+      TIMEOUT: 60000
+
+  # --- optional full stack (기존 n8n/ollama 없을 때만) ---
+  ollama:
+    profiles: ["full"]
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - "${OLLAMA_DATA_PATH:-/Volumes/Extreme SSD/DockerData/ollama_data}:/root/.ollama"
+    environment:
+      OLLAMA_HOST: 0.0.0.0
+
+  n8n:
+    profiles: ["full"]
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    environment:
+      TZ: ${TZ:-Asia/Seoul}
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-Asia/Seoul}
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: ${N8N_PORT:-5678}
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      WEBHOOK_URL: ${WEBHOOK_URL:-http://localhost:5678/}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:latest}
+    volumes:
+      - "${N8N_DATA_PATH:-/Volumes/WD_BLACK/Careers/DockerData/n8n_data}:/home/node/.n8n"
+      - ./prompts:/home/node/prompts:ro
+      - ./templates:/home/node/templates:ro
+      - ./workflows:/home/node/workflows:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
