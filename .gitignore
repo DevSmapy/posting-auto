@@ -1,0 +1,19 @@
+# 환경 변수·에디터·OS 무시
+
+.env
+.env.*
+!.env.example
+
+.DS_Store
+*.log
+.gnews_*_sample.xml
+output/
+.venv/
+__pycache__/
+*.pyc
+
+# 로컬 도구
+.idea/
+.vscode/
+*.swp
+.Rhistory
