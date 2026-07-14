@@ -13,9 +13,10 @@
 - [ ] `docker compose exec ollama ollama pull qwen2.5:14b`
 - [ ] `./scripts/smoke_ollama.sh` (호스트 → `127.0.0.1:11434`)
 
-### 티스토리
+### 티스토리 / 블로그
 
-- [ ] [API 앱 등록](https://www.tistory.com/guide/api/manage/register) + `access_token` + `blogName`
+- [x] Open API 종료 → **반자동 마크다운** (`briefing.md` 수동 붙여넣기)
+- [ ] (운영) Approve 후 에디터에 붙여넣기 습관화
 
 ### Instagram / Meta
 
@@ -29,6 +30,12 @@
 
 - [ ] BotFather 봇 → `TELEGRAM_BOT_TOKEN`
 - [ ] `TELEGRAM_CHAT_ID` + 봇에게 `/start`
+- [ ] `python scripts/smoke_telegram.py`
+
+### Postgres / seen_urls
+
+- [x] `docker compose up -d postgres`
+- [x] `python scripts/smoke_seen_urls.py`
 
 ### Cloudflare R2
 

@@ -92,6 +92,32 @@ MVP_MODE=dry_run python scripts/mvp_pipeline.py
 결과: `output/<시각>/candidates.json`, `ranked.json`, `briefing.json`  
 랭킹이 비면 `importance_raw.json`을 보고, 자동으로 heuristic 폴백이 돕니다.
 
+### draft (Approve → 마크다운)
+
+`.env`에 `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID`를 넣은 뒤:
+
+```bash
+python scripts/smoke_telegram.py
+python scripts/smoke_seen_urls.py
+
+MVP_MODE=draft python scripts/mvp_pipeline.py
+# Telegram Approve → output/<시각>/briefing.md 저장 (에디터에 붙여넣기)
+```
+
+토큰 없이 게이트만 검증할 때:
+
+```bash
+MVP_MODE=draft TELEGRAM_APPROVE_MODE=auto \
+  RANK_MODE=heuristic BRIEFING_MODE=heuristic \
+  python scripts/mvp_pipeline.py
+```
+
+| `MVP_MODE` | 동작 |
+|------------|------|
+| `dry_run` | 수집·LLM만, JSON 저장 |
+| `draft` | 초안 → Approve 대기 → `briefing.md` |
+| `publish` | Approve 없이 바로 `briefing.md` |
+
 CPU가 여전히 높으면 `.env`에서:
 
 ```bash

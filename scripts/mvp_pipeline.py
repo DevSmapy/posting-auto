@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""MVP pipeline: Google News → filter → Ollama rank/brief → optional publish.
+"""MVP pipeline: Google News → filter → Ollama rank/brief → Approve → markdown export.
 
 Modes (MVP_MODE):
   dry_run  - fetch + LLM, write output/*.json (default)
-  draft    - also Telegram preview (no Approve wait; sends message)
-  publish  - Tistory + cards + optional Instagram (requires tokens)
+  draft    - Telegram preview + Approve/Skip; Approve → briefing.md (manual paste)
+  publish  - write briefing.md without Approve wait
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ import os
 import re
 import sys
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -26,7 +27,10 @@ import requests
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 load_dotenv(ROOT / ".env")
+
+from seen_urls import SeenUrlsStore  # noqa: E402
 
 TZ = ZoneInfo(os.getenv("NEWS_TIMEZONE", "Asia/Seoul"))
 PROMPTS = ROOT / "prompts"
@@ -44,7 +48,6 @@ def ollama_base() -> str:
     if host_url:
         return host_url.rstrip("/")
     base = env("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
-    # rewrite compose service hostname → localhost published port
     base = base.replace("http://ollama:", "http://127.0.0.1:")
     base = base.replace("https://ollama:", "https://127.0.0.1:")
     base = base.replace("host.docker.internal", "127.0.0.1")
@@ -85,7 +88,6 @@ def parse_entry(entry: Any, topic: str, feed_rank: int) -> dict[str, Any] | None
     source = ""
     if hasattr(entry, "source") and entry.source:
         source = strip_html(getattr(entry.source, "title", "") or str(entry.source))
-    # title often ends with " - 매체명" (prefer splitting even if source exists)
     if " - " in title:
         maybe_title, maybe_source = title.rsplit(" - ", 1)
         if maybe_title.strip():
@@ -93,7 +95,6 @@ def parse_entry(entry: Any, topic: str, feed_rank: int) -> dict[str, Any] | None
             if not source:
                 source = maybe_source.strip()
             elif maybe_source.strip() and maybe_source.strip() != source:
-                # keep feedparser source; title already cleaned
                 pass
 
     published = None
@@ -126,7 +127,7 @@ def fetch_topic(url: str, topic: str) -> list[dict[str, Any]]:
 
 def is_today(dt: datetime | None, now: datetime) -> bool:
     if dt is None:
-        return True  # keep if unknown; LLM can still drop
+        return True
     local = dt.astimezone(TZ)
     return local.date() == now.date()
 
@@ -142,7 +143,6 @@ def fetch_candidates(now: datetime) -> list[dict[str, Any]]:
     )
     merged = fetch_topic(business, "BUSINESS") + fetch_topic(nation, "NATION")
     today = [a for a in merged if is_today(a.get("published_dt"), now)]
-    # dedupe by id / normalized title
     seen: set[str] = set()
     unique: list[dict[str, Any]] = []
     for a in today:
@@ -167,7 +167,6 @@ def extract_json(text: str) -> Any:
 
 
 def as_bool_drop(value: Any) -> bool:
-    """LLM이 drop을 문자열 \"false\"로 주면 bool(\"false\")==True 가 되므로 방어."""
     if isinstance(value, bool):
         return value
     if value is None:
@@ -180,10 +179,8 @@ def as_bool_drop(value: Any) -> bool:
 
 
 def ollama_options() -> dict[str, Any]:
-    """MacBook Air 등에서 CPU 폭주를 줄이기 위한 Ollama 옵션."""
     opts: dict[str, Any] = {
         "temperature": float(env("OLLAMA_TEMPERATURE", "0.3")),
-        # 스레드 수 제한 (미설정 시 4 — M2 Air에서 전 코어 점유 완화)
         "num_thread": int(env("OLLAMA_NUM_THREAD", "4")),
     }
     num_ctx = env("OLLAMA_NUM_CTX")
@@ -193,7 +190,6 @@ def ollama_options() -> dict[str, Any]:
 
 
 def ollama_chat(system: str, user: str) -> tuple[Any, str]:
-    """Returns (parsed_json, raw_content)."""
     model = env("OLLAMA_MODEL", "qwen2.5:14b")
     timeout = int(env("OLLAMA_TIMEOUT_MS", "180000")) / 1000
     url = f"{ollama_base()}/api/chat"
@@ -221,7 +217,6 @@ def ollama_chat(system: str, user: str) -> tuple[Any, str]:
 
 
 def heuristic_rank(articles: list[dict[str, Any]], pick: int) -> list[dict[str, Any]]:
-    """LLM 실패/빈 결과 시 피드 순서·클러스터·WATCHLIST로 선별."""
     watchlist = [w.strip() for w in env("WATCHLIST", "").split(",") if w.strip()]
     scored: list[dict[str, Any]] = []
     for a in articles:
@@ -260,7 +255,6 @@ def rank_articles(
     run_dir: Path | None = None,
 ) -> list[dict[str, Any]]:
     pick = int(env("NEWS_PICK_COUNT", "5"))
-    # LLM에 넣기 전 후보 축소 → CPU·토큰 절약
     llm_limit = int(env("NEWS_LLM_CANDIDATES", "10"))
     pre = heuristic_rank(articles, max(llm_limit, pick))
     watchlist = env("WATCHLIST", "")
@@ -328,7 +322,61 @@ def rank_articles(
     return scored
 
 
+def build_briefing_heuristic(articles: list[dict[str, Any]], now: datetime) -> dict[str, Any]:
+    """LLM 없이 발행 경로 스모크·폴백용 브리핑."""
+    date = now.strftime("%Y-%m-%d")
+    stories = []
+    slides: list[dict[str, str]] = [
+        {
+            "type": "cover",
+            "headline": f"{date} 경제 브리핑",
+            "body": "오늘의 주요 경제 뉴스",
+        }
+    ]
+    for i, a in enumerate(articles, start=1):
+        summary = (a.get("snippet") or a.get("title") or "")[:280]
+        stories.append(
+            {
+                "headline": a.get("title") or f"이슈 {i}",
+                "summary": summary,
+                "why_it_matters": a.get("reason") or "시장·정책 흐름 점검",
+                "source_name": a.get("source") or "",
+                "source_url": a.get("link") or "",
+            }
+        )
+        slides.append(
+            {
+                "type": "story",
+                "headline": (a.get("title") or "")[:80],
+                "body": summary[:160],
+            }
+        )
+    slides.append(
+        {
+            "type": "disclaimer",
+            "headline": "면책",
+            "body": "정보 안내용이며 투자 권유가 아닙니다.",
+        }
+    )
+    tops = [a.get("title") or "" for a in articles[:3]]
+    return {
+        "title": f"오늘의 경제 브리핑 ({date})",
+        "intro": "휴리스틱 브리핑(테스트/폴백).",
+        "market_one_liner": " · ".join(t for t in tops if t) or "오늘 주요 뉴스 정리",
+        "stories": stories,
+        "today_points": [f"{a.get('title')}" for a in articles[:5]],
+        "blog_tags": ["경제", "브리핑", "뉴스"],
+        "slides": slides,
+        "caption": f"{date} 경제 브리핑",
+        "hashtags": ["경제", "뉴스", "브리핑"],
+    }
+
+
 def build_briefing(articles: list[dict[str, Any]], now: datetime) -> dict[str, Any]:
+    if env("BRIEFING_MODE", "llm").lower() == "heuristic":
+        print("   briefing mode=heuristic")
+        return build_briefing_heuristic(articles, now)
+
     payload = [
         {
             "title": a["title"],
@@ -346,10 +394,16 @@ def build_briefing(articles: list[dict[str, Any]], now: datetime) -> dict[str, A
         .replace("{{date}}", now.strftime("%Y-%m-%d"))
         .replace("{{articles_json}}", json.dumps(payload, ensure_ascii=False, indent=2))
     )
-    parsed, raw = ollama_chat(read_prompt("briefing_system.md"), user)
-    if not isinstance(parsed, dict):
-        raise RuntimeError(f"briefing JSON must be object, got {type(parsed)}: {raw[:500]}")
-    return parsed
+    try:
+        parsed, raw = ollama_chat(read_prompt("briefing_system.md"), user)
+        if not isinstance(parsed, dict):
+            raise RuntimeError(f"briefing JSON must be object, got {type(parsed)}: {raw[:500]}")
+        return parsed
+    except Exception as exc:  # noqa: BLE001
+        if env("ALLOW_BRIEFING_FALLBACK", "1").lower() in {"1", "true", "yes"}:
+            print(f"   !! LLM briefing failed: {exc} — heuristic fallback")
+            return build_briefing_heuristic(articles, now)
+        raise
 
 
 def assemble_blog_html(briefing: dict[str, Any]) -> str:
@@ -375,44 +429,202 @@ def assemble_blog_html(briefing: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
+def assemble_blog_markdown(briefing: dict[str, Any]) -> str:
+    """티스토리 등 에디터에 수동 붙여넣기용 Markdown."""
+    title = (briefing.get("title") or "오늘의 경제 브리핑").strip()
+    tags = briefing.get("blog_tags") or []
+    lines: list[str] = [f"# {title}", ""]
+    intro = (briefing.get("intro") or "").strip()
+    if intro:
+        lines.append(intro)
+        lines.append("")
+    one = (briefing.get("market_one_liner") or "").strip()
+    if one:
+        lines.append(f"**오늘 한줄** {one}")
+        lines.append("")
+    for story in briefing.get("stories") or []:
+        headline = (story.get("headline") or "").strip()
+        lines.append(f"## {headline}" if headline else "##")
+        lines.append("")
+        summary = (story.get("summary") or "").strip()
+        if summary:
+            lines.append(summary)
+            lines.append("")
+        why = (story.get("why_it_matters") or "").strip()
+        if why:
+            lines.append(f"*{why}*")
+            lines.append("")
+        name = (story.get("source_name") or "").strip()
+        url = (story.get("source_url") or "").strip()
+        if url:
+            label = name or "출처"
+            lines.append(f"출처: [{label}]({url})")
+            lines.append("")
+        elif name:
+            lines.append(f"출처: {name}")
+            lines.append("")
+    points = briefing.get("today_points") or []
+    if points:
+        lines.append("## 오늘 포인트")
+        lines.append("")
+        for point in points:
+            lines.append(f"- {point}")
+        lines.append("")
+    lines.append("---")
+    lines.append("")
+    lines.append(
+        "본 콘텐츠는 정보 안내용이며 특정 종목의 매수·매도·투자를 권유하지 않습니다. "
+        "투자 판단과 책임은 독자 본인에게 있습니다."
+    )
+    if tags:
+        lines.append("")
+        lines.append("태그: " + ", ".join(str(t) for t in tags))
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def telegram_api(method: str, payload: dict[str, Any] | None = None, *, token: str | None = None) -> dict[str, Any]:
+    tok = token or env("TELEGRAM_BOT_TOKEN")
+    if not tok:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN required")
+    url = f"https://api.telegram.org/bot{tok}/{method}"
+    resp = requests.post(url, json=payload or {}, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+    if not data.get("ok"):
+        raise RuntimeError(f"Telegram API {method} failed: {data}")
+    return data
+
+
 def telegram_send(text: str) -> None:
     token = env("TELEGRAM_BOT_TOKEN")
     chat_id = env("TELEGRAM_CHAT_ID")
     if not token or not chat_id:
         print("Telegram skipped: missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID")
         return
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    # Telegram limit ~4096
     chunk = text[:4000]
-    requests.post(url, json={"chat_id": chat_id, "text": chunk}, timeout=30).raise_for_status()
+    telegram_api("sendMessage", {"chat_id": chat_id, "text": chunk}, token=token)
 
 
-def tistory_write(title: str, content: str, tags: list[str]) -> dict[str, Any]:
-    token = env("TISTORY_ACCESS_TOKEN")
-    blog = env("TISTORY_BLOG_NAME")
-    if not token or not blog:
-        raise RuntimeError("TISTORY_ACCESS_TOKEN / TISTORY_BLOG_NAME required for publish")
-    visibility = env("TISTORY_VISIBILITY", "3")
-    resp = requests.post(
-        "https://www.tistory.com/apis/post/write",
-        data={
-            "access_token": token,
-            "output": "json",
-            "blogName": blog,
-            "title": title,
-            "content": content,
-            "visibility": visibility,
-            "tag": ",".join(tags),
+def _approve_mode() -> str:
+    """telegram | cli | auto
+
+    auto: approve without waiting (tests / CI)
+    cli: stdin approve/skip when Telegram tokens missing or forced
+    telegram: inline keyboard + getUpdates poll
+    """
+    explicit = env("TELEGRAM_APPROVE_MODE").lower()
+    if explicit in {"telegram", "cli", "auto"}:
+        return explicit
+    if env("TELEGRAM_BOT_TOKEN") and env("TELEGRAM_CHAT_ID"):
+        return "telegram"
+    return "cli"
+
+
+def wait_for_approve(preview: str) -> bool:
+    """Return True if approved, False if skipped/timeout."""
+    mode = _approve_mode()
+    timeout = int(env("TELEGRAM_APPROVE_TIMEOUT_SEC", "900"))
+    print(f"==> Approve gate mode={mode} timeout={timeout}s")
+
+    if mode == "auto":
+        print("   auto-approve")
+        return True
+
+    if mode == "cli":
+        print(preview)
+        print("\n--- Approve? type approve / skip ---")
+        try:
+            line = input("> ").strip().lower()
+        except EOFError:
+            line = "skip"
+        approved = line in {"a", "approve", "y", "yes", "ok"}
+        print("   approved" if approved else "   skipped")
+        return approved
+
+    token = env("TELEGRAM_BOT_TOKEN")
+    chat_id = env("TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
+        raise RuntimeError("Telegram Approve requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID")
+
+    request_id = uuid.uuid4().hex[:12]
+    approve_data = f"approve:{request_id}"
+    skip_data = f"skip:{request_id}"
+    chunk = preview[:3500]
+    markup = {
+        "inline_keyboard": [
+            [
+                {"text": "✅ Approve", "callback_data": approve_data},
+                {"text": "⏭ Skip", "callback_data": skip_data},
+            ]
+        ]
+    }
+    # Drop pending updates so we only see new callbacks
+    boot = telegram_api("getUpdates", {"offset": -1, "timeout": 0}, token=token)
+    offset = 0
+    for upd in boot.get("result") or []:
+        offset = max(offset, int(upd.get("update_id", 0)) + 1)
+
+    telegram_api(
+        "sendMessage",
+        {
+            "chat_id": chat_id,
+            "text": chunk + f"\n\n[승인 요청 {request_id}]",
+            "reply_markup": markup,
         },
-        timeout=60,
+        token=token,
     )
-    resp.raise_for_status()
-    return resp.json()
+    print("   Telegram preview + Approve/Skip sent — waiting…")
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        remaining = max(1, int(deadline - time.time()))
+        poll_timeout = min(25, remaining)
+        data = telegram_api(
+            "getUpdates",
+            {"offset": offset, "timeout": poll_timeout, "allowed_updates": ["callback_query", "message"]},
+            token=token,
+        )
+        for upd in data.get("result") or []:
+            offset = max(offset, int(upd.get("update_id", 0)) + 1)
+            cb = upd.get("callback_query")
+            if cb:
+                raw = str(cb.get("data") or "")
+                cq_id = cb.get("id")
+                if raw == approve_data:
+                    if cq_id:
+                        telegram_api(
+                            "answerCallbackQuery",
+                            {"callback_query_id": cq_id, "text": "Approve — 마크다운 저장"},
+                            token=token,
+                        )
+                    telegram_send("승인됨. 마크다운 파일로 저장합니다.")
+                    return True
+                if raw == skip_data:
+                    if cq_id:
+                        telegram_api(
+                            "answerCallbackQuery",
+                            {"callback_query_id": cq_id, "text": "Skip"},
+                            token=token,
+                        )
+                    telegram_send("스킵됨. 저장하지 않습니다.")
+                    return False
+            msg = upd.get("message") or {}
+            text = (msg.get("text") or "").strip().lower()
+            if str(msg.get("chat", {}).get("id")) == str(chat_id):
+                if text in {"/approve", "approve"}:
+                    telegram_send("승인됨. 마크다운 파일로 저장합니다.")
+                    return True
+                if text in {"/skip", "skip"}:
+                    telegram_send("스킵됨. 저장하지 않습니다.")
+                    return False
+
+    telegram_send(f"[타임아웃] {timeout}s 내 응답 없음 — 마크다운 저장 취소")
+    print("   Approve timeout — skip export")
+    return False
 
 
 def screenshot_html(html_doc: str, out_path: Path) -> None:
     base = env("BROWSERLESS_URL", "http://localhost:3000").rstrip("/")
-    # browserless chrome screenshot API
     endpoint = f"{base}/chrome/screenshot"
     resp = requests.post(
         endpoint,
@@ -433,7 +645,7 @@ def screenshot_html(html_doc: str, out_path: Path) -> None:
 
 
 def render_cards(briefing: dict[str, Any], out_dir: Path) -> list[Path]:
-    brand = env("TISTORY_BLOG_NAME") or "경제 브리핑"
+    brand = env("CARD_BRAND") or "경제 브리핑"
     slides = briefing.get("slides") or []
     paths: list[Path] = []
     story_i = 0
@@ -565,7 +777,67 @@ def preview_text(briefing: dict[str, Any], picked: list[dict[str, Any]]) -> str:
     lines.append("슬라이드:")
     for s in briefing.get("slides") or []:
         lines.append(f"- [{s.get('type')}] {s.get('headline')}")
+    lines.append("")
+    lines.append("Approve 시 briefing.md 저장 (수동 붙여넣기용)")
+    lines.append("Approve / Skip 버튼 또는 /approve /skip")
     return "\n".join(lines)
+
+
+def run_publish(
+    briefing: dict[str, Any],
+    picked: list[dict[str, Any]],
+    now: datetime,
+    run_dir: Path,
+    store: SeenUrlsStore,
+) -> None:
+    """Approve 후: 마크다운 저장(+선택 카드/인스타) → seen_urls 기록."""
+    print("==> Write briefing markdown (manual paste)")
+    md = assemble_blog_markdown(briefing)
+    md_path = run_dir / "briefing.md"
+    md_path.write_text(md, encoding="utf-8")
+    (run_dir / "briefing.html").write_text(briefing.get("blog_html") or assemble_blog_html(briefing), encoding="utf-8")
+    export_ref = str(md_path.resolve())
+    print(f"   wrote {md_path}")
+
+    ig_media_id: str | None = None
+    if env("PUBLISH_CARDS", "0").lower() in {"1", "true", "yes"}:
+        print("==> Render cards via Browserless")
+        cards_dir = run_dir / "cards"
+        cards_dir.mkdir(exist_ok=True)
+        try:
+            paths = render_cards(briefing, cards_dir)
+        except Exception as exc:  # noqa: BLE001
+            print(f"   !! card render skipped: {exc}")
+            paths = []
+
+        image_urls: list[str] = []
+        if paths and env("R2_ACCESS_KEY_ID"):
+            print("==> Upload R2")
+            prefix = f"briefs/{now.strftime('%Y-%m-%d')}"
+            image_urls = upload_r2(paths, prefix)
+            (run_dir / "image_urls.json").write_text(
+                json.dumps(image_urls, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        elif not env("R2_ACCESS_KEY_ID"):
+            print("R2 not configured — skip Instagram")
+
+        if image_urls and env("IG_USER_ID") and env("META_ACCESS_TOKEN"):
+            caption = briefing.get("caption") or ""
+            tags_h = " ".join(f"#{t.lstrip('#')}" for t in (briefing.get("hashtags") or []))
+            print("==> Instagram carousel")
+            ig_media_id = instagram_carousel(image_urls, f"{caption}\n\n{tags_h}".strip())
+            print(f"   ig media id: {ig_media_id}")
+
+    telegram_send(
+        f"[마크다운 준비됨]\n{briefing.get('title')}\n\n"
+        f"파일: {md_path}\n"
+        f"에디터에 붙여넣기 하세요.\n\n"
+        f"---\n{md[:1500]}"
+    )
+
+    n = store.record_published(picked, tistory_post_id=export_ref, ig_media_id=ig_media_id)
+    print(f"==> seen_urls recorded: {n} (backend={store.backend})")
+    print("Done (markdown export).")
 
 
 def main() -> int:
@@ -575,7 +847,8 @@ def main() -> int:
     run_dir = OUTPUT / now.strftime("%Y%m%d_%H%M%S")
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"==> mode={mode} date={now.date()} tz={TZ}")
+    store = SeenUrlsStore()
+    print(f"==> mode={mode} date={now.date()} tz={TZ} seen_urls={store.backend}")
     print(
         f"==> ollama threads={env('OLLAMA_NUM_THREAD', '4')} "
         f"rank_mode={env('RANK_MODE', 'llm')} "
@@ -583,7 +856,8 @@ def main() -> int:
     )
     print("==> fetching Google News RSS")
     candidates = fetch_candidates(now)
-    print(f"   candidates today (capped): {len(candidates)}")
+    candidates = store.filter_new(candidates)
+    print(f"   candidates today (capped, after seen_urls): {len(candidates)}")
     (run_dir / "candidates.json").write_text(
         json.dumps([{k: v for k, v in a.items() if k != "published_dt"} for a in candidates], ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -592,6 +866,7 @@ def main() -> int:
         print("No candidates for today. Exit.")
         if mode in {"draft", "publish"}:
             telegram_send(f"[경제브리핑] {now.date()} 당일 후보 0건 — 스킵")
+        store.close()
         return 0
 
     print("==> Ollama importance ranking")
@@ -603,6 +878,7 @@ def main() -> int:
     )
     if not picked:
         print("No articles after ranking. Exit.")
+        store.close()
         return 1
 
     print("==> Ollama briefing")
@@ -615,46 +891,27 @@ def main() -> int:
     print(f"   title: {briefing.get('title')}")
     print(f"   wrote {run_dir}")
 
-    if mode in {"draft", "publish"}:
-        telegram_send(preview_text(briefing, picked))
-        print("==> Telegram preview sent")
+    try:
+        if mode == "dry_run":
+            print("Done (dry_run). Set MVP_MODE=draft for Approve→markdown, or publish to export.md.")
+            return 0
 
-    if mode != "publish":
-        print("Done (dry_run/draft). Set MVP_MODE=publish to post.")
-        return 0
+        if mode == "draft":
+            preview = preview_text(briefing, picked)
+            if not wait_for_approve(preview):
+                print("Done (draft skipped). seen_urls not updated.")
+                return 0
+            run_publish(briefing, picked, now, run_dir, store)
+            return 0
 
-    print("==> Tistory write")
-    tags = briefing.get("blog_tags") or []
-    tistory_res = tistory_write(briefing.get("title") or "오늘의 경제 브리핑", briefing["blog_html"], tags)
-    (run_dir / "tistory.json").write_text(json.dumps(tistory_res, ensure_ascii=False, indent=2), encoding="utf-8")
-    print("   tistory ok")
+        if mode == "publish":
+            run_publish(briefing, picked, now, run_dir, store)
+            return 0
 
-    print("==> Render cards via Browserless")
-    cards_dir = run_dir / "cards"
-    cards_dir.mkdir(exist_ok=True)
-    paths = render_cards(briefing, cards_dir)
-
-    image_urls: list[str] = []
-    if env("R2_ACCESS_KEY_ID"):
-        print("==> Upload R2")
-        prefix = f"briefs/{now.strftime('%Y-%m-%d')}"
-        image_urls = upload_r2(paths, prefix)
-        (run_dir / "image_urls.json").write_text(json.dumps(image_urls, ensure_ascii=False, indent=2), encoding="utf-8")
-    else:
-        print("R2 not configured — skip Instagram (need public image URLs)")
-
-    if image_urls and env("IG_USER_ID") and env("META_ACCESS_TOKEN"):
-        caption = briefing.get("caption") or ""
-        tags = " ".join(f"#{t.lstrip('#')}" for t in (briefing.get("hashtags") or []))
-        print("==> Instagram carousel")
-        media_id = instagram_carousel(image_urls, f"{caption}\n\n{tags}".strip())
-        print(f"   ig media id: {media_id}")
-        telegram_send(f"[발행완료]\n{briefing.get('title')}\nIG: {media_id}")
-    else:
-        telegram_send(f"[부분발행] 티스토리 완료 / 인스타 스킵\n{briefing.get('title')}")
-
-    print("Done publish.")
-    return 0
+        print(f"Unknown MVP_MODE={mode}", file=sys.stderr)
+        return 1
+    finally:
+        store.close()
 
 
 if __name__ == "__main__":

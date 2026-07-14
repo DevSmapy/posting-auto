@@ -29,7 +29,7 @@ curl http://127.0.0.1:11434/api/tags
 ## 2단계 LLM 호출
 
 1. **중요도 랭킹** — 후보 15~20건 → 점수·탈락 사유  
-2. **브리핑 생성** — 상위 5건 → 티스토리/카드용 JSON  
+2. **브리핑 생성** — 상위 5건 → 마크다운/카드용 JSON
 
 한 번에 다 시키면 JSON이 불안정해지므로 **분리**합니다.
 
@@ -77,7 +77,7 @@ curl http://127.0.0.1:11434/api/tags
 
 ```json
 {
-  "title": "티스토리 제목 (50자 내외)",
+  "title": "브리핑 제목 (50자 내외)",
   "intro": "도입 2~3문장",
   "market_one_liner": "시장/이슈 한 줄",
   "stories": [
@@ -107,7 +107,7 @@ curl http://127.0.0.1:11434/api/tags
 - 총 5~7장: `cover` + `story`들 + `disclaimer`
 - `body`는 화면 기준 2줄 이내
 
-### 티스토리 HTML
+### 블로그 마크다운 / HTML
 
 LLM이 긴 HTML을 직접 쓰기보다, n8n에서 `intro` / `stories` / `today_points` / `sources`를 조립합니다. (로컬 모델 HTML 깨짐 방지)
 
