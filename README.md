@@ -1,8 +1,8 @@
 # 경제 뉴스 자동 포스팅 (n8n + Ollama)
 
-로컬 Docker **n8n + Ollama**로 한국 뉴스를 모아 요약한 뒤, **티스토리** 브리핑과 **인스타그램** 카드뉴스(캐러셀)를 발행하는 자동화 프로젝트입니다.
+로컬 Docker **n8n + Ollama**로 한국 뉴스를 모아 요약한 뒤, **마크다운 브리핑**(수동 붙여넣기)과 선택적으로 **인스타그램** 카드뉴스를 준비하는 자동화 프로젝트입니다.
 
-> 현재 상태: **Post-MVP** — `feat/post-mvp-publish`에서 Approve 게이트 + `seen_urls` 연동. 실행은 [`docs/00-mvp-quickstart.md`](docs/00-mvp-quickstart.md) → `scripts/mvp_pipeline.py`.
+> 현재 상태: **반자동** — Telegram Approve → `briefing.md` 저장. 티스토리 Open API는 종료되어 사용하지 않습니다.
 
 ---
 
@@ -15,12 +15,12 @@
 | 날짜 | `pubDate` 기준 **당일(Asia/Seoul)** 만 |
 | 중요도 | 피드 순서 + 클러스터 크기 + **Ollama 스니펫 점수** |
 | LLM | Docker Ollama (`qwen2.5:14b` 권장) |
-| 발행 | 티스토리 Open API + Instagram Graph API 캐러셀 |
-| 안전장치 | `MVP_MODE=draft` → Telegram Approve/Skip → 승인 시에만 발행 |
+| 발행 | 마크다운 파일 반자동 (수동 붙여넣기) + 선택적 Instagram |
+| 안전장치 | `MVP_MODE=draft` → Telegram Approve/Skip → `briefing.md` |
 
 ```text
 Google News RSS → 당일/seen_urls 필터 → Ollama 중요도 → Ollama 브리핑
-        → (draft) Telegram Approve/Skip → (승인 시) 티스토리 + 카드/인스타 → seen_urls 기록
+        → (draft) Telegram Approve/Skip → briefing.md (수동 붙여넣기) → seen_urls 기록
 ```
 
 ---
@@ -49,7 +49,7 @@ MVP_MODE=dry_run python scripts/mvp_pipeline.py
 | [docs/02-architecture.md](docs/02-architecture.md) | 아키텍처, 스택 결정 |
 | [docs/03-news-collection.md](docs/03-news-collection.md) | Google News 수집·필터 |
 | [docs/04-llm-and-prompts.md](docs/04-llm-and-prompts.md) | Ollama, 중요도·브리핑 JSON |
-| [docs/05-publishing.md](docs/05-publishing.md) | 티스토리, 카드, 인스타, Telegram |
+| [docs/05-publishing.md](docs/05-publishing.md) | 마크다운 반자동, 카드, 인스타, Telegram |
 | [docs/06-setup.md](docs/06-setup.md) | 사전 준비, 환경 변수 |
 | [docs/07-workflow.md](docs/07-workflow.md) | n8n 노드 흐름 |
 | [docs/08-roadmap.md](docs/08-roadmap.md) | 로드맵, 트러블슈팅, 보안 |

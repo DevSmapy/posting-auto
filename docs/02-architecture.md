@@ -23,7 +23,7 @@
        ├─ Skip → 종료
        │
        └─ Approve
-            ├─▶ 티스토리 Post Write
+            ├─▶ briefing.md (수동 붙여넣기)
             └─▶ 카드 HTML → Browserless PNG → R2 → Instagram Carousel
                     │
                     ▼
@@ -53,7 +53,7 @@
 | 뉴스 목록 | Google News KR 토픽 RSS | 키 없이 RSS 사용 가능, n8n 연동 단순 |
 | LLM | Ollama (Docker) | 비용·프라이버시, n8n과 같은 Compose |
 | LLM 비채택 | LM Studio | 실험용. 스케줄 headless에는 Ollama |
-| 블로그 | 티스토리 Open API | 공식 발행 API |
+| 블로그 | 마크다운 반자동 | Open API 종료 → 수동 붙여넣기 |
 | 카드 채널 | Instagram Graph API | 비즈니스/크리에이터 + 페이지 |
 | 카드 이미지 | HTML + Browserless | 한글 타이포·레이아웃 통제 |
 | 이미지 호스팅 | Cloudflare R2 | 인스타 Media API는 공개 HTTPS URL 필요 |

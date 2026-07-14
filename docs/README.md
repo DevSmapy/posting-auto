@@ -9,7 +9,7 @@
 | 02 | [아키텍처](02-architecture.md) | 파이프라인, 프로세스 구성, 스택 결정 |
 | 03 | [뉴스 수집](03-news-collection.md) | Google News MVP, 날짜·중요도, 네이버/검색 RSS 비채택 이유 |
 | 04 | [LLM·프롬프트](04-llm-and-prompts.md) | Ollama, 중요도 점수, 브리핑 JSON, 금지 문구 |
-| 05 | [발행](05-publishing.md) | 티스토리, 카드뉴스, 인스타, Telegram |
+| 05 | [발행](05-publishing.md) | 마크다운 반자동, 카드뉴스, 인스타, Telegram |
 | 06 | [설치·설정](06-setup.md) | 체크리스트, 환경 변수, 로컬 실행 |
 | 07 | [워크플로](07-workflow.md) | n8n 노드 순서, DB, 에러 처리 |
 | 08 | [로드맵·운영](08-roadmap.md) | 구현 순서, MVP 기준, 트러블슈팅, 보안 |

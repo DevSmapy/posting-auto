@@ -1,4 +1,6 @@
-# 05. 발행 (티스토리 · 카드 · 인스타 · Telegram)
+# 05. 발행 (반자동 마크다운 · 카드 · 인스타 · Telegram)
+
+> 티스토리 Open API는 2024년 종료되었습니다. 블로그 발행은 **마크다운 파일 수동 붙여넣기**로 합니다.
 
 ## Telegram 승인 게이트
 
@@ -13,8 +15,8 @@
 
 | 선택 | 동작 |
 |------|------|
-| Approve | 티스토리 + 카드/인스타 진행 |
-| Skip | 종료. `seen_urls` 미기록 (다음날 다시 후보 가능) |
+| Approve | `output/<시각>/briefing.md` 저장 (+ Telegram에 경로·미리보기) |
+| Skip | 종료. `seen_urls` 미기록 |
 | 타임아웃 | `TELEGRAM_APPROVE_TIMEOUT_SEC`(기본 900초) 후 Skip과 동일 |
 
 | `TELEGRAM_APPROVE_MODE` | 동작 |
@@ -24,68 +26,44 @@
 | `cli` | 터미널에 `approve` / `skip` 입력 |
 | `auto` | 대기 없이 승인 (로컬 스모크) |
 
-Approve 후 **발행 성공 시**에만 `seen_urls`에 insert (`scripts/seen_urls.py`, Postgres 우선·불가 시 SQLite).
+Approve 후 **마크다운 저장 성공 시**에만 `seen_urls`에 insert.
 
 스모크: `python scripts/smoke_telegram.py`
 
 ---
 
-## 티스토리
+## 반자동 블로그 (Markdown)
 
-- 문서: [티스토리 Open API](https://www.tistory.com/guide/api/manage/register)
-- `POST` `https://www.tistory.com/apis/post/write`
+산출물:
 
-| 파라미터 | 값 |
-|----------|-----|
-| `access_token` | `.env` |
-| `blogName` | `.env` |
-| `title` | 브리핑 `title` |
-| `content` | 조립 HTML |
-| `visibility` | `3` 테스트 → `0` 운영 |
-| `tag` | `blog_tags` |
+| 파일 | 용도 |
+|------|------|
+| `briefing.md` | 에디터에 붙여넣기 (권장) |
+| `briefing.html` | HTML이 필요할 때 |
+| `briefing.json` | LLM 원본 구조 |
 
-테스트 순서: 수동 비공개 → n8n 비공개 → 공개.
-
-토큰 없이 발행 경로만 검증: `TISTORY_DRY_RUN=1` (API 미호출, 로컬 stub + `seen_urls` 기록).  
-스모크: `python scripts/smoke_tistory.py`
+티스토리/다른 블로그 글쓰기 화면에 `briefing.md` 내용을 복사해 붙이면 됩니다.
 
 ---
 
-## 카드뉴스 렌더
+## 카드뉴스 / Instagram (옵션)
 
-템플릿(예정):
+`PUBLISH_CARDS=1` 일 때만 Approve 후 카드 렌더·R2·인스타를 시도합니다. 기본은 `0`(마크다운만).
+
+템플릿:
 
 - `templates/cards/cover.html`
 - `templates/cards/slide.html`
 - `templates/cards/disclaimer.html`
 
-공통: 1080×1080, 큰 제목 + 짧은 본문, 브랜드/블로그명 푸터.
-
 1. 슬라이드별 HTML 주입  
 2. Browserless screenshot → PNG  
-3. R2(S3 호환) 업로드 → 공개 URL  
-
-인스타 Graph API는 **이미지 URL**이 필요하므로 R2(또는 S3)를 MVP 기본으로 둡니다.
-
----
-
-## Instagram 캐러셀
-
-전제: 프로페셔널 계정 + Facebook 페이지 + Meta 앱 Content Publishing.
-
-1. 이미지마다 `POST /{IG_USER_ID}/media` (`is_carousel_item=true`)  
-2. 부모 `media_type=CAROUSEL` + `children` + `caption`  
-3. 상태 `FINISHED` 폴링  
-4. `POST /{IG_USER_ID}/media_publish`  
-
-버전: `.env`의 `META_GRAPH_VERSION` (예: `v21.0`).
+3. R2 업로드 → Instagram Graph API 캐러셀  
 
 ---
 
 ## 면책 문구 (고정)
 
 > 본 콘텐츠는 정보 안내용이며 특정 종목의 매수·매도·투자를 권유하지 않습니다. 투자 판단과 책임은 독자 본인에게 있습니다.
-
-블로그 하단·카드 마지막 슬라이드·인스타 캡션 중 최소 한 곳에 포함합니다.
 
 다음: [06. 설치·설정](06-setup.md)

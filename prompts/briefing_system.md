@@ -11,7 +11,7 @@
 
 스키마:
 {
-  "title": "티스토리 제목 50자 내외",
+  "title": "브리핑 제목 50자 내외",
   "intro": "도입 2~3문장",
   "market_one_liner": "한 줄",
   "stories": [
