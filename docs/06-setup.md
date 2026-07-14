@@ -29,6 +29,12 @@
 
 - [ ] BotFather 봇 → `TELEGRAM_BOT_TOKEN`
 - [ ] `TELEGRAM_CHAT_ID` + 봇에게 `/start`
+- [ ] `python scripts/smoke_telegram.py`
+
+### Postgres / seen_urls
+
+- [x] `docker compose up -d postgres`
+- [x] `python scripts/smoke_seen_urls.py`
 
 ### Cloudflare R2
 

@@ -9,22 +9,22 @@
 | 2 | Ollama 스모크 스크립트 | `./scripts/smoke_ollama.sh` |
 | 3 | `prompts/` + `templates/cards/` | 샘플 템플릿·프롬프트 존재 |
 | 4 | MVP 파이프라인 (RSS→중요도→브리핑) | `MVP_MODE=dry_run python scripts/mvp_pipeline.py` |
-| 5 | Telegram draft / 티스토리 publish 경로 | `.env` 토큰 후 `draft`·`publish` |
+| 5 | Telegram draft / 티스토리 publish 경로 | `.env` 토큰 후 `draft`·`publish` (Approve 게이트 코드 준비) |
 | 6 | Browserless + R2 카드 렌더 | `publish` 시 PNG·URL |
 | 7 | 인스타 캐러셀 | Meta 토큰 후 게시 |
-| 8 | `seen_urls` + n8n 네이티브 노드화 | Postgres·UI 워크플로 고도화 |
+| 8 | `seen_urls` + n8n 네이티브 노드화 | **Postgres `seen_urls` 파이프라인 연동됨** / n8n UI는 후속 |
 | 9 | (선택) 장후 16:30 마감 브리핑 | 워크플로 복제 |
 | 10 | (Phase 2) 네이버 섹션·조회수 랭킹 | 포털면 정렬이 필요할 때 |
 
-**코드로 준비된 단계:** 0–4 (및 5–7은 `.env` 연동 코드 포함, 토큰/로컬 서비스 필요).
+**코드로 준비된 단계:** 0–5, 8의 `seen_urls` (5–7 실발행은 `.env` 토큰·Browserless/R2 필요).
 
 ## MVP 성공 기준
 
-- [ ] 평일 07:30(또는 Manual)에 Telegram 초안이 온다
-- [ ] 초안 뉴스가 **당일** Google News 토픽 기반이다
-- [ ] Approve 시 티스토리 글이 생긴다
+- [ ] 평일 07:30(또는 Manual)에 Telegram 초안이 온다 (토큰 설정 후 `smoke_telegram` + `MVP_MODE=draft`)
+- [x] 초안 뉴스가 **당일** Google News 토픽 기반이다
+- [ ] Approve 시 티스토리 글이 생긴다 (코드·DRY_RUN 경로 확인됨; 실토큰 스모크 남음)
 - [ ] Approve 시 인스타 5~7장 캐러셀이 올라간다
-- [ ] 성공 발행한 URL은 다음날 재사용되지 않는다
+- [x] 성공 발행한 URL은 다음날 재사용되지 않는다 (`seen_urls` Postgres)
 - [ ] 실패 시 단계가 Telegram에 보인다
 
 ## 트러블슈팅

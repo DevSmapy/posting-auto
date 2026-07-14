@@ -92,6 +92,33 @@ MVP_MODE=dry_run python scripts/mvp_pipeline.py
 결과: `output/<시각>/candidates.json`, `ranked.json`, `briefing.json`  
 랭킹이 비면 `importance_raw.json`을 보고, 자동으로 heuristic 폴백이 돕니다.
 
+### draft (Approve → 발행)
+
+`.env`에 `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` (및 발행 시 티스토리 토큰)을 넣은 뒤:
+
+```bash
+python scripts/smoke_telegram.py
+python scripts/smoke_seen_urls.py
+python scripts/smoke_tistory.py   # 티스토리 토큰 있을 때
+
+MVP_MODE=draft python scripts/mvp_pipeline.py
+# Telegram에 초안 + Approve/Skip 버튼 → 승인 시에만 티스토리 발행 + seen_urls 기록
+```
+
+토큰 없이 게이트·`seen_urls`만 검증할 때:
+
+```bash
+MVP_MODE=draft TELEGRAM_APPROVE_MODE=auto TISTORY_DRY_RUN=1 \
+  RANK_MODE=heuristic BRIEFING_MODE=heuristic \
+  python scripts/mvp_pipeline.py
+```
+
+| `MVP_MODE` | 동작 |
+|------------|------|
+| `dry_run` | 수집·LLM만, 파일 저장 |
+| `draft` | 초안 → Approve 대기 → 승인 시 발행 |
+| `publish` | Approve 없이 바로 발행 |
+
 CPU가 여전히 높으면 `.env`에서:
 
 ```bash

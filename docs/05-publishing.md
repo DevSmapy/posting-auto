@@ -2,19 +2,31 @@
 
 ## Telegram 승인 게이트
 
+`MVP_MODE=draft` 일 때 [`scripts/mvp_pipeline.py`](../scripts/mvp_pipeline.py)가 초안을 보낸 뒤 **Approve/Skip**을 기다립니다.
+
 ### 미리보기에 포함
 
 - 제목, 시장 한줄
 - 선정 뉴스 헤드라인 + 중요도 점수
 - 카드 슬라이드 headline 목록
-- **Approve / Skip**
+- **Approve / Skip** (인라인 버튼) 또는 `/approve` `/skip` 텍스트
 
 | 선택 | 동작 |
 |------|------|
 | Approve | 티스토리 + 카드/인스타 진행 |
-| Skip | 종료. 기본: `seen_urls` 미기록 (다음날 다시 후보 가능) |
+| Skip | 종료. `seen_urls` 미기록 (다음날 다시 후보 가능) |
+| 타임아웃 | `TELEGRAM_APPROVE_TIMEOUT_SEC`(기본 900초) 후 Skip과 동일 |
 
-Approve 후 **발행 성공 시**에만 `seen_urls`에 insert.
+| `TELEGRAM_APPROVE_MODE` | 동작 |
+|-------------------------|------|
+| (미설정) | 토큰 있으면 `telegram`, 없으면 `cli` |
+| `telegram` | 인라인 버튼 + `getUpdates` 폴링 |
+| `cli` | 터미널에 `approve` / `skip` 입력 |
+| `auto` | 대기 없이 승인 (로컬 스모크) |
+
+Approve 후 **발행 성공 시**에만 `seen_urls`에 insert (`scripts/seen_urls.py`, Postgres 우선·불가 시 SQLite).
+
+스모크: `python scripts/smoke_telegram.py`
 
 ---
 
@@ -33,6 +45,9 @@ Approve 후 **발행 성공 시**에만 `seen_urls`에 insert.
 | `tag` | `blog_tags` |
 
 테스트 순서: 수동 비공개 → n8n 비공개 → 공개.
+
+토큰 없이 발행 경로만 검증: `TISTORY_DRY_RUN=1` (API 미호출, 로컬 stub + `seen_urls` 기록).  
+스모크: `python scripts/smoke_tistory.py`
 
 ---
 

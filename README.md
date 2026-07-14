@@ -2,7 +2,7 @@
 
 로컬 Docker **n8n + Ollama**로 한국 뉴스를 모아 요약한 뒤, **티스토리** 브리핑과 **인스타그램** 카드뉴스(캐러셀)를 발행하는 자동화 프로젝트입니다.
 
-> 현재 상태: **MVP 코드 준비됨**. 실행은 [`docs/00-mvp-quickstart.md`](docs/00-mvp-quickstart.md) → `scripts/mvp_pipeline.py`.
+> 현재 상태: **Post-MVP** — `feat/post-mvp-publish`에서 Approve 게이트 + `seen_urls` 연동. 실행은 [`docs/00-mvp-quickstart.md`](docs/00-mvp-quickstart.md) → `scripts/mvp_pipeline.py`.
 
 ---
 
@@ -16,11 +16,11 @@
 | 중요도 | 피드 순서 + 클러스터 크기 + **Ollama 스니펫 점수** |
 | LLM | Docker Ollama (`qwen2.5:14b` 권장) |
 | 발행 | 티스토리 Open API + Instagram Graph API 캐러셀 |
-| 안전장치 | `MVP_MODE=draft` Telegram 미리보기 → `publish` |
+| 안전장치 | `MVP_MODE=draft` → Telegram Approve/Skip → 승인 시에만 발행 |
 
 ```text
-Google News RSS → 당일/중복 필터 → Ollama 중요도 → Ollama 브리핑
-        → (draft) Telegram → (publish) 티스토리 + 카드/인스타
+Google News RSS → 당일/seen_urls 필터 → Ollama 중요도 → Ollama 브리핑
+        → (draft) Telegram Approve/Skip → (승인 시) 티스토리 + 카드/인스타 → seen_urls 기록
 ```
 
 ---
