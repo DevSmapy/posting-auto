@@ -3,7 +3,7 @@
 
 Modes (MVP_MODE):
   dry_run  - fetch + LLM, write output/*.json (default)
-  draft    - Telegram preview + Approve/Skip; Approve → briefing.md (manual paste)
+  draft    - messenger preview + Approve/Skip; Approve → briefing.md (manual paste)
   publish  - write briefing.md without Approve wait
 """
 
@@ -16,8 +16,7 @@ import os
 import re
 import sys
 import time
-import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -30,6 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 load_dotenv(ROOT / ".env")
 
+from notify import get_notifier, resolve_channel  # noqa: E402
 from seen_urls import SeenUrlsStore  # noqa: E402
 
 TZ = ZoneInfo(os.getenv("NEWS_TIMEZONE", "Asia/Seoul"))
@@ -125,11 +125,26 @@ def fetch_topic(url: str, topic: str) -> list[dict[str, Any]]:
     return items
 
 
-def is_today(dt: datetime | None, now: datetime) -> bool:
+def news_window_start(now: datetime) -> datetime:
+    """Start of news inclusion window (Asia/Seoul local).
+
+    NEWS_WINDOW_MODE:
+      since_prev_day_hour (default) — previous calendar day at NEWS_WINDOW_PREV_DAY_HOUR
+      today — calendar day 00:00 (legacy)
+    """
+    mode = env("NEWS_WINDOW_MODE").lower() or "since_prev_day_hour"
+    local_now = now.astimezone(TZ)
+    if mode == "today":
+        return local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    hour = int(env("NEWS_WINDOW_PREV_DAY_HOUR", "15"))
+    return (local_now - timedelta(days=1)).replace(hour=hour, minute=0, second=0, microsecond=0)
+
+
+def in_news_window(dt: datetime | None, now: datetime, start: datetime) -> bool:
     if dt is None:
         return True
     local = dt.astimezone(TZ)
-    return local.date() == now.date()
+    return start <= local <= now.astimezone(TZ)
 
 
 def fetch_candidates(now: datetime) -> list[dict[str, Any]]:
@@ -142,10 +157,13 @@ def fetch_candidates(now: datetime) -> list[dict[str, Any]]:
         "https://news.google.com/rss/headlines/section/topic/NATION?hl=ko&gl=KR&ceid=KR:ko",
     )
     merged = fetch_topic(business, "BUSINESS") + fetch_topic(nation, "NATION")
-    today = [a for a in merged if is_today(a.get("published_dt"), now)]
+    start = news_window_start(now)
+    print(f"   news window: {start.isoformat()} → {now.astimezone(TZ).isoformat()}")
+    windowed = [a for a in merged if in_news_window(a.get("published_dt"), now, start)]
+    print(f"   after window filter: {len(windowed)} (raw merge={len(merged)})")
     seen: set[str] = set()
     unique: list[dict[str, Any]] = []
-    for a in today:
+    for a in windowed:
         key = a["id"]
         title_key = re.sub(r"\s+", "", a["title"].lower())
         if key in seen or title_key in seen:
@@ -482,147 +500,6 @@ def assemble_blog_markdown(briefing: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def telegram_api(method: str, payload: dict[str, Any] | None = None, *, token: str | None = None) -> dict[str, Any]:
-    tok = token or env("TELEGRAM_BOT_TOKEN")
-    if not tok:
-        raise RuntimeError("TELEGRAM_BOT_TOKEN required")
-    url = f"https://api.telegram.org/bot{tok}/{method}"
-    resp = requests.post(url, json=payload or {}, timeout=30)
-    resp.raise_for_status()
-    data = resp.json()
-    if not data.get("ok"):
-        raise RuntimeError(f"Telegram API {method} failed: {data}")
-    return data
-
-
-def telegram_send(text: str) -> None:
-    token = env("TELEGRAM_BOT_TOKEN")
-    chat_id = env("TELEGRAM_CHAT_ID")
-    if not token or not chat_id:
-        print("Telegram skipped: missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID")
-        return
-    chunk = text[:4000]
-    telegram_api("sendMessage", {"chat_id": chat_id, "text": chunk}, token=token)
-
-
-def _approve_mode() -> str:
-    """telegram | cli | auto
-
-    auto: approve without waiting (tests / CI)
-    cli: stdin approve/skip when Telegram tokens missing or forced
-    telegram: inline keyboard + getUpdates poll
-    """
-    explicit = env("TELEGRAM_APPROVE_MODE").lower()
-    if explicit in {"telegram", "cli", "auto"}:
-        return explicit
-    if env("TELEGRAM_BOT_TOKEN") and env("TELEGRAM_CHAT_ID"):
-        return "telegram"
-    return "cli"
-
-
-def wait_for_approve(preview: str) -> bool:
-    """Return True if approved, False if skipped/timeout."""
-    mode = _approve_mode()
-    timeout = int(env("TELEGRAM_APPROVE_TIMEOUT_SEC", "900"))
-    print(f"==> Approve gate mode={mode} timeout={timeout}s")
-
-    if mode == "auto":
-        print("   auto-approve")
-        return True
-
-    if mode == "cli":
-        print(preview)
-        print("\n--- Approve? type approve / skip ---")
-        try:
-            line = input("> ").strip().lower()
-        except EOFError:
-            line = "skip"
-        approved = line in {"a", "approve", "y", "yes", "ok"}
-        print("   approved" if approved else "   skipped")
-        return approved
-
-    token = env("TELEGRAM_BOT_TOKEN")
-    chat_id = env("TELEGRAM_CHAT_ID")
-    if not token or not chat_id:
-        raise RuntimeError("Telegram Approve requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID")
-
-    request_id = uuid.uuid4().hex[:12]
-    approve_data = f"approve:{request_id}"
-    skip_data = f"skip:{request_id}"
-    chunk = preview[:3500]
-    markup = {
-        "inline_keyboard": [
-            [
-                {"text": "✅ Approve", "callback_data": approve_data},
-                {"text": "⏭ Skip", "callback_data": skip_data},
-            ]
-        ]
-    }
-    # Drop pending updates so we only see new callbacks
-    boot = telegram_api("getUpdates", {"offset": -1, "timeout": 0}, token=token)
-    offset = 0
-    for upd in boot.get("result") or []:
-        offset = max(offset, int(upd.get("update_id", 0)) + 1)
-
-    telegram_api(
-        "sendMessage",
-        {
-            "chat_id": chat_id,
-            "text": chunk + f"\n\n[승인 요청 {request_id}]",
-            "reply_markup": markup,
-        },
-        token=token,
-    )
-    print("   Telegram preview + Approve/Skip sent — waiting…")
-
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        remaining = max(1, int(deadline - time.time()))
-        poll_timeout = min(25, remaining)
-        data = telegram_api(
-            "getUpdates",
-            {"offset": offset, "timeout": poll_timeout, "allowed_updates": ["callback_query", "message"]},
-            token=token,
-        )
-        for upd in data.get("result") or []:
-            offset = max(offset, int(upd.get("update_id", 0)) + 1)
-            cb = upd.get("callback_query")
-            if cb:
-                raw = str(cb.get("data") or "")
-                cq_id = cb.get("id")
-                if raw == approve_data:
-                    if cq_id:
-                        telegram_api(
-                            "answerCallbackQuery",
-                            {"callback_query_id": cq_id, "text": "Approve — 마크다운 저장"},
-                            token=token,
-                        )
-                    telegram_send("승인됨. 마크다운 파일로 저장합니다.")
-                    return True
-                if raw == skip_data:
-                    if cq_id:
-                        telegram_api(
-                            "answerCallbackQuery",
-                            {"callback_query_id": cq_id, "text": "Skip"},
-                            token=token,
-                        )
-                    telegram_send("스킵됨. 저장하지 않습니다.")
-                    return False
-            msg = upd.get("message") or {}
-            text = (msg.get("text") or "").strip().lower()
-            if str(msg.get("chat", {}).get("id")) == str(chat_id):
-                if text in {"/approve", "approve"}:
-                    telegram_send("승인됨. 마크다운 파일로 저장합니다.")
-                    return True
-                if text in {"/skip", "skip"}:
-                    telegram_send("스킵됨. 저장하지 않습니다.")
-                    return False
-
-    telegram_send(f"[타임아웃] {timeout}s 내 응답 없음 — 마크다운 저장 취소")
-    print("   Approve timeout — skip export")
-    return False
-
-
 def screenshot_html(html_doc: str, out_path: Path) -> None:
     base = env("BROWSERLESS_URL", "http://localhost:3000").rstrip("/")
     endpoint = f"{base}/chrome/screenshot"
@@ -779,7 +656,7 @@ def preview_text(briefing: dict[str, Any], picked: list[dict[str, Any]]) -> str:
         lines.append(f"- [{s.get('type')}] {s.get('headline')}")
     lines.append("")
     lines.append("Approve 시 briefing.md 저장 (수동 붙여넣기용)")
-    lines.append("Approve / Skip 버튼 또는 /approve /skip")
+    lines.append("Discord: ✅ / ⏭  ·  Telegram: 버튼 또는 /approve /skip")
     return "\n".join(lines)
 
 
@@ -789,6 +666,7 @@ def run_publish(
     now: datetime,
     run_dir: Path,
     store: SeenUrlsStore,
+    notifier: Any,
 ) -> None:
     """Approve 후: 마크다운 저장(+선택 카드/인스타) → seen_urls 기록."""
     print("==> Write briefing markdown (manual paste)")
@@ -828,7 +706,7 @@ def run_publish(
             ig_media_id = instagram_carousel(image_urls, f"{caption}\n\n{tags_h}".strip())
             print(f"   ig media id: {ig_media_id}")
 
-    telegram_send(
+    notifier.send_text(
         f"[마크다운 준비됨]\n{briefing.get('title')}\n\n"
         f"파일: {md_path}\n"
         f"에디터에 붙여넣기 하세요.\n\n"
@@ -847,8 +725,13 @@ def main() -> int:
     run_dir = OUTPUT / now.strftime("%Y%m%d_%H%M%S")
     run_dir.mkdir(parents=True, exist_ok=True)
 
+    notifier = get_notifier()
+    channel = resolve_channel()
     store = SeenUrlsStore()
-    print(f"==> mode={mode} date={now.date()} tz={TZ} seen_urls={store.backend}")
+    print(
+        f"==> mode={mode} date={now.date()} tz={TZ} "
+        f"seen_urls={store.backend} notify={channel}"
+    )
     print(
         f"==> ollama threads={env('OLLAMA_NUM_THREAD', '4')} "
         f"rank_mode={env('RANK_MODE', 'llm')} "
@@ -857,15 +740,15 @@ def main() -> int:
     print("==> fetching Google News RSS")
     candidates = fetch_candidates(now)
     candidates = store.filter_new(candidates)
-    print(f"   candidates today (capped, after seen_urls): {len(candidates)}")
+    print(f"   candidates in window (capped, after seen_urls): {len(candidates)}")
     (run_dir / "candidates.json").write_text(
         json.dumps([{k: v for k, v in a.items() if k != "published_dt"} for a in candidates], ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     if not candidates:
-        print("No candidates for today. Exit.")
+        print("No candidates in news window. Exit.")
         if mode in {"draft", "publish"}:
-            telegram_send(f"[경제브리핑] {now.date()} 당일 후보 0건 — 스킵")
+            notifier.send_text(f"[경제브리핑] {now.date()} 창 내 후보 0건 — 스킵")
         store.close()
         return 0
 
@@ -898,14 +781,15 @@ def main() -> int:
 
         if mode == "draft":
             preview = preview_text(briefing, picked)
-            if not wait_for_approve(preview):
+            print(f"==> Approve gate channel={channel}")
+            if not notifier.wait_for_approve(preview):
                 print("Done (draft skipped). seen_urls not updated.")
                 return 0
-            run_publish(briefing, picked, now, run_dir, store)
+            run_publish(briefing, picked, now, run_dir, store, notifier)
             return 0
 
         if mode == "publish":
-            run_publish(briefing, picked, now, run_dir, store)
+            run_publish(briefing, picked, now, run_dir, store, notifier)
             return 0
 
         print(f"Unknown MVP_MODE={mode}", file=sys.stderr)
@@ -920,7 +804,7 @@ if __name__ == "__main__":
     except Exception as exc:  # noqa: BLE001
         print(f"ERROR: {exc}", file=sys.stderr)
         try:
-            telegram_send(f"[경제브리핑 실패] {exc}")
+            get_notifier().send_text(f"[경제브리핑 실패] {exc}")
         except Exception:  # noqa: BLE001
             pass
         raise SystemExit(1)

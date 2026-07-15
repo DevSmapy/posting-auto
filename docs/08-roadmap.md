@@ -9,7 +9,8 @@
 | 2 | Ollama 스모크 스크립트 | `./scripts/smoke_ollama.sh` |
 | 3 | `prompts/` + `templates/cards/` | 샘플 템플릿·프롬프트 존재 |
 | 4 | MVP 파이프라인 (RSS→중요도→브리핑) | `MVP_MODE=dry_run python scripts/mvp_pipeline.py` |
-| 5 | Telegram draft → 마크다운 export | `draft` Approve 후 `briefing.md` (티스토리 API 미사용) |
+| 5 | Notify draft → 마크다운 export | Discord/Telegram Approve 후 `briefing.md` |
+| 5b | (다음) Slack Approve 어댑터 | `NOTIFY_CHANNEL=slack` |
 | 6 | Browserless + R2 카드 렌더 | `PUBLISH_CARDS=1` 시 PNG·URL |
 | 7 | 인스타 캐러셀 | Meta 토큰 후 게시 |
 | 8 | `seen_urls` + n8n 네이티브 노드화 | **Postgres `seen_urls` 파이프라인 연동됨** / n8n UI는 후속 |
@@ -20,8 +21,8 @@
 
 ## MVP 성공 기준
 
-- [ ] 평일 07:30(또는 Manual)에 Telegram 초안이 온다 (`smoke_telegram` + `MVP_MODE=draft`)
-- [x] 초안 뉴스가 **당일** Google News 토픽 기반이다
+- [ ] 평일 07:30(또는 Manual)에 Discord/Telegram 초안이 온다 (`smoke_*` + `MVP_MODE=draft`)
+- [x] 초안 뉴스가 **전일 15:00~실행시각** Google News 토픽 기반이다
 - [x] Approve 시 `briefing.md`가 생긴다 (수동 붙여넣기; 티스토리 Open API 종료로 자동 발행 제거)
 - [ ] Approve 시 인스타 5~7장 캐러셀이 올라간다 (`PUBLISH_CARDS=1`)
 - [x] 성공 확정한 URL은 다음날 재사용되지 않는다 (`seen_urls` Postgres)
