@@ -94,20 +94,20 @@ MVP_MODE=dry_run python scripts/mvp_pipeline.py
 
 ### draft (Approve → 마크다운)
 
-`.env`에 `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID`를 넣은 뒤:
+`.env`에 Discord 또는 Telegram 토큰을 넣고 `NOTIFY_CHANNEL`을 고른 뒤:
 
 ```bash
-python scripts/smoke_telegram.py
+python scripts/smoke_discord.py    # 또는 smoke_telegram.py
 python scripts/smoke_seen_urls.py
 
 MVP_MODE=draft python scripts/mvp_pipeline.py
-# Telegram Approve → output/<시각>/briefing.md 저장 (에디터에 붙여넣기)
+# Approve → output/<시각>/briefing.md 저장 (에디터에 붙여넣기)
 ```
 
 토큰 없이 게이트만 검증할 때:
 
 ```bash
-MVP_MODE=draft TELEGRAM_APPROVE_MODE=auto \
+MVP_MODE=draft NOTIFY_CHANNEL=auto \
   RANK_MODE=heuristic BRIEFING_MODE=heuristic \
   python scripts/mvp_pipeline.py
 ```

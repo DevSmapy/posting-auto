@@ -2,7 +2,7 @@
 
 로컬 Docker **n8n + Ollama**로 한국 뉴스를 모아 요약한 뒤, **마크다운 브리핑**(수동 붙여넣기)과 선택적으로 **인스타그램** 카드뉴스를 준비하는 자동화 프로젝트입니다.
 
-> 현재 상태: **반자동** — Telegram Approve → `briefing.md` 저장. 티스토리 Open API는 종료되어 사용하지 않습니다.
+> 현재 상태: **반자동** — Discord/Telegram Approve → `briefing.md` 저장. 티스토리 Open API는 종료되어 사용하지 않습니다.
 
 ---
 
@@ -12,15 +12,15 @@
 |------|------|
 | 스케줄 | 평일 07:30 KST (호스트 cron 또는 n8n) |
 | 뉴스 소스 (MVP) | Google News KR 토픽 RSS — `BUSINESS` + `NATION` |
-| 날짜 | `pubDate` 기준 **당일(Asia/Seoul)** 만 |
+| 날짜 | `pubDate` ∈ **전일 15:00 ~ 실행시각** (Asia/Seoul, 설정 가능) |
 | 중요도 | 피드 순서 + 클러스터 크기 + **Ollama 스니펫 점수** |
 | LLM | Docker Ollama (`qwen2.5:14b` 권장) |
 | 발행 | 마크다운 파일 반자동 (수동 붙여넣기) + 선택적 Instagram |
-| 안전장치 | `MVP_MODE=draft` → Telegram Approve/Skip → `briefing.md` |
+| 안전장치 | `MVP_MODE=draft` → `NOTIFY_CHANNEL`(Discord/Telegram) Approve → `briefing.md` |
 
 ```text
-Google News RSS → 당일/seen_urls 필터 → Ollama 중요도 → Ollama 브리핑
-        → (draft) Telegram Approve/Skip → briefing.md (수동 붙여넣기) → seen_urls 기록
+Google News RSS → 전일15:00~now / seen_urls → Ollama 중요도 → Ollama 브리핑
+        → (draft) Discord|Telegram Approve/Skip → briefing.md → seen_urls 기록
 ```
 
 ---
