@@ -29,7 +29,7 @@
 ### Discord (권장 Approve 채널)
 
 - [ ] Developer Portal Bot → `DISCORD_BOT_TOKEN`
-- [ ] 채널 ID → `DISCORD_CHANNEL_ID` + 봇 초대 (Send/React/History)
+- [ ] **텍스트 채널** ID → `DISCORD_CHANNEL_ID` (카테고리 ID 금지) + 봇 초대 (Send / Attach Files / React / History)
 - [ ] `NOTIFY_CHANNEL=discord` (또는 자동 선택)
 - [ ] `python scripts/smoke_discord.py`
 
