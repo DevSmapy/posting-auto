@@ -102,6 +102,7 @@ python scripts/smoke_seen_urls.py
 
 MVP_MODE=draft python scripts/mvp_pipeline.py
 # Approve → output/<시각>/briefing.md 저장 (에디터에 붙여넣기)
+# 또는: ./scripts/run_draft.sh
 ```
 
 토큰 없이 게이트만 검증할 때:
@@ -111,6 +112,22 @@ MVP_MODE=draft NOTIFY_CHANNEL=auto \
   RANK_MODE=heuristic BRIEFING_MODE=heuristic \
   python scripts/mvp_pipeline.py
 ```
+
+단위 체크 (네트워크 없음):
+
+```bash
+python scripts/test_notify_window.py
+```
+
+### 평일 07:30 cron 예시 (macOS/Linux)
+
+프로젝트 경로를 본인 환경에 맞게 바꾼 뒤:
+
+```cron
+30 7 * * 1-5 cd "/Users/leeyongkyun/포스팅 자동화" && ./scripts/run_draft.sh >>./output/cron.log 2>&1
+```
+
+`ollama` / `postgres`가 그 시각에 떠 있어야 합니다.
 
 | `MVP_MODE` | 동작 |
 |------------|------|

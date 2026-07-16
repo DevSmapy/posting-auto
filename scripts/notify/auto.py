@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 
 class AutoNotifier:
     name = "auto"
@@ -12,3 +14,6 @@ class AutoNotifier:
     def wait_for_approve(self, preview: str) -> bool:
         print("   auto-approve")
         return True
+
+    def send_file(self, path: Path, caption: str = "") -> None:
+        print(f"[notify:auto] file={path.name}")

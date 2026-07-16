@@ -706,12 +706,19 @@ def run_publish(
             ig_media_id = instagram_carousel(image_urls, f"{caption}\n\n{tags_h}".strip())
             print(f"   ig media id: {ig_media_id}")
 
-    notifier.send_text(
-        f"[마크다운 준비됨]\n{briefing.get('title')}\n\n"
-        f"파일: {md_path}\n"
-        f"에디터에 붙여넣기 하세요.\n\n"
-        f"---\n{md[:1500]}"
+    caption = (
+        f"[마크다운 준비됨]\n{briefing.get('title')}\n"
+        f"경로: {md_path}\n에디터에 붙여넣기 하세요."
     )
+    send_file = getattr(notifier, "send_file", None)
+    if callable(send_file):
+        try:
+            send_file(md_path, caption=caption)
+        except Exception as exc:  # noqa: BLE001
+            print(f"   !! send_file failed: {exc}")
+            notifier.send_text(f"{caption}\n\n---\n{md[:1500]}")
+    else:
+        notifier.send_text(f"{caption}\n\n---\n{md[:1500]}")
 
     n = store.record_published(picked, tistory_post_id=export_ref, ig_media_id=ig_media_id)
     print(f"==> seen_urls recorded: {n} (backend={store.backend})")

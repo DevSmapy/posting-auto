@@ -26,7 +26,7 @@
 
 | 선택 | 동작 |
 |------|------|
-| Approve | `output/<시각>/briefing.md` 저장 (+ 채널에 경로·미리보기) |
+| Approve | `output/<시각>/briefing.md` 저장 (+ 채널 알림; Discord는 파일 첨부) |
 | Skip | 종료. `seen_urls` 미기록 |
 | 타임아웃 | Skip과 동일 |
 
@@ -35,11 +35,16 @@ Approve 후 **마크다운 저장 성공 시**에만 `seen_urls`에 insert.
 ### Discord 설정
 
 1. [Discord Developer Portal](https://discord.com/developers/applications)에서 앱·Bot 생성 → `DISCORD_BOT_TOKEN`
-2. Bot 권한: `Send Messages`, `Add Reactions`, `Read Message History` (해당 채널)
-3. 서버에 봇 초대 후, 채널 ID → `DISCORD_CHANNEL_ID` (개발자 모드에서 채널 복사)
+2. Bot 권한: `Send Messages`, `Attach Files`, `Add Reactions`, `Read Message History` (해당 채널)
+3. 서버에 봇 초대 후, **텍스트 채널** ID → `DISCORD_CHANNEL_ID`
 4. `.env`에 `NOTIFY_CHANNEL=discord` (또는 토큰만 넣고 자동 선택)
 
-스모크: `python scripts/smoke_discord.py`
+> **주의:** `DISCORD_CHANNEL_ID`는 `#일반`처럼 **#으로 시작하는 텍스트 채널**이어야 합니다.  
+> 카테고리(예: “채팅 채널” 폴더) ID를 넣으면 `Cannot send messages in a non-text channel`(400)이 납니다.  
+> 개발자 모드 ON → 텍스트 채널 우클릭 → **채널 ID 복사**.
+
+스모크: `python scripts/smoke_discord.py`  
+Approve 후 채널에 `briefing.md` 파일이 첨부됩니다 (붙여넣기용).
 
 ### Telegram 설정
 
