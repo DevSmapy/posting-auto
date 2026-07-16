@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 
 class CliNotifier:
     name = "cli"
@@ -19,3 +21,6 @@ class CliNotifier:
         approved = line in {"a", "approve", "y", "yes", "ok"}
         print("   approved" if approved else "   skipped")
         return approved
+
+    def send_file(self, path: Path, caption: str = "") -> None:
+        print(f"[notify:cli] file ready: {path}" + (f" ({caption})" if caption else ""))

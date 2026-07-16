@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -34,6 +35,25 @@ class TelegramNotifier:
             print("Telegram skipped: missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID")
             return
         self._api("sendMessage", {"chat_id": self.chat_id, "text": text[:4000]})
+
+    def send_file(self, path: Path, caption: str = "") -> None:
+        if not self.token or not self.chat_id:
+            print("Telegram skipped: missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID")
+            return
+        path = Path(path)
+        if not path.is_file():
+            print(f"Telegram send_file skipped: missing {path}")
+            return
+        url = f"https://api.telegram.org/bot{self.token}/sendDocument"
+        with path.open("rb") as fh:
+            resp = requests.post(
+                url,
+                data={"chat_id": self.chat_id, "caption": (caption or path.name)[:1024]},
+                files={"document": (path.name, fh)},
+                timeout=60,
+            )
+        resp.raise_for_status()
+        print(f"   Telegram document sent: {path.name}")
 
     def wait_for_approve(self, preview: str) -> bool:
         timeout = approve_timeout_sec()

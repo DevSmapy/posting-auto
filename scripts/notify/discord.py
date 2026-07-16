@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import time
+from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import requests
 
@@ -21,11 +24,14 @@ class DiscordNotifier:
         self.token = env("DISCORD_BOT_TOKEN")
         self.channel_id = env("DISCORD_CHANNEL_ID")
 
-    def _headers(self) -> dict[str, str]:
+    def _auth_headers(self) -> dict[str, str]:
         if not self.token:
             raise RuntimeError("DISCORD_BOT_TOKEN required")
+        return {"Authorization": f"Bot {self.token}"}
+
+    def _headers(self) -> dict[str, str]:
         return {
-            "Authorization": f"Bot {self.token}",
+            **self._auth_headers(),
             "Content-Type": "application/json",
         }
 
@@ -45,9 +51,40 @@ class DiscordNotifier:
         if not self.token or not self.channel_id:
             print("Discord skipped: missing DISCORD_BOT_TOKEN or DISCORD_CHANNEL_ID")
             return
-        # Discord message limit ~2000
         chunk = text[:1900]
         self._request("POST", f"/channels/{self.channel_id}/messages", json={"content": chunk})
+
+    def send_file(self, path: Path, caption: str = "") -> None:
+        if not self.token or not self.channel_id:
+            print("Discord skipped: missing DISCORD_BOT_TOKEN or DISCORD_CHANNEL_ID")
+            return
+        path = Path(path)
+        if not path.is_file():
+            print(f"Discord send_file skipped: missing {path}")
+            return
+        payload = {"content": (caption or f"첨부: {path.name}")[:1900]}
+        with path.open("rb") as fh:
+            resp = requests.post(
+                f"{API}/channels/{self.channel_id}/messages",
+                headers=self._auth_headers(),
+                data={"payload_json": json.dumps(payload, ensure_ascii=False)},
+                files={"files[0]": (path.name, fh, "text/markdown; charset=utf-8")},
+                timeout=60,
+            )
+        if resp.status_code == 429:
+            time.sleep(float(resp.headers.get("Retry-After", "1")))
+            with path.open("rb") as fh:
+                resp = requests.post(
+                    f"{API}/channels/{self.channel_id}/messages",
+                    headers=self._auth_headers(),
+                    data={"payload_json": json.dumps(payload, ensure_ascii=False)},
+                    files={"files[0]": (path.name, fh, "text/markdown; charset=utf-8")},
+                    timeout=60,
+                )
+        if not resp.ok:
+            print(f"   !! Discord send_file failed: {resp.status_code} {resp.text[:300]}")
+            return
+        print(f"   Discord file attached: {path.name}")
 
     def _create_message(self, content: str) -> str:
         data = self._request(
@@ -58,9 +95,6 @@ class DiscordNotifier:
         return str(data["id"])
 
     def _add_reaction(self, message_id: str, emoji: str) -> None:
-        # Unicode emoji path-encoded as-is for ✅ / ⏭
-        from urllib.parse import quote
-
         enc = quote(emoji)
         self._request(
             "PUT",
@@ -68,8 +102,6 @@ class DiscordNotifier:
         )
 
     def _reaction_users(self, message_id: str, emoji: str) -> list[dict[str, Any]]:
-        from urllib.parse import quote
-
         enc = quote(emoji)
         data = self._request(
             "GET",
@@ -89,7 +121,6 @@ class DiscordNotifier:
             "(봇이 미리 달아 둔 리액션에 추가로 눌러 주세요)"
         )
         msg_id = self._create_message(body)
-        # Seed reactions so users can click
         try:
             self._add_reaction(msg_id, APPROVE_EMOJI)
             self._add_reaction(msg_id, SKIP_EMOJI)
@@ -97,7 +128,6 @@ class DiscordNotifier:
             print(f"   !! Discord seed reactions failed: {exc}")
         print("   Discord preview sent — react ✅ or ⏭ …")
 
-        # Fetch bot user id to ignore own reactions
         me = self._request("GET", "/users/@me")
         bot_id = str(me.get("id") or "")
 
