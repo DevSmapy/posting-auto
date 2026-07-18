@@ -4,7 +4,7 @@
 
 ## Approve 채널 (`NOTIFY_CHANNEL`)
 
-`MVP_MODE=draft` 일 때 [`scripts/mvp_pipeline.py`](../scripts/mvp_pipeline.py)가 초안을 보낸 뒤 **Approve/Skip**을 기다립니다.  
+`MVP_MODE=draft` 일 때 [`scripts/mvp_pipeline.py`](../scripts/mvp_pipeline.py)가 브리핑을 준비한 뒤, `NOTIFY_SEND_AT`(예: `07:50`, Asia/Seoul)까지 기다렸다가 초안을 보내고 **Approve/Skip**을 기다립니다. 비어 있으면 준비 즉시 발송하고, 이미 지난 시각이면 대기 없이 보냅니다.  
 구현: [`scripts/notify/`](../scripts/notify/).
 
 | `NOTIFY_CHANNEL` | 동작 |

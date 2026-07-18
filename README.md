@@ -10,7 +10,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| 스케줄 | 평일 07:30 KST (호스트 cron 또는 n8n) |
+| 스케줄 | 평일 07:00 실행 → `NOTIFY_SEND_AT`(기본 07:50) Discord (cron `1-5`) |
 | 뉴스 소스 (MVP) | Google News KR 토픽 RSS — `BUSINESS` + `NATION` |
 | 날짜 | `pubDate` ∈ **전일 15:00 ~ 실행시각** (Asia/Seoul, 설정 가능) |
 | 중요도 | 피드 순서 + 클러스터 크기 + **Ollama 스니펫 점수** |
@@ -20,7 +20,8 @@
 
 ```text
 Google News RSS → 전일15:00~now / seen_urls → Ollama 중요도 → Ollama 브리핑
-        → (draft) Discord|Telegram Approve/Skip → briefing.md → seen_urls 기록
+        → (draft) NOTIFY_SEND_AT 대기 → Discord|Telegram Approve/Skip
+        → briefing.md → seen_urls 기록
 ```
 
 ---
