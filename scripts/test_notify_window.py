@@ -46,6 +46,31 @@ def test_news_window() -> None:
     print("OK news_window")
 
 
+def test_notify_send_at() -> None:
+    assert mvp.parse_notify_send_at("") is None
+    assert mvp.parse_notify_send_at("07:50") == (7, 50)
+    assert mvp.parse_notify_send_at("7:05") == (7, 5)
+    try:
+        mvp.parse_notify_send_at("25:00")
+        raise AssertionError("expected ValueError")
+    except ValueError:
+        pass
+
+    now = datetime(2026, 7, 20, 7, 10, tzinfo=TZ)
+    os.environ["NOTIFY_SEND_AT"] = "07:50"
+    target = mvp.notify_send_at_target(now)
+    assert target == datetime(2026, 7, 20, 7, 50, tzinfo=TZ), target
+
+    late = datetime(2026, 7, 20, 7, 55, tzinfo=TZ)
+    assert mvp.notify_send_at_target(late) == datetime(2026, 7, 20, 7, 50, tzinfo=TZ)
+    # Past target: wait helper must return without sleeping when now is injected
+    mvp.wait_until_notify_send_at(late)
+
+    os.environ.pop("NOTIFY_SEND_AT", None)
+    assert mvp.notify_send_at_target(now) is None
+    print("OK notify_send_at")
+
+
 def test_resolve_channel() -> None:
     _clear_notify_env()
     assert resolve_channel() == "cli"
@@ -74,6 +99,7 @@ def test_resolve_channel() -> None:
 
 def main() -> int:
     test_news_window()
+    test_notify_send_at()
     test_resolve_channel()
     print("All checks passed.")
     return 0
