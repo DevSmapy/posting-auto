@@ -13,22 +13,17 @@
 - 브리핑과 무관한 로컬 소식
 - 동일 이슈의 가십성 후속
 
-스키마:
+스키마 (단일 기사 1건):
 {
-  "ranked": [
-    {
-      "id": "string",
-      "score": 1,
-      "audience": "market",
-      "reason": "짧은 한국어 근거",
-      "drop": false
-    }
-  ]
+  "id": "string",
+  "score": 1,
+  "audience": "market",
+  "reason": "짧은 한국어 근거",
+  "drop": false
 }
 
 drop 필드는 JSON boolean 만 사용하라 (문자열 "false" 금지).
 audience는 "market" 또는 "general".
 score는 1~10 정수.
 입력 id를 그대로 복사하라 (새로 만들지 말 것).
-입력에 있는 모든 id를 ranked에 포함하라.
-drop=true 인 항목도 ranked 배열에 넣되, 브리핑에 쓸 가치 없는 것만 true.
+브리핑에 쓸 가치 없으면 drop=true.
