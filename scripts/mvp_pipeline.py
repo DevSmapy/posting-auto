@@ -42,6 +42,53 @@ def env(name: str, default: str = "") -> str:
     return os.getenv(name, default).strip()
 
 
+def parse_notify_send_at(raw: str) -> tuple[int, int] | None:
+    """Parse NOTIFY_SEND_AT as HH:MM (Asia/Seoul wall clock). Empty → None."""
+    text = (raw or "").strip()
+    if not text:
+        return None
+    m = re.fullmatch(r"(\d{1,2}):(\d{2})", text)
+    if not m:
+        raise ValueError(f"NOTIFY_SEND_AT must be HH:MM, got {raw!r}")
+    hour, minute = int(m.group(1)), int(m.group(2))
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        raise ValueError(f"NOTIFY_SEND_AT out of range: {raw!r}")
+    return hour, minute
+
+
+def notify_send_at_target(now: datetime, raw: str | None = None) -> datetime | None:
+    """Today's send deadline in NEWS_TIMEZONE, or None if unset."""
+    parsed = parse_notify_send_at(raw if raw is not None else env("NOTIFY_SEND_AT"))
+    if parsed is None:
+        return None
+    hour, minute = parsed
+    local = now.astimezone(TZ)
+    return local.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+
+def wait_until_notify_send_at(now: datetime | None = None) -> None:
+    """Block until NOTIFY_SEND_AT (KST). If already past, return immediately."""
+    clock = now or datetime.now(TZ)
+    target = notify_send_at_target(clock)
+    if target is None:
+        return
+    remaining = (target - clock).total_seconds()
+    if remaining <= 0:
+        print(f"==> NOTIFY_SEND_AT={target.strftime('%H:%M')} already passed — send now")
+        return
+    print(
+        f"==> waiting until NOTIFY_SEND_AT={target.strftime('%H:%M')} "
+        f"({int(remaining)}s, tz={TZ})"
+    )
+    while True:
+        clock = datetime.now(TZ)
+        remaining = (target - clock).total_seconds()
+        if remaining <= 0:
+            break
+        time.sleep(min(remaining, 30.0))
+    print(f"==> NOTIFY_SEND_AT reached — sending Approve preview")
+
+
 def ollama_base() -> str:
     """Host scripts must not use the Docker DNS name `ollama`."""
     host_url = env("OLLAMA_HOST_URL")
@@ -788,6 +835,7 @@ def main() -> int:
 
         if mode == "draft":
             preview = preview_text(briefing, picked)
+            wait_until_notify_send_at()
             print(f"==> Approve gate channel={channel}")
             if not notifier.wait_for_approve(preview):
                 print("Done (draft skipped). seen_urls not updated.")

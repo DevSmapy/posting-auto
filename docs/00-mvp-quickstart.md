@@ -119,15 +119,16 @@ MVP_MODE=draft NOTIFY_CHANNEL=auto \
 python scripts/test_notify_window.py
 ```
 
-### 평일 07:30 cron 예시 (macOS/Linux)
+### 평일 07:00 cron 예시 (macOS/Linux)
 
-프로젝트 경로를 본인 환경에 맞게 바꾼 뒤:
+월–금만 (`1-5`). 토·일은 돌리지 않습니다.  
+파이프라인은 07:00에 시작하고, Discord Approve 초안은 `.env`의 `NOTIFY_SEND_AT`(기본 07:50)에 보냅니다.
 
 ```cron
-30 7 * * 1-5 cd "/Users/leeyongkyun/포스팅 자동화" && ./scripts/run_draft.sh >>./output/cron.log 2>&1
+0 7 * * 1-5 cd "/Users/leeyongkyun/포스팅 자동화" && ./scripts/run_draft.sh >>./output/cron.log 2>&1
 ```
 
-`ollama` / `postgres`가 그 시각에 떠 있어야 합니다.
+`ollama` / `postgres`가 07:00에 떠 있어야 합니다. 포스팅 목표 시각(예: 08:00)은 수동 붙여넣기 기준이며 코드로 강제하지 않습니다.
 
 | `MVP_MODE` | 동작 |
 |------------|------|

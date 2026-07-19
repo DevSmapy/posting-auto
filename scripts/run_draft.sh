@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Weekday morning draft run (Approve → briefing.md).
+# Cron: 0 7 * * 1-5  (NOTIFY_SEND_AT controls Discord send time, default 07:50)
 # Usage: ./scripts/run_draft.sh
 set -euo pipefail
 
