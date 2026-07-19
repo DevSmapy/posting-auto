@@ -28,26 +28,22 @@ curl http://127.0.0.1:11434/api/tags
 
 ## 2단계 LLM 호출
 
-1. **중요도 랭킹** — 후보 15~20건 → 점수·탈락 사유  
-2. **브리핑 생성** — 상위 5건 → 마크다운/카드용 JSON
+1. **중요도** — heuristic으로 전체 점수 → `HEURISTIC_MIN_SCORE` 이상만 → 기사별 LLM 순차 호출(상한 `NEWS_LLM_CANDIDATES`) → 상위 `NEWS_PICK_COUNT`  
+2. **브리핑** — 상위 선정분 → 마크다운/카드용 JSON **1회**
 
-한 번에 다 시키면 JSON이 불안정해지므로 **분리**합니다.
+중요도는 후보를 한 프롬프트에 몰아넣지 않고 **기사당 1회**로 나눕니다.
 
 ---
 
-## 중요도 점수 JSON
+## 중요도 점수 JSON (기사 1건)
 
 ```json
 {
-  "ranked": [
-    {
-      "id": "article-stable-id",
-      "score": 8,
-      "audience": "market",
-      "reason": "코스피 급락·서킷브레이커, 다수 매체 보도",
-      "drop": false
-    }
-  ]
+  "id": "article-stable-id",
+  "score": 8,
+  "audience": "market",
+  "reason": "코스피 급락·서킷브레이커, 다수 매체 보도",
+  "drop": false
 }
 ```
 
@@ -57,6 +53,11 @@ curl http://127.0.0.1:11434/api/tags
 | `audience` | `market` \| `general` |
 | `drop` | 지역 홍보·행사·기고 등이면 `true` |
 | `reason` | 짧은 한국어 근거 |
+
+### 선별
+
+- `HEURISTIC_MIN_SCORE` (기본 8): 이 미만은 LLM 미호출
+- `NEWS_LLM_CANDIDATES` (기본 10): 임계값 통과분 상한
 
 ### 가점
 
@@ -69,7 +70,7 @@ curl http://127.0.0.1:11434/api/tags
 - 동일 이슈의 가십성 후속
 - 브리핑 독자와 무관한 로컬 소식
 
-프롬프트 파일(예정): `prompts/importance_system.md`, `prompts/importance_user.md`
+프롬프트: `prompts/importance_system.md`, `prompts/importance_user.md`
 
 ---
 

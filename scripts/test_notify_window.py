@@ -46,6 +46,35 @@ def test_news_window() -> None:
     print("OK news_window")
 
 
+def test_per_article_rank_helpers() -> None:
+    assert mvp.normalize_importance_item({"id": "a1", "score": 9, "drop": False})["score"] == 9
+    assert mvp.normalize_importance_item({"ranked": [{"id": "a1", "score": 7}]})["id"] == "a1"
+    assert mvp.normalize_importance_item({}) is None
+
+    base = {
+        "id": "a1",
+        "title": "t",
+        "feed_rank": 1,
+        "score": 8,
+        "audience": "market",
+        "reason": "heuristic",
+    }
+    kept = mvp.apply_importance_row(base, {"score": 9, "audience": "market", "reason": "ok", "drop": False})
+    assert kept is not None and kept["score"] == 9
+    assert mvp.apply_importance_row(base, {"score": 1, "drop": True}) is None
+
+    scored = [
+        {"id": "hi", "score": 12, "feed_rank": 1},
+        {"id": "mid", "score": 8, "feed_rank": 2},
+        {"id": "lo", "score": 5, "feed_rank": 3},
+    ]
+    picked = mvp.select_llm_candidates(scored, min_score=8, limit=10)
+    assert [a["id"] for a in picked] == ["hi", "mid"]
+    capped = mvp.select_llm_candidates(scored, min_score=8, limit=1)
+    assert [a["id"] for a in capped] == ["hi"]
+    print("OK per_article_rank_helpers")
+
+
 def test_notify_send_at() -> None:
     assert mvp.parse_notify_send_at("") is None
     assert mvp.parse_notify_send_at("07:50") == (7, 50)
@@ -99,6 +128,7 @@ def test_resolve_channel() -> None:
 
 def main() -> int:
     test_news_window()
+    test_per_article_rank_helpers()
     test_notify_send_at()
     test_resolve_channel()
     print("All checks passed.")

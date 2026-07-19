@@ -281,7 +281,8 @@ def ollama_chat(system: str, user: str) -> tuple[Any, str]:
     raise RuntimeError(f"Ollama failed after retry: {last_err}")
 
 
-def heuristic_rank(articles: list[dict[str, Any]], pick: int) -> list[dict[str, Any]]:
+def heuristic_score_all(articles: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Score every article with feed/cluster/watchlist heuristics (no truncate)."""
     watchlist = [w.strip() for w in env("WATCHLIST", "").split(",") if w.strip()]
     scored: list[dict[str, Any]] = []
     for a in articles:
@@ -300,18 +301,49 @@ def heuristic_rank(articles: list[dict[str, Any]], pick: int) -> list[dict[str, 
         item["drop"] = False
         scored.append(item)
     scored.sort(key=lambda x: (-x["score"], x["feed_rank"]))
-    return scored[:pick]
+    return scored
 
 
-def normalize_ranked_payload(parsed: Any) -> list[dict[str, Any]]:
-    if isinstance(parsed, list):
-        return [x for x in parsed if isinstance(x, dict)]
+def heuristic_rank(articles: list[dict[str, Any]], pick: int) -> list[dict[str, Any]]:
+    return heuristic_score_all(articles)[:pick]
+
+
+def normalize_importance_item(parsed: Any) -> dict[str, Any] | None:
+    """Accept a single importance object (or legacy ranked[0])."""
+    row: Any = None
     if isinstance(parsed, dict):
-        for key in ("ranked", "items", "articles", "results"):
-            val = parsed.get(key)
-            if isinstance(val, list):
-                return [x for x in val if isinstance(x, dict)]
-    return []
+        ranked = parsed.get("ranked")
+        if isinstance(ranked, list) and ranked and isinstance(ranked[0], dict):
+            row = ranked[0]
+        elif "score" in parsed or "id" in parsed:
+            row = parsed
+    elif isinstance(parsed, list) and parsed and isinstance(parsed[0], dict):
+        row = parsed[0]
+    return row if isinstance(row, dict) else None
+
+
+def apply_importance_row(base: dict[str, Any], row: dict[str, Any]) -> dict[str, Any] | None:
+    if as_bool_drop(row.get("drop")):
+        return None
+    item = dict(base)
+    try:
+        item["score"] = int(row.get("score") or 0)
+    except (TypeError, ValueError):
+        item["score"] = int(base.get("score") or 0)
+    item["audience"] = row.get("audience") or base.get("audience") or "general"
+    item["reason"] = row.get("reason") or base.get("reason") or ""
+    item["drop"] = False
+    return item
+
+
+def select_llm_candidates(
+    scored: list[dict[str, Any]],
+    min_score: int,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Heuristic score >= min_score, already sorted high→low, capped at limit."""
+    above = [a for a in scored if int(a.get("score") or 0) >= min_score]
+    return above[: max(0, limit)]
 
 
 def rank_articles(
@@ -321,70 +353,73 @@ def rank_articles(
 ) -> list[dict[str, Any]]:
     pick = int(env("NEWS_PICK_COUNT", "5"))
     llm_limit = int(env("NEWS_LLM_CANDIDATES", "10"))
-    pre = heuristic_rank(articles, max(llm_limit, pick))
-    watchlist = env("WATCHLIST", "")
-    payload = [
-        {
-            "id": a["id"],
-            "title": a["title"],
-            "snippet": a["snippet"][:400],
-            "source": a["source"],
-            "topic": a["topic"],
-            "feed_rank": a["feed_rank"],
-            "cluster_size": a["cluster_size"],
-        }
-        for a in pre
-    ]
-    user = (
-        read_prompt("importance_user.md")
-        .replace("{{date}}", now.strftime("%Y-%m-%d"))
-        .replace("{{watchlist}}", watchlist)
-        .replace("{{articles_json}}", json.dumps(payload, ensure_ascii=False, indent=2))
+    min_score = int(env("HEURISTIC_MIN_SCORE", "8"))
+    all_scored = heuristic_score_all(articles)
+    use_llm = env("RANK_MODE", "llm").lower() != "heuristic"
+
+    if not use_llm:
+        print(f"   rank mode=heuristic → top {pick}")
+        return all_scored[:pick]
+
+    candidates = select_llm_candidates(all_scored, min_score, llm_limit)
+    above_n = sum(1 for a in all_scored if int(a.get("score") or 0) >= min_score)
+    print(
+        f"   heuristic>={min_score}: {above_n} eligible → LLM {len(candidates)} "
+        f"(cap={llm_limit})"
     )
 
-    use_llm = env("RANK_MODE", "llm").lower() != "heuristic"
     scored: list[dict[str, Any]] = []
-    raw = ""
-    parsed: Any = None
-    if use_llm:
-        try:
-            parsed, raw = ollama_chat(read_prompt("importance_system.md"), user)
-            if run_dir is not None:
-                (run_dir / "importance_raw.json").write_text(
-                    json.dumps({"raw": raw, "parsed": parsed}, ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
-            by_id = {a["id"]: a for a in pre}
-            for row in normalize_ranked_payload(parsed):
-                rid = str(row.get("id") or "").strip()
-                base = by_id.get(rid)
-                if not base:
-                    continue
-                if as_bool_drop(row.get("drop")):
-                    continue
-                item = dict(base)
-                try:
-                    item["score"] = int(row.get("score") or 0)
-                except (TypeError, ValueError):
-                    item["score"] = 0
-                item["audience"] = row.get("audience") or "general"
-                item["reason"] = row.get("reason") or ""
-                scored.append(item)
-            scored.sort(key=lambda x: (-x["score"], x["feed_rank"]))
-            scored = scored[:pick]
-        except Exception as exc:  # noqa: BLE001
-            print(f"   !! LLM rank failed: {exc} — heuristic fallback")
-            scored = []
+    per_raw: list[dict[str, Any]] = []
+    system = read_prompt("importance_system.md")
+    watchlist = env("WATCHLIST", "")
+    date_s = now.strftime("%Y-%m-%d")
 
-    if not scored:
-        print("   !! empty LLM rank — using heuristic fallback")
-        scored = heuristic_rank(articles, pick)
-        if run_dir is not None and raw:
-            (run_dir / "importance_fallback.txt").write_text(
-                f"LLM returned no usable ranks.\nraw={raw[:2000]}\n",
-                encoding="utf-8",
-            )
-    return scored
+    for idx, base in enumerate(candidates, start=1):
+        payload = {
+            "id": base["id"],
+            "title": base["title"],
+            "snippet": (base.get("snippet") or "")[:400],
+            "source": base.get("source"),
+            "topic": base.get("topic"),
+            "feed_rank": base.get("feed_rank"),
+            "cluster_size": base.get("cluster_size"),
+        }
+        user = (
+            read_prompt("importance_user.md")
+            .replace("{{date}}", date_s)
+            .replace("{{watchlist}}", watchlist)
+            .replace("{{article_json}}", json.dumps(payload, ensure_ascii=False, indent=2))
+        )
+        print(f"   LLM importance {idx}/{len(candidates)} id={base['id'][:8]}…")
+        try:
+            parsed, raw = ollama_chat(system, user)
+            per_raw.append({"id": base["id"], "raw": raw, "parsed": parsed})
+            row = normalize_importance_item(parsed)
+            if row is None:
+                print(f"   !! bad JSON for {base['id'][:8]} — keep heuristic")
+                scored.append(dict(base))
+                continue
+            item = apply_importance_row(base, row)
+            if item is None:
+                print(f"   drop id={base['id'][:8]}")
+                continue
+            scored.append(item)
+        except Exception as exc:  # noqa: BLE001
+            print(f"   !! LLM fail {base['id'][:8]}: {exc} — keep heuristic")
+            scored.append(dict(base))
+
+    if run_dir is not None and per_raw:
+        (run_dir / "importance_raw.json").write_text(
+            json.dumps(per_raw, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    scored.sort(key=lambda x: (-int(x.get("score") or 0), x.get("feed_rank") or 99))
+    picked = scored[:pick]
+    if not picked:
+        print("   !! no LLM ranks usable — heuristic top")
+        return all_scored[:pick]
+    return picked
 
 
 def build_briefing_heuristic(articles: list[dict[str, Any]], now: datetime) -> dict[str, Any]:
@@ -789,6 +824,7 @@ def main() -> int:
     print(
         f"==> ollama threads={env('OLLAMA_NUM_THREAD', '4')} "
         f"rank_mode={env('RANK_MODE', 'llm')} "
+        f"heuristic_min={env('HEURISTIC_MIN_SCORE', '8')} "
         f"llm_candidates={env('NEWS_LLM_CANDIDATES', '10')}"
     )
     print("==> fetching Google News RSS")
