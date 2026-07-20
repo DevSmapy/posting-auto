@@ -535,6 +535,13 @@ def _market_impact_lists(briefing: dict[str, Any]) -> tuple[list[str], list[str]
     return [str(x) for x in pos], [str(x) for x in neu], [str(x) for x in neg]
 
 
+def _safe_source_url(value: Any) -> str:
+    url = str(value or "").strip()
+    if re.match(r"^https?://", url, re.IGNORECASE):
+        return url
+    return "#"
+
+
 _BLOG_DISCLAIMER = (
     "※ 본 글은 정보 제공을 목적으로 작성되었으며 "
     "투자 또는 의사결정을 위한 전문적인 조언이 아닙니다."
@@ -575,7 +582,7 @@ def assemble_blog_html(briefing: dict[str, Any]) -> str:
             parts.append("<h3>한 줄 요약</h3>")
             parts.append(f"<p>{html.escape(one)}</p>")
         name = html.escape(story.get("source_name") or "")
-        url = html.escape(story.get("source_url") or "#", quote=True)
+        url = html.escape(_safe_source_url(story.get("source_url")), quote=True)
         if name or story.get("source_url"):
             parts.append(f'<p>출처: <a href="{url}">{name or "링크"}</a></p>')
         parts.append("<hr>")
@@ -682,8 +689,9 @@ def assemble_blog_markdown(briefing: dict[str, Any]) -> str:
             lines.append(one)
             lines.append("")
         name = (story.get("source_name") or "").strip()
-        url = (story.get("source_url") or "").strip()
-        if url:
+        raw_url = (story.get("source_url") or "").strip()
+        url = _safe_source_url(raw_url)
+        if raw_url:
             label = name or "출처"
             lines.append(f"출처: [{label}]({url})")
             lines.append("")

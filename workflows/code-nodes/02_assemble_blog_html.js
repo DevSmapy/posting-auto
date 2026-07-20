@@ -21,6 +21,10 @@ const whatHappened = (story) =>
   String(story.what_happened || story.summary || '').trim();
 const whyImportant = (story) =>
   String(story.why_important || story.why_it_matters || '').trim();
+const safeSourceUrl = (value) => {
+  const url = String(value || '').trim();
+  return /^https?:\/\//i.test(url) ? url : '#';
+};
 
 const parts = [];
 const intro = String(b.intro || '').trim();
@@ -62,7 +66,7 @@ for (let i = 0; i < (b.stories || []).length; i++) {
   }
   if (story.source_url || story.source_name) {
     parts.push(
-      `<p>출처: <a href="${esc(story.source_url || '#')}">${esc(story.source_name || '링크')}</a></p>`,
+      `<p>출처: <a href="${esc(safeSourceUrl(story.source_url))}">${esc(story.source_name || '링크')}</a></p>`,
     );
   }
   parts.push('<hr>');

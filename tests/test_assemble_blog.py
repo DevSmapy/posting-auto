@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from mvp_pipeline import (  # noqa: E402
+    _safe_source_url,
     assemble_blog_markdown,
     build_briefing_heuristic,
 )
@@ -101,6 +102,25 @@ class AssembleBlogMarkdownTest(unittest.TestCase):
         self.assertNotIn("heuristic", md.lower())
         self.assertNotIn("watchlist:", md.lower())
         self.assertIn("| 오늘의 경제 브리핑 (2026-07-20)", md)
+
+    def test_source_url_allows_only_http_and_https(self) -> None:
+        self.assertEqual(_safe_source_url("https://example.com"), "https://example.com")
+        self.assertEqual(_safe_source_url("http://example.com"), "http://example.com")
+        self.assertEqual(_safe_source_url("javascript:alert(1)"), "#")
+        self.assertEqual(_safe_source_url("data:text/html,1"), "#")
+
+    def test_markdown_source_url_falls_back_to_hash(self) -> None:
+        briefing = {
+            **BRIEFING_V2,
+            "stories": [
+                {
+                    **BRIEFING_V2["stories"][0],
+                    "source_url": "javascript:alert(1)",
+                }
+            ],
+        }
+        md = assemble_blog_markdown(briefing)
+        self.assertIn("출처: [연합뉴스](#)", md)
 
 
 if __name__ == "__main__":
