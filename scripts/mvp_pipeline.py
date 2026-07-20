@@ -425,7 +425,7 @@ def rank_articles(
 def build_briefing_heuristic(articles: list[dict[str, Any]], now: datetime) -> dict[str, Any]:
     """LLM 없이 발행 경로 스모크·폴백용 브리핑."""
     date = now.strftime("%Y-%m-%d")
-    stories = []
+    stories: list[dict[str, Any]] = []
     slides: list[dict[str, str]] = [
         {
             "type": "cover",
@@ -434,12 +434,15 @@ def build_briefing_heuristic(articles: list[dict[str, Any]], now: datetime) -> d
         }
     ]
     for i, a in enumerate(articles, start=1):
-        summary = (a.get("snippet") or a.get("title") or "")[:280]
+        snippet = (a.get("snippet") or a.get("title") or "")[:280]
+        headline = a.get("title") or f"이슈 {i}"
         stories.append(
             {
-                "headline": a.get("title") or f"이슈 {i}",
-                "summary": summary,
-                "why_it_matters": a.get("reason") or "시장·정책 흐름 점검",
+                "headline": headline,
+                "what_happened": snippet,
+                "why_important": "시장·정책 흐름에 영향을 줄 수 있는 이슈입니다.",
+                "watch_next": "후속 보도와 시장 반응을 지켜볼 필요가 있습니다.",
+                "one_liner": headline[:20],
                 "source_name": a.get("source") or "",
                 "source_url": a.get("link") or "",
             }
@@ -447,8 +450,8 @@ def build_briefing_heuristic(articles: list[dict[str, Any]], now: datetime) -> d
         slides.append(
             {
                 "type": "story",
-                "headline": (a.get("title") or "")[:80],
-                "body": summary[:160],
+                "headline": headline[:80],
+                "body": snippet[:160],
             }
         )
     slides.append(
@@ -458,18 +461,310 @@ def build_briefing_heuristic(articles: list[dict[str, Any]], now: datetime) -> d
             "body": "정보 안내용이며 투자 권유가 아닙니다.",
         }
     )
-    tops = [a.get("title") or "" for a in articles[:3]]
+    tops = [a.get("title") or "" for a in articles[:3] if a.get("title")]
+    keywords = ", ".join(tops[:3]) if tops else "경제, 증시, 브리핑"
+    core_summary = [t for t in tops[:5]] or ["오늘 주요 경제 뉴스를 정리했습니다."]
     return {
-        "title": f"오늘의 경제 브리핑 ({date})",
-        "intro": "휴리스틱 브리핑(테스트/폴백).",
-        "market_one_liner": " · ".join(t for t in tops if t) or "오늘 주요 뉴스 정리",
+        "title": f"{keywords} | 오늘의 경제 브리핑 ({date})",
+        "intro": (
+            "오늘 아침 경제·시장에서 주목할 이슈를 정리했습니다. "
+            "각 이슈의 배경과 앞으로 확인할 점을 함께 살펴봅니다."
+        ),
+        "core_summary": core_summary,
         "stories": stories,
-        "today_points": [f"{a.get('title')}" for a in articles[:5]],
+        "market_impact": {
+            "positive": ["주요 이슈가 시장 관심을 높이고 있습니다."],
+            "neutral": ["단기 변동성은 지속될 수 있습니다."],
+            "negative": ["불확실성이 남아 있어 주의가 필요합니다."],
+        },
+        "insight": (
+            "오늘 소개한 이슈들은 경제·시장 흐름을 이해하는 데 "
+            "서로 연결된 맥락을 갖고 있습니다. 개별 뉴스보다 전체 흐름을 "
+            "함께 보는 것이 도움이 됩니다."
+        ),
+        "upcoming_events": [
+            {
+                "date": "",
+                "title": "주요 경제 지표·기업 실적 발표",
+                "description": "이번 주 예정된 발표 일정을 확인하세요.",
+            }
+        ],
+        "closing_remark": (
+            "오늘도 핵심만 담아 전해드렸습니다. 내일 아침 브리핑에서도 "
+            "중요한 흐름을 이어가겠습니다."
+        ),
+        "related_keywords": ["경제", "증시", "브리핑", "시장", "뉴스"],
         "blog_tags": ["경제", "브리핑", "뉴스"],
         "slides": slides,
         "caption": f"{date} 경제 브리핑",
         "hashtags": ["경제", "뉴스", "브리핑"],
     }
+
+
+def _core_summary(briefing: dict[str, Any]) -> list[str]:
+    points = briefing.get("core_summary") or briefing.get("today_points") or []
+    if points:
+        return [str(p) for p in points]
+    one = (briefing.get("market_one_liner") or "").strip()
+    return [one] if one else []
+
+
+def _story_what_happened(story: dict[str, Any]) -> str:
+    return (story.get("what_happened") or story.get("summary") or "").strip()
+
+
+def _story_why_important(story: dict[str, Any]) -> str:
+    return (story.get("why_important") or story.get("why_it_matters") or "").strip()
+
+
+def _story_watch_next(story: dict[str, Any]) -> str:
+    return (story.get("watch_next") or "").strip()
+
+
+def _story_one_liner(story: dict[str, Any]) -> str:
+    return (story.get("one_liner") or "").strip()
+
+
+def _market_impact_lists(briefing: dict[str, Any]) -> tuple[list[str], list[str], list[str]]:
+    impact = briefing.get("market_impact") or {}
+    if not isinstance(impact, dict):
+        return [], [], []
+    pos = impact.get("positive") or []
+    neu = impact.get("neutral") or []
+    neg = impact.get("negative") or []
+    return [str(x) for x in pos], [str(x) for x in neu], [str(x) for x in neg]
+
+
+def _safe_source_url(value: Any) -> str:
+    url = str(value or "").strip()
+    if re.match(r"^https?://", url, re.IGNORECASE):
+        return url
+    return "#"
+
+
+_BLOG_DISCLAIMER = (
+    "※ 본 글은 정보 제공을 목적으로 작성되었으며 "
+    "투자 또는 의사결정을 위한 전문적인 조언이 아닙니다."
+)
+
+
+def assemble_blog_html(briefing: dict[str, Any]) -> str:
+    parts: list[str] = []
+    intro = (briefing.get("intro") or "").strip()
+    if intro:
+        parts.append(f"<p>{html.escape(intro)}</p>")
+        parts.append("<hr>")
+
+    summary = _core_summary(briefing)
+    if summary:
+        parts.append("<h2>📌 오늘의 핵심 요약</h2><ul>")
+        for point in summary:
+            parts.append(f"<li>{html.escape(point)}</li>")
+        parts.append("</ul><hr>")
+
+    for i, story in enumerate(briefing.get("stories") or [], start=1):
+        headline = (story.get("headline") or "").strip()
+        parts.append(f"<h2>{i}. {html.escape(headline)}</h2>")
+        what = _story_what_happened(story)
+        if what:
+            parts.append("<h3>무슨 일이 있었나?</h3>")
+            parts.append(f"<p>{html.escape(what)}</p>")
+        why = _story_why_important(story)
+        if why:
+            parts.append("<h3>왜 중요한가?</h3>")
+            parts.append(f"<p>{html.escape(why)}</p>")
+        watch = _story_watch_next(story)
+        if watch:
+            parts.append("<h3>앞으로 주목할 점</h3>")
+            parts.append(f"<p>{html.escape(watch)}</p>")
+        one = _story_one_liner(story)
+        if one:
+            parts.append("<h3>한 줄 요약</h3>")
+            parts.append(f"<p>{html.escape(one)}</p>")
+        name = html.escape(story.get("source_name") or "")
+        url = html.escape(_safe_source_url(story.get("source_url")), quote=True)
+        if name or story.get("source_url"):
+            parts.append(f'<p>출처: <a href="{url}">{name or "링크"}</a></p>')
+        parts.append("<hr>")
+
+    pos, neu, neg = _market_impact_lists(briefing)
+    if pos or neu or neg:
+        parts.append("<h2>📈 오늘의 시장·산업 영향</h2>")
+        if pos:
+            parts.append("<p><strong>긍정적인 영향</strong></p><ul>")
+            for item in pos:
+                parts.append(f"<li>{html.escape(item)}</li>")
+            parts.append("</ul>")
+        if neu:
+            parts.append("<p><strong>중립적인 영향</strong></p><ul>")
+            for item in neu:
+                parts.append(f"<li>{html.escape(item)}</li>")
+            parts.append("</ul>")
+        if neg:
+            parts.append("<p><strong>부정적인 영향</strong></p><ul>")
+            for item in neg:
+                parts.append(f"<li>{html.escape(item)}</li>")
+            parts.append("</ul>")
+
+    insight = (briefing.get("insight") or "").strip()
+    if insight:
+        parts.append("<h2>🔍 오늘의 인사이트</h2>")
+        parts.append(f"<p>{html.escape(insight)}</p>")
+
+    events = briefing.get("upcoming_events") or []
+    if events:
+        parts.append("<h2>📅 앞으로 주목할 일정</h2><ul>")
+        for ev in events:
+            if not isinstance(ev, dict):
+                parts.append(f"<li>{html.escape(str(ev))}</li>")
+                continue
+            date = (ev.get("date") or "").strip()
+            title = (ev.get("title") or "").strip()
+            desc = (ev.get("description") or "").strip()
+            label = " — ".join(x for x in [date, title] if x) or title
+            if desc:
+                label = f"{label}: {desc}" if label else desc
+            parts.append(f"<li>{html.escape(label)}</li>")
+        parts.append("</ul>")
+
+    closing = (briefing.get("closing_remark") or "").strip()
+    if closing:
+        parts.append("<h2>✨ 오늘의 한마디</h2>")
+        parts.append(f"<p>{html.escape(closing)}</p>")
+
+    parts.append("<hr>")
+    keywords = briefing.get("related_keywords") or []
+    if keywords:
+        parts.append("<h3>관련 키워드</h3>")
+        parts.append(f"<p>{html.escape(', '.join(str(k) for k in keywords))}</p>")
+    parts.append(f"<p>{html.escape(_BLOG_DISCLAIMER)}</p>")
+    return "\n".join(parts)
+
+
+def assemble_blog_markdown(briefing: dict[str, Any]) -> str:
+    """티스토리 등 에디터에 수동 붙여넣기용 Markdown."""
+    title = (briefing.get("title") or "오늘의 경제 브리핑").strip()
+    tags = briefing.get("blog_tags") or []
+    lines: list[str] = [f"# {title}", ""]
+
+    intro = (briefing.get("intro") or "").strip()
+    if intro:
+        lines.append(intro)
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+
+    summary = _core_summary(briefing)
+    if summary:
+        lines.append("## 📌 오늘의 핵심 요약")
+        lines.append("")
+        for point in summary:
+            lines.append(f"- {point}")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+
+    for i, story in enumerate(briefing.get("stories") or [], start=1):
+        headline = (story.get("headline") or "").strip()
+        lines.append(f"## {i}. {headline}" if headline else f"## {i}.")
+        lines.append("")
+        what = _story_what_happened(story)
+        if what:
+            lines.append("### 무슨 일이 있었나?")
+            lines.append(what)
+            lines.append("")
+        why = _story_why_important(story)
+        if why:
+            lines.append("### 왜 중요한가?")
+            lines.append(why)
+            lines.append("")
+        watch = _story_watch_next(story)
+        if watch:
+            lines.append("### 앞으로 주목할 점")
+            lines.append(watch)
+            lines.append("")
+        one = _story_one_liner(story)
+        if one:
+            lines.append("### 한 줄 요약")
+            lines.append(one)
+            lines.append("")
+        name = (story.get("source_name") or "").strip()
+        raw_url = (story.get("source_url") or "").strip()
+        url = _safe_source_url(raw_url)
+        if raw_url:
+            label = name or "출처"
+            lines.append(f"출처: [{label}]({url})")
+            lines.append("")
+        elif name:
+            lines.append(f"출처: {name}")
+            lines.append("")
+        lines.append("---")
+        lines.append("")
+
+    pos, neu, neg = _market_impact_lists(briefing)
+    if pos or neu or neg:
+        lines.append("## 📈 오늘의 시장·산업 영향")
+        lines.append("")
+        if pos:
+            lines.append("**긍정적인 영향**")
+            for item in pos:
+                lines.append(f"- {item}")
+            lines.append("")
+        if neu:
+            lines.append("**중립적인 영향**")
+            for item in neu:
+                lines.append(f"- {item}")
+            lines.append("")
+        if neg:
+            lines.append("**부정적인 영향**")
+            for item in neg:
+                lines.append(f"- {item}")
+            lines.append("")
+
+    insight = (briefing.get("insight") or "").strip()
+    if insight:
+        lines.append("## 🔍 오늘의 인사이트")
+        lines.append("")
+        lines.append(insight)
+        lines.append("")
+
+    events = briefing.get("upcoming_events") or []
+    if events:
+        lines.append("## 📅 앞으로 주목할 일정")
+        lines.append("")
+        for ev in events:
+            if not isinstance(ev, dict):
+                lines.append(f"- {ev}")
+                continue
+            date = (ev.get("date") or "").strip()
+            ev_title = (ev.get("title") or "").strip()
+            desc = (ev.get("description") or "").strip()
+            label = " — ".join(x for x in [date, ev_title] if x) or ev_title
+            if desc:
+                label = f"{label}: {desc}" if label else desc
+            lines.append(f"- {label}")
+        lines.append("")
+
+    closing = (briefing.get("closing_remark") or "").strip()
+    if closing:
+        lines.append("## ✨ 오늘의 한마디")
+        lines.append("")
+        lines.append(closing)
+        lines.append("")
+
+    lines.append("---")
+    lines.append("")
+    keywords = briefing.get("related_keywords") or []
+    if keywords:
+        lines.append("### 관련 키워드")
+        lines.append("")
+        lines.append(", ".join(str(k) for k in keywords))
+        lines.append("")
+    lines.append(_BLOG_DISCLAIMER)
+    if tags:
+        lines.append("")
+        lines.append("태그: " + ", ".join(str(t) for t in tags))
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def build_briefing(articles: list[dict[str, Any]], now: datetime) -> dict[str, Any]:
@@ -504,82 +799,6 @@ def build_briefing(articles: list[dict[str, Any]], now: datetime) -> dict[str, A
             print(f"   !! LLM briefing failed: {exc} — heuristic fallback")
             return build_briefing_heuristic(articles, now)
         raise
-
-
-def assemble_blog_html(briefing: dict[str, Any]) -> str:
-    parts = [
-        f"<p>{html.escape(briefing.get('intro', ''))}</p>",
-        f"<p><strong>오늘 한줄</strong> {html.escape(briefing.get('market_one_liner', ''))}</p>",
-    ]
-    for story in briefing.get("stories") or []:
-        parts.append(f"<h2>{html.escape(story.get('headline', ''))}</h2>")
-        parts.append(f"<p>{html.escape(story.get('summary', ''))}</p>")
-        parts.append(f"<p><em>{html.escape(story.get('why_it_matters', ''))}</em></p>")
-        name = html.escape(story.get("source_name") or "")
-        url = html.escape(story.get("source_url") or "#", quote=True)
-        parts.append(f'<p>출처: <a href="{url}">{name}</a></p>')
-    parts.append("<h2>오늘 포인트</h2><ul>")
-    for point in briefing.get("today_points") or []:
-        parts.append(f"<li>{html.escape(str(point))}</li>")
-    parts.append("</ul><hr>")
-    parts.append(
-        "<p>본 콘텐츠는 정보 안내용이며 특정 종목의 매수·매도·투자를 권유하지 않습니다. "
-        "투자 판단과 책임은 독자 본인에게 있습니다.</p>"
-    )
-    return "\n".join(parts)
-
-
-def assemble_blog_markdown(briefing: dict[str, Any]) -> str:
-    """티스토리 등 에디터에 수동 붙여넣기용 Markdown."""
-    title = (briefing.get("title") or "오늘의 경제 브리핑").strip()
-    tags = briefing.get("blog_tags") or []
-    lines: list[str] = [f"# {title}", ""]
-    intro = (briefing.get("intro") or "").strip()
-    if intro:
-        lines.append(intro)
-        lines.append("")
-    one = (briefing.get("market_one_liner") or "").strip()
-    if one:
-        lines.append(f"**오늘 한줄** {one}")
-        lines.append("")
-    for story in briefing.get("stories") or []:
-        headline = (story.get("headline") or "").strip()
-        lines.append(f"## {headline}" if headline else "##")
-        lines.append("")
-        summary = (story.get("summary") or "").strip()
-        if summary:
-            lines.append(summary)
-            lines.append("")
-        why = (story.get("why_it_matters") or "").strip()
-        if why:
-            lines.append(f"*{why}*")
-            lines.append("")
-        name = (story.get("source_name") or "").strip()
-        url = (story.get("source_url") or "").strip()
-        if url:
-            label = name or "출처"
-            lines.append(f"출처: [{label}]({url})")
-            lines.append("")
-        elif name:
-            lines.append(f"출처: {name}")
-            lines.append("")
-    points = briefing.get("today_points") or []
-    if points:
-        lines.append("## 오늘 포인트")
-        lines.append("")
-        for point in points:
-            lines.append(f"- {point}")
-        lines.append("")
-    lines.append("---")
-    lines.append("")
-    lines.append(
-        "본 콘텐츠는 정보 안내용이며 특정 종목의 매수·매도·투자를 권유하지 않습니다. "
-        "투자 판단과 책임은 독자 본인에게 있습니다."
-    )
-    if tags:
-        lines.append("")
-        lines.append("태그: " + ", ".join(str(t) for t in tags))
-    return "\n".join(lines).rstrip() + "\n"
 
 
 def screenshot_html(html_doc: str, out_path: Path) -> None:
@@ -724,12 +943,14 @@ def instagram_carousel(image_urls: list[str], caption: str) -> str:
 
 
 def preview_text(briefing: dict[str, Any], picked: list[dict[str, Any]]) -> str:
-    lines = [
-        f"[초안] {briefing.get('title', '')}",
-        briefing.get("market_one_liner", ""),
-        "",
-        "선정 뉴스:",
-    ]
+    lines = [f"[초안] {briefing.get('title', '')}", ""]
+    for point in _core_summary(briefing)[:3]:
+        lines.append(f"- {point}")
+    insight = (briefing.get("insight") or "").strip()
+    if insight:
+        lines.append("")
+        lines.append(insight[:120] + ("…" if len(insight) > 120 else ""))
+    lines.extend(["", "선정 뉴스:"])
     for a in picked:
         lines.append(f"- ({a.get('score')}) {a['title']}")
     lines.append("")
