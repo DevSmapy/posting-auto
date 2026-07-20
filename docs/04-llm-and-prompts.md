@@ -74,23 +74,35 @@ curl http://127.0.0.1:11434/api/tags
 
 ---
 
-## 브리핑 JSON
+## 브리핑 JSON (v2)
 
 ```json
 {
-  "title": "브리핑 제목 (50자 내외)",
+  "title": "금리, 반도체, AI | 오늘의 경제 브리핑 (2026-07-20)",
   "intro": "도입 2~3문장",
-  "market_one_liner": "시장/이슈 한 줄",
+  "core_summary": ["핵심 요약 1", "핵심 요약 2", "핵심 요약 3"],
   "stories": [
     {
       "headline": "재작성 헤드라인",
-      "summary": "3~5문장 요약·해설",
-      "why_it_matters": "투자자 관점 한 줄(추천 금지)",
+      "what_happened": "사실을 객관적으로 2~4문장",
+      "why_important": "배경·맥락 2~3문장",
+      "watch_next": "앞으로 주목할 점 1~2문장",
+      "one_liner": "20자 내외",
       "source_name": "한겨레",
       "source_url": "https://..."
     }
   ],
-  "today_points": ["포인트1", "포인트2", "포인트3"],
+  "market_impact": {
+    "positive": ["긍정 영향"],
+    "neutral": ["중립 영향"],
+    "negative": ["부정 영향"]
+  },
+  "insight": "이슈들을 연결한 3~5문장",
+  "upcoming_events": [
+    { "date": "7월 21일", "title": "이벤트명", "description": "한 줄 설명" }
+  ],
+  "closing_remark": "마무리 한마디",
+  "related_keywords": ["금리", "반도체", "AI", "증시", "브리핑"],
   "blog_tags": ["경제", "증시", "브리핑"],
   "slides": [
     { "type": "cover", "headline": "오늘의 경제 브리핑", "body": "2026.07.13" },
@@ -103,6 +115,19 @@ curl http://127.0.0.1:11434/api/tags
 }
 ```
 
+### v1 → v2 필드 대응
+
+| v1 (구) | v2 (신) |
+|---------|---------|
+| `market_one_liner` | `core_summary` (또는 조립 시 생략) |
+| `today_points` | `core_summary` |
+| `stories[].summary` | `stories[].what_happened` |
+| `stories[].why_it_matters` | `stories[].why_important` |
+| — | `stories[].watch_next`, `one_liner` |
+| — | `market_impact`, `insight`, `upcoming_events`, `closing_remark`, `related_keywords` |
+
+조립 함수(`assemble_blog_markdown`)는 v1 JSON도 하위 호환으로 렌더링합니다.
+
 ### 슬라이드 규칙
 
 - 총 5~7장: `cover` + `story`들 + `disclaimer`
@@ -110,9 +135,9 @@ curl http://127.0.0.1:11434/api/tags
 
 ### 블로그 마크다운 / HTML
 
-LLM이 긴 HTML을 직접 쓰기보다, n8n에서 `intro` / `stories` / `today_points` / `sources`를 조립합니다. (로컬 모델 HTML 깨짐 방지)
+LLM이 긴 HTML을 직접 쓰기보다, `intro` / `core_summary` / `stories` / `market_impact` 등을 조립합니다. (로컬 모델 HTML 깨짐 방지)
 
-프롬프트 파일(예정): `prompts/briefing_system.md`, `prompts/briefing_user.md`
+프롬프트 파일: `prompts/briefing_system.md`, `prompts/briefing_user.md`
 
 ---
 

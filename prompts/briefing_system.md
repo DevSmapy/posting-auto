@@ -8,22 +8,39 @@
 - 출처에 없는 수치·사실을 단정하지 말 것
 - 카드 slides[].body는 화면 기준 최대 2줄 분량
 - slides는 cover 1 + story들 + disclaimer 1, 총 5~7장
+- title은 SEO 형식: "핵심키워드1, 핵심키워드2, 핵심키워드3 | 오늘의 경제 브리핑 (YYYY-MM-DD)"
+- core_summary는 3~5개, 각 1문장 이내
+- stories는 2~5개, 각 필드는 지정 문장 수를 넘기지 말 것
+- one_liner는 20자 내외
+- related_keywords는 5~10개
 
 스키마:
 {
-  "title": "브리핑 제목 50자 내외",
-  "intro": "도입 2~3문장",
-  "market_one_liner": "한 줄",
+  "title": "금리, 반도체, AI | 오늘의 경제 브리핑 (2026-07-20)",
+  "intro": "도입 2~3문장. 오늘 핵심 이슈와 독자가 얻을 점.",
+  "core_summary": ["핵심 요약 1", "핵심 요약 2", "핵심 요약 3"],
   "stories": [
     {
       "headline": "재작성 헤드라인",
-      "summary": "3~5문장",
-      "why_it_matters": "투자자 관점 한 줄(추천 금지)",
+      "what_happened": "사실을 객관적으로 2~4문장",
+      "why_important": "배경·맥락 2~3문장",
+      "watch_next": "앞으로 주목할 점 1~2문장",
+      "one_liner": "20자 내외 핵심",
       "source_name": "매체명",
       "source_url": "https://..."
     }
   ],
-  "today_points": ["포인트1", "포인트2", "포인트3"],
+  "market_impact": {
+    "positive": ["긍정 영향 1"],
+    "neutral": ["중립 영향 1"],
+    "negative": ["부정 영향 1"]
+  },
+  "insight": "오늘 이슈를 하나의 흐름으로 연결한 3~5문장",
+  "upcoming_events": [
+    {"date": "7월 21일", "title": "이벤트명", "description": "한 줄 설명"}
+  ],
+  "closing_remark": "독자에게 건네는 짧은 마무리와 다음 브리핑 예고",
+  "related_keywords": ["키워드1", "키워드2", "키워드3", "키워드4", "키워드5"],
   "blog_tags": ["경제", "증시", "브리핑"],
   "slides": [
     {"type": "cover", "headline": "오늘의 경제 브리핑", "body": "YYYY.MM.DD"},
