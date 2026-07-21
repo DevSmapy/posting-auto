@@ -13,6 +13,7 @@ __pycache__/
 *.pyc
 
 # 로컬 도구
+.cursor/
 .idea/
 .vscode/
 *.swp
