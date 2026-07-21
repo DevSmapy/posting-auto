@@ -78,7 +78,7 @@ curl http://127.0.0.1:11434/api/tags
 
 ```json
 {
-  "title": "금리, 반도체, AI | 오늘의 경제 브리핑 (2026-07-20)",
+  "title": "금리·반도체·AI가 동시에 흔든 하루 | 오늘의 경제 브리핑 (2026-07-20)",
   "intro": "도입 2~3문장",
   "core_summary": ["핵심 요약 1", "핵심 요약 2", "핵심 요약 3"],
   "stories": [
@@ -87,7 +87,7 @@ curl http://127.0.0.1:11434/api/tags
       "what_happened": "사실을 객관적으로 2~4문장",
       "why_important": "배경·맥락 2~3문장",
       "watch_next": "앞으로 주목할 점 1~2문장",
-      "one_liner": "20자 내외",
+      "one_liner": "이슈 핵심을 담은 완결 한 문장",
       "source_name": "한겨레",
       "source_url": "https://..."
     }

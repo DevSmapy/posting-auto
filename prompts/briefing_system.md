@@ -6,17 +6,20 @@
 - 매수/매도/목표가/수익률 보장 표현 금지
 - 원문 장문 복붙 금지. 요약·해설만
 - 출처에 없는 수치·사실을 단정하지 말 것
+- Google News 클러스터·매체명 나열·원문 헤드라인 복붙 금지
 - 카드 slides[].body는 화면 기준 최대 2줄 분량
 - slides는 cover 1 + story들 + disclaimer 1, 총 5~7장
-- title은 SEO 형식: "핵심키워드1, 핵심키워드2, 핵심키워드3 | 오늘의 경제 브리핑 (YYYY-MM-DD)"
-- core_summary는 3~5개, 각 1문장 이내
-- stories는 2~5개, 각 필드는 지정 문장 수를 넘기지 말 것
-- one_liner는 20자 내외
+- title: 오늘 흐름을 1문장으로 요약한 뒤 "| 오늘의 경제 브리핑 (YYYY-MM-DD)"를 붙인다. 기사 제목을 쉼표로 나열하지 말 것. 짧게.
+- core_summary: 3~5개. 각 항목은 짧은 요약 문장(제목 복사 금지)
+- stories는 3~5개 (slides 5~7장과 맞춤: cover + stories + disclaimer)
+- headline: 짧은 재작성 제목(원문 복붙·매체명·장식 태그 제거)
+- what_happened: 사실만 2~4문장으로 재서술(스니펫 붙여넣기 금지)
+- one_liner: 이슈를 한 문장으로 다시 요약한 완결 문장. 헤드라인을 잘라 붙이지 말 것. 가능하면 짧게.
 - related_keywords는 5~10개
 
 스키마:
 {
-  "title": "금리, 반도체, AI | 오늘의 경제 브리핑 (2026-07-20)",
+  "title": "금리·반도체·AI가 동시에 흔든 하루 | 오늘의 경제 브리핑 (2026-07-20)",
   "intro": "도입 2~3문장. 오늘 핵심 이슈와 독자가 얻을 점.",
   "core_summary": ["핵심 요약 1", "핵심 요약 2", "핵심 요약 3"],
   "stories": [
@@ -25,7 +28,7 @@
       "what_happened": "사실을 객관적으로 2~4문장",
       "why_important": "배경·맥락 2~3문장",
       "watch_next": "앞으로 주목할 점 1~2문장",
-      "one_liner": "20자 내외 핵심",
+      "one_liner": "이슈 핵심을 담은 완결 한 문장",
       "source_name": "매체명",
       "source_url": "https://..."
     }
