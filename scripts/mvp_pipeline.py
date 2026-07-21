@@ -422,6 +422,17 @@ def rank_articles(
     return picked
 
 
+def _clean_rss_snippet(raw: str) -> str:
+    """Strip Google News boilerplate; keep the first chunk only."""
+    text = re.sub(r"Google\s*뉴스에서[^\n]*", "", raw or "", flags=re.IGNORECASE)
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        return ""
+    parts = re.split(r"\s{2,}", text)
+    first = (parts[0] if parts else text).strip()
+    return first or text
+
+
 def build_briefing_heuristic(articles: list[dict[str, Any]], now: datetime) -> dict[str, Any]:
     """LLM 없이 발행 경로 스모크·폴백용 브리핑."""
     date = now.strftime("%Y-%m-%d")
@@ -434,15 +445,20 @@ def build_briefing_heuristic(articles: list[dict[str, Any]], now: datetime) -> d
         }
     ]
     for i, a in enumerate(articles, start=1):
-        snippet = (a.get("snippet") or a.get("title") or "")[:280]
         headline = a.get("title") or f"이슈 {i}"
+        cleaned = _clean_rss_snippet(a.get("snippet") or "")
+        # Avoid Google News cluster dumps: prefer a short title-based line.
+        if not cleaned or len(cleaned) > 120 or cleaned.startswith(headline):
+            what = headline
+        else:
+            what = cleaned
         stories.append(
             {
                 "headline": headline,
-                "what_happened": snippet,
+                "what_happened": what,
                 "why_important": "시장·정책 흐름에 영향을 줄 수 있는 이슈입니다.",
                 "watch_next": "후속 보도와 시장 반응을 지켜볼 필요가 있습니다.",
-                "one_liner": headline[:20],
+                "one_liner": "이 이슈의 핵심 흐름을 한 줄로 점검합니다.",
                 "source_name": a.get("source") or "",
                 "source_url": a.get("link") or "",
             }
@@ -451,7 +467,7 @@ def build_briefing_heuristic(articles: list[dict[str, Any]], now: datetime) -> d
             {
                 "type": "story",
                 "headline": headline[:80],
-                "body": snippet[:160],
+                "body": what[:160],
             }
         )
     slides.append(
@@ -461,16 +477,14 @@ def build_briefing_heuristic(articles: list[dict[str, Any]], now: datetime) -> d
             "body": "정보 안내용이며 투자 권유가 아닙니다.",
         }
     )
-    tops = [a.get("title") or "" for a in articles[:3] if a.get("title")]
-    keywords = ", ".join(tops[:3]) if tops else "경제, 증시, 브리핑"
-    core_summary = [t for t in tops[:5]] or ["오늘 주요 경제 뉴스를 정리했습니다."]
+    n = len(articles)
     return {
-        "title": f"{keywords} | 오늘의 경제 브리핑 ({date})",
+        "title": f"오늘 주요 경제·시장 이슈를 정리합니다 | 오늘의 경제 브리핑 ({date})",
         "intro": (
             "오늘 아침 경제·시장에서 주목할 이슈를 정리했습니다. "
             "각 이슈의 배경과 앞으로 확인할 점을 함께 살펴봅니다."
         ),
-        "core_summary": core_summary,
+        "core_summary": [f"오늘 선정 이슈 {n}건을 정리했습니다."] if n else ["오늘 주요 경제 뉴스를 정리했습니다."],
         "stories": stories,
         "market_impact": {
             "positive": ["주요 이슈가 시장 관심을 높이고 있습니다."],
@@ -542,6 +556,15 @@ def _safe_source_url(value: Any) -> str:
     return "#"
 
 
+def _body_bullet_lines(text: str) -> list[str]:
+    """Wrap body as bullets; split on newlines only (no NLP sentence split)."""
+    text = (text or "").strip()
+    if not text:
+        return []
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    return lines or [text]
+
+
 _BLOG_DISCLAIMER = (
     "※ 본 글은 정보 제공을 목적으로 작성되었으며 "
     "투자 또는 의사결정을 위한 전문적인 조언이 아닙니다."
@@ -567,19 +590,25 @@ def assemble_blog_html(briefing: dict[str, Any]) -> str:
         parts.append(f"<h2>{i}. {html.escape(headline)}</h2>")
         what = _story_what_happened(story)
         if what:
-            parts.append("<h3>무슨 일이 있었나?</h3>")
-            parts.append(f"<p>{html.escape(what)}</p>")
+            parts.append("<h3>📰 무슨 일이 있었나?</h3><ul>")
+            for line in _body_bullet_lines(what):
+                parts.append(f"<li>{html.escape(line)}</li>")
+            parts.append("</ul>")
         why = _story_why_important(story)
         if why:
-            parts.append("<h3>왜 중요한가?</h3>")
-            parts.append(f"<p>{html.escape(why)}</p>")
+            parts.append("<h3>💡 왜 중요한가?</h3><ul>")
+            for line in _body_bullet_lines(why):
+                parts.append(f"<li>{html.escape(line)}</li>")
+            parts.append("</ul>")
         watch = _story_watch_next(story)
         if watch:
-            parts.append("<h3>앞으로 주목할 점</h3>")
-            parts.append(f"<p>{html.escape(watch)}</p>")
+            parts.append("<h3>🔭 앞으로 주목할 점</h3><ul>")
+            for line in _body_bullet_lines(watch):
+                parts.append(f"<li>{html.escape(line)}</li>")
+            parts.append("</ul>")
         one = _story_one_liner(story)
         if one:
-            parts.append("<h3>한 줄 요약</h3>")
+            parts.append("<h3>✍️ 한 줄 요약</h3>")
             parts.append(f"<p>{html.escape(one)}</p>")
         name = html.escape(story.get("source_name") or "")
         url = html.escape(_safe_source_url(story.get("source_url")), quote=True)
@@ -670,22 +699,25 @@ def assemble_blog_markdown(briefing: dict[str, Any]) -> str:
         lines.append("")
         what = _story_what_happened(story)
         if what:
-            lines.append("### 무슨 일이 있었나?")
-            lines.append(what)
+            lines.append("### 📰 무슨 일이 있었나?")
+            for line in _body_bullet_lines(what):
+                lines.append(f"- {line}")
             lines.append("")
         why = _story_why_important(story)
         if why:
-            lines.append("### 왜 중요한가?")
-            lines.append(why)
+            lines.append("### 💡 왜 중요한가?")
+            for line in _body_bullet_lines(why):
+                lines.append(f"- {line}")
             lines.append("")
         watch = _story_watch_next(story)
         if watch:
-            lines.append("### 앞으로 주목할 점")
-            lines.append(watch)
+            lines.append("### 🔭 앞으로 주목할 점")
+            for line in _body_bullet_lines(watch):
+                lines.append(f"- {line}")
             lines.append("")
         one = _story_one_liner(story)
         if one:
-            lines.append("### 한 줄 요약")
+            lines.append("### ✍️ 한 줄 요약")
             lines.append(one)
             lines.append("")
         name = (story.get("source_name") or "").strip()
@@ -767,10 +799,10 @@ def assemble_blog_markdown(briefing: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def build_briefing(articles: list[dict[str, Any]], now: datetime) -> dict[str, Any]:
+def build_briefing(articles: list[dict[str, Any]], now: datetime) -> tuple[dict[str, Any], str]:
     if env("BRIEFING_MODE", "llm").lower() == "heuristic":
         print("   briefing mode=heuristic")
-        return build_briefing_heuristic(articles, now)
+        return build_briefing_heuristic(articles, now), "heuristic"
 
     payload = [
         {
@@ -793,11 +825,11 @@ def build_briefing(articles: list[dict[str, Any]], now: datetime) -> dict[str, A
         parsed, raw = ollama_chat(read_prompt("briefing_system.md"), user)
         if not isinstance(parsed, dict):
             raise RuntimeError(f"briefing JSON must be object, got {type(parsed)}: {raw[:500]}")
-        return parsed
+        return parsed, "llm"
     except Exception as exc:  # noqa: BLE001
         if env("ALLOW_BRIEFING_FALLBACK", "1").lower() in {"1", "true", "yes"}:
             print(f"   !! LLM briefing failed: {exc} — heuristic fallback")
-            return build_briefing_heuristic(articles, now)
+            return build_briefing_heuristic(articles, now), "heuristic"
         raise
 
 
@@ -942,8 +974,17 @@ def instagram_carousel(image_urls: list[str], caption: str) -> str:
     return pub.json().get("id", creation_id)
 
 
-def preview_text(briefing: dict[str, Any], picked: list[dict[str, Any]]) -> str:
-    lines = [f"[초안] {briefing.get('title', '')}", ""]
+def preview_text(
+    briefing: dict[str, Any],
+    picked: list[dict[str, Any]],
+    generation_mode: str = "llm",
+) -> str:
+    mode_label = "heuristic" if generation_mode == "heuristic" else "llm"
+    lines = [
+        f"[초안] {briefing.get('title', '')}",
+        f"생성: {mode_label}",
+        "",
+    ]
     for point in _core_summary(briefing)[:3]:
         lines.append(f"- {point}")
     insight = (briefing.get("insight") or "").strip()
@@ -970,6 +1011,7 @@ def run_publish(
     run_dir: Path,
     store: SeenUrlsStore,
     notifier: Any,
+    generation_mode: str = "llm",
 ) -> None:
     """Approve 후: 마크다운 저장(+선택 카드/인스타) → seen_urls 기록."""
     print("==> Write briefing markdown (manual paste)")
@@ -1009,8 +1051,9 @@ def run_publish(
             ig_media_id = instagram_carousel(image_urls, f"{caption}\n\n{tags_h}".strip())
             print(f"   ig media id: {ig_media_id}")
 
+    mode_label = "heuristic" if generation_mode == "heuristic" else "llm"
     caption = (
-        f"[마크다운 준비됨]\n{briefing.get('title')}\n"
+        f"[마크다운 준비됨]\n생성: {mode_label}\n{briefing.get('title')}\n"
         f"경로: {md_path}\n에디터에 붙여넣기 하세요."
     )
     send_file = getattr(notifier, "send_file", None)
@@ -1076,13 +1119,14 @@ def main() -> int:
         return 1
 
     print("==> Ollama briefing")
-    briefing = build_briefing(picked, now)
+    briefing, generation_mode = build_briefing(picked, now)
     briefing["blog_html"] = assemble_blog_html(briefing)
     (run_dir / "briefing.json").write_text(
         json.dumps(briefing, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     print(f"   title: {briefing.get('title')}")
+    print(f"   generation: {generation_mode}")
     print(f"   wrote {run_dir}")
 
     try:
@@ -1091,17 +1135,21 @@ def main() -> int:
             return 0
 
         if mode == "draft":
-            preview = preview_text(briefing, picked)
+            preview = preview_text(briefing, picked, generation_mode=generation_mode)
             wait_until_notify_send_at()
             print(f"==> Approve gate channel={channel}")
             if not notifier.wait_for_approve(preview):
                 print("Done (draft skipped). seen_urls not updated.")
                 return 0
-            run_publish(briefing, picked, now, run_dir, store, notifier)
+            run_publish(
+                briefing, picked, now, run_dir, store, notifier, generation_mode=generation_mode
+            )
             return 0
 
         if mode == "publish":
-            run_publish(briefing, picked, now, run_dir, store, notifier)
+            run_publish(
+                briefing, picked, now, run_dir, store, notifier, generation_mode=generation_mode
+            )
             return 0
 
         print(f"Unknown MVP_MODE={mode}", file=sys.stderr)

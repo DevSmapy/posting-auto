@@ -25,6 +25,22 @@ const safeSourceUrl = (value) => {
   const url = String(value || '').trim();
   return /^https?:\/\//i.test(url) ? url : '#';
 };
+const bodyBulletLines = (text) => {
+  const trimmed = String(text || '').trim();
+  if (!trimmed) return [];
+  const lines = trimmed
+    .split(/\n/)
+    .map((ln) => ln.trim())
+    .filter(Boolean);
+  return lines.length ? lines : [trimmed];
+};
+const pushBullets = (heading, text) => {
+  const lines = bodyBulletLines(text);
+  if (!lines.length) return;
+  parts.push(`<h3>${heading}</h3><ul>`);
+  for (const line of lines) parts.push(`<li>${esc(line)}</li>`);
+  parts.push('</ul>');
+};
 
 const parts = [];
 const intro = String(b.intro || '').trim();
@@ -44,24 +60,12 @@ for (let i = 0; i < (b.stories || []).length; i++) {
   const story = b.stories[i];
   const headline = String(story.headline || '').trim();
   parts.push(`<h2>${i + 1}. ${esc(headline)}</h2>`);
-  const what = whatHappened(story);
-  if (what) {
-    parts.push('<h3>무슨 일이 있었나?</h3>');
-    parts.push(`<p>${esc(what)}</p>`);
-  }
-  const why = whyImportant(story);
-  if (why) {
-    parts.push('<h3>왜 중요한가?</h3>');
-    parts.push(`<p>${esc(why)}</p>`);
-  }
-  const watch = String(story.watch_next || '').trim();
-  if (watch) {
-    parts.push('<h3>앞으로 주목할 점</h3>');
-    parts.push(`<p>${esc(watch)}</p>`);
-  }
+  pushBullets('📰 무슨 일이 있었나?', whatHappened(story));
+  pushBullets('💡 왜 중요한가?', whyImportant(story));
+  pushBullets('🔭 앞으로 주목할 점', String(story.watch_next || '').trim());
   const one = String(story.one_liner || '').trim();
   if (one) {
-    parts.push('<h3>한 줄 요약</h3>');
+    parts.push('<h3>✍️ 한 줄 요약</h3>');
     parts.push(`<p>${esc(one)}</p>`);
   }
   if (story.source_url || story.source_name) {
