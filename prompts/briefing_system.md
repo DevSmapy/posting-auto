@@ -11,7 +11,7 @@
 - slides는 cover 1 + story들 + disclaimer 1, 총 5~7장
 - title: 오늘 흐름을 1문장으로 요약한 뒤 "| 오늘의 경제 브리핑 (YYYY-MM-DD)"를 붙인다. 기사 제목을 쉼표로 나열하지 말 것. 짧게.
 - core_summary: 3~5개. 각 항목은 짧은 요약 문장(제목 복사 금지)
-- stories는 2~5개
+- stories는 3~5개 (slides 5~7장과 맞춤: cover + stories + disclaimer)
 - headline: 짧은 재작성 제목(원문 복붙·매체명·장식 태그 제거)
 - what_happened: 사실만 2~4문장으로 재서술(스니펫 붙여넣기 금지)
 - one_liner: 이슈를 한 문장으로 다시 요약한 완결 문장. 헤드라인을 잘라 붙이지 말 것. 가능하면 짧게.

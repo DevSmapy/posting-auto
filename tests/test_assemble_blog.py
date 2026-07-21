@@ -144,6 +144,12 @@ class AssembleBlogMarkdownTest(unittest.TestCase):
         raw = "첫 문장입니다.  Google 뉴스에서 헤드라인 및 의견 더보기"
         self.assertEqual(_clean_rss_snippet(raw), "첫 문장입니다.")
 
+    def test_clean_rss_snippet_splits_before_collapse(self) -> None:
+        raw = "첫 덩어리입니다.  둘째 덩어리와 매체명"
+        self.assertEqual(_clean_rss_snippet(raw), "첫 덩어리입니다.")
+        self.assertEqual(_clean_rss_snippet(""), "")
+        self.assertEqual(_clean_rss_snippet("   "), "")
+
     def test_preview_shows_generation_mode(self) -> None:
         preview = preview_text(BRIEFING_V2, [], generation_mode="heuristic")
         self.assertIn("생성: heuristic", preview)

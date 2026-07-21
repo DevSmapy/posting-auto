@@ -424,13 +424,15 @@ def rank_articles(
 
 def _clean_rss_snippet(raw: str) -> str:
     """Strip Google News boilerplate; keep the first chunk only."""
-    text = re.sub(r"Google\s*뉴스에서[^\n]*", "", raw or "", flags=re.IGNORECASE)
-    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"Google\s*뉴스에서[^\n]*", "", raw or "", flags=re.IGNORECASE).strip()
     if not text:
         return ""
+    # Split on multi-whitespace BEFORE collapsing, so cluster chunks survive.
     parts = re.split(r"\s{2,}", text)
-    first = (parts[0] if parts else text).strip()
-    return first or text
+    first = re.sub(r"\s+", " ", (parts[0] if parts else text)).strip()
+    if first:
+        return first
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def build_briefing_heuristic(articles: list[dict[str, Any]], now: datetime) -> dict[str, Any]:
