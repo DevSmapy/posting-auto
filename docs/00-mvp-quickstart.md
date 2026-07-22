@@ -136,11 +136,12 @@ python scripts/test_notify_window.py
 
 1. `postgres` (+ `browserless` if `PUBLISH_CARDS`) · `ollama` **start**
 2. 랭킹·브리핑 LLM
-3. **ollama stop** (Discord 발송 전 — 메모리 반환)
-4. Discord Approve 대기 → `briefing.md`
-5. 종료 시 남은 aux 컨테이너 **stop**
+3. **ollama + aux stop** (Discord 발송/Approve 대기 전 — 메모리 반환)
+4. Discord Approve 대기 → Approve 시 aux 재기동 → `briefing.md`
+5. 종료 시 남은 컨테이너 **stop** (`OLLAMA_AUTO_CONTAINER`/`DRAFT_AUTO_AUX`는 run_draft가 1로 켬)
 
 Docker Desktop은 켜 두세요. 포스팅 목표 시각(예: 08:00)은 수동 붙여넣기 기준이며 코드로 강제하지 않습니다.
+
 | `MVP_MODE` | 동작 |
 |------------|------|
 | `dry_run` | 수집·LLM만, JSON 저장 |
