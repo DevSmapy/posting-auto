@@ -837,7 +837,9 @@ def build_briefing(articles: list[dict[str, Any]], now: datetime) -> tuple[dict[
         .replace("{{date}}", now.strftime("%Y-%m-%d"))
         .replace("{{articles_json}}", json.dumps(payload, ensure_ascii=False, indent=2))
     )
-    briefing_timeout_ms = int(env("OLLAMA_BRIEFING_TIMEOUT_MS", "600000"))
+    briefing_timeout_ms = int(
+        env("OLLAMA_BRIEFING_TIMEOUT_MS") or env("OLLAMA_TIMEOUT_MS", "600000")
+    )
     try:
         parsed, raw = ollama_chat(
             read_prompt("briefing_system.md"),
