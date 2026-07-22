@@ -102,10 +102,10 @@ RANK_MODE=heuristic BRIEFING_MODE=llm MVP_MODE=dry_run python scripts/mvp_pipeli
 python scripts/smoke_discord.py    # 또는 smoke_telegram.py
 python scripts/smoke_seen_urls.py
 
-# 권장: 컨테이너 start → 워밍 → 파이프라인 → 모델 unload → docker stop
+# 권장: postgres(+browserless) · ollama start → LLM → ollama stop → Discord Approve → aux stop
 ./scripts/run_draft.sh
 # 또는 수동으로 컨테이너를 켠 채:
-# MVP_MODE=draft OLLAMA_AUTO_CONTAINER=0 python scripts/mvp_pipeline.py
+# MVP_MODE=draft OLLAMA_AUTO_CONTAINER=0 DRAFT_AUTO_AUX=0 python scripts/mvp_pipeline.py
 ```
 
 토큰 없이 게이트만 검증할 때:
@@ -113,7 +113,7 @@ python scripts/smoke_seen_urls.py
 ```bash
 MVP_MODE=draft NOTIFY_CHANNEL=auto \
   RANK_MODE=heuristic BRIEFING_MODE=heuristic \
-  OLLAMA_AUTO_CONTAINER=0 \
+  OLLAMA_AUTO_CONTAINER=0 DRAFT_AUTO_AUX=0 \
   python scripts/mvp_pipeline.py
 ```
 
@@ -132,9 +132,15 @@ python scripts/test_notify_window.py
 0 7 * * 1-5 cd "/Users/leeyongkyun/포스팅 자동화" && ./scripts/run_draft.sh >>./output/cron.log 2>&1
 ```
 
-`./scripts/run_draft.sh`가 ollama 컨테이너를 **시작·종료**합니다(Docker Desktop은 켜 두세요).  
-`postgres`가 필요하면 미리 떠 있어야 합니다. 포스팅 목표 시각(예: 08:00)은 수동 붙여넣기 기준이며 코드로 강제하지 않습니다.
+`./scripts/run_draft.sh` 수명주기:
 
+1. `postgres` (+ `browserless` if `PUBLISH_CARDS`) · `ollama` **start**
+2. 랭킹·브리핑 LLM
+3. **ollama stop** (Discord 발송 전 — 메모리 반환)
+4. Discord Approve 대기 → `briefing.md`
+5. 종료 시 남은 aux 컨테이너 **stop**
+
+Docker Desktop은 켜 두세요. 포스팅 목표 시각(예: 08:00)은 수동 붙여넣기 기준이며 코드로 강제하지 않습니다.
 | `MVP_MODE` | 동작 |
 |------------|------|
 | `dry_run` | 수집·LLM만, JSON 저장 |
