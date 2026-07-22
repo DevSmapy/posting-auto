@@ -10,7 +10,7 @@
 | From 호스트 스크립트 | `http://127.0.0.1:11434` (`OLLAMA_HOST_URL`) |
 | API | `POST /api/chat`, `stream: false`, `format: "json"` |
 | temperature | `0.2`~`0.4` |
-| timeout | `180000` ms (중요도+브리핑 각각 여유) |
+| timeout | 건당 스토리 기본 `120000` ms (`OLLAMA_STORY_TIMEOUT_MS`) |
 
 모델 pull 예:
 
@@ -28,10 +28,14 @@ curl http://127.0.0.1:11434/api/tags
 
 ## 2단계 LLM 호출
 
-1. **중요도** — heuristic으로 전체 점수 → `HEURISTIC_MIN_SCORE` 이상만 → 기사별 LLM 순차 호출(상한 `NEWS_LLM_CANDIDATES`) → 상위 `NEWS_PICK_COUNT`  
-2. **브리핑** — 상위 선정분 → 마크다운/카드용 JSON **1회**
+1. **중요도 (선택)** — 아침 기본은 `RANK_MODE=heuristic`. `RANK_MODE=llm`일 때만 heuristic 필터 후 기사별 중요도 LLM  
+2. **스토리 요약** — 선정 기사 **건당** LLM 1회 (`story_system` / `story_user`) → 코드가 envelope(title/intro/core_summary/slides 등) 취합
 
-중요도는 후보를 한 프롬프트에 몰아넣지 않고 **기사당 1회**로 나눕니다.
+전체 브리핑 JSON을 한 번에 생성하는 경로(구 `briefing_*.md`)는 사용하지 않습니다. 타임아웃·품질 붕괴의 원인이었습니다.
+
+건당 타임아웃: `OLLAMA_STORY_TIMEOUT_MS` → `OLLAMA_BRIEFING_TIMEOUT_MS` → `OLLAMA_TIMEOUT_MS` → **120000**
+
+생성 모드 로그: `llm` (전원 성공) | `mixed` (일부 폴백) | `heuristic` (전부 폴백 또는 `BRIEFING_MODE=heuristic`)
 
 ---
 
@@ -74,13 +78,27 @@ curl http://127.0.0.1:11434/api/tags
 
 ---
 
-## 브리핑 JSON (v2)
+## 스토리 JSON (건당) → envelope 취합
+
+LLM은 기사 1건당 아래 필드만 생성합니다. `source_name` / `source_url`은 코드가 원문에서 채웁니다.
 
 ```json
 {
-  "title": "금리·반도체·AI가 동시에 흔든 하루 | 오늘의 경제 브리핑 (2026-07-20)",
+  "headline": "짧은 재작성 제목",
+  "what_happened": "2~4문장",
+  "why_important": "2~3문장",
+  "watch_next": "1~2문장",
+  "one_liner": "완결 한 문장"
+}
+```
+
+코드 `assemble_briefing_from_stories`가 최종 브리핑 envelope를 만듭니다:
+
+```json
+{
+  "title": "오늘 주요 경제·시장 이슈를 정리합니다 | 오늘의 경제 브리핑 (YYYY-MM-DD)",
   "intro": "도입 2~3문장",
-  "core_summary": ["핵심 요약 1", "핵심 요약 2", "핵심 요약 3"],
+  "core_summary": ["스토리 one_liner …"],
   "stories": [
     {
       "headline": "재작성 헤드라인",
@@ -103,15 +121,14 @@ curl http://127.0.0.1:11434/api/tags
   ],
   "closing_remark": "마무리 한마디",
   "related_keywords": ["금리", "반도체", "AI", "증시", "브리핑"],
-  "blog_tags": ["경제", "증시", "브리핑"],
+  "blog_tags": ["경제", "브리핑"],
   "slides": [
     { "type": "cover", "headline": "오늘의 경제 브리핑", "body": "2026.07.13" },
     { "type": "story", "headline": "슬라이드 제목", "body": "최대 두 줄" },
     { "type": "disclaimer", "headline": "참고하세요", "body": "투자 판단의 책임은 본인에게 있습니다." }
   ],
   "caption": "인스타 캡션",
-  "hashtags": ["경제뉴스", "증시", "주식", "경제브리핑"],
-  "sources": [{ "title": "원문 제목", "url": "https://..." }]
+  "hashtags": ["경제뉴스", "증시", "주식", "경제브리핑"]
 }
 ```
 
@@ -135,9 +152,10 @@ curl http://127.0.0.1:11434/api/tags
 
 ### 블로그 마크다운 / HTML
 
-LLM이 긴 HTML을 직접 쓰기보다, `intro` / `core_summary` / `stories` / `market_impact` 등을 조립합니다. (로컬 모델 HTML 깨짐 방지)
+`intro` / `core_summary` / `stories` / `market_impact` 등을 코드가 조립합니다. (로컬 모델 HTML 깨짐 방지)
 
-프롬프트 파일: `prompts/briefing_system.md`, `prompts/briefing_user.md`
+프롬프트 파일: `prompts/story_system.md`, `prompts/story_user.md`  
+(레거시 미사용: `prompts/briefing_system.md`, `prompts/briefing_user.md`)
 
 ---
 
