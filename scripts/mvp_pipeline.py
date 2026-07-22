@@ -254,11 +254,18 @@ def ollama_options() -> dict[str, Any]:
     return opts
 
 
-def ollama_chat(system: str, user: str) -> tuple[Any, str]:
+def ollama_chat(
+    system: str,
+    user: str,
+    *,
+    timeout_ms: int | None = None,
+) -> tuple[Any, str]:
     model = env("OLLAMA_MODEL", "qwen2.5:14b")
-    timeout = int(env("OLLAMA_TIMEOUT_MS", "180000")) / 1000
+    if timeout_ms is None:
+        timeout_ms = int(env("OLLAMA_TIMEOUT_MS", "180000"))
+    timeout = timeout_ms / 1000
     url = f"{ollama_base()}/api/chat"
-    payload = {
+    payload: dict[str, Any] = {
         "model": model,
         "stream": False,
         "format": "json",
@@ -268,6 +275,9 @@ def ollama_chat(system: str, user: str) -> tuple[Any, str]:
             {"role": "user", "content": user},
         ],
     }
+    keep_alive = env("OLLAMA_KEEP_ALIVE", "30m")
+    if keep_alive:
+        payload["keep_alive"] = keep_alive
     last_err: Exception | None = None
     for _attempt in range(2):
         try:
@@ -458,9 +468,13 @@ def build_briefing_heuristic(articles: list[dict[str, Any]], now: datetime) -> d
             {
                 "headline": headline,
                 "what_happened": what,
-                "why_important": "시장·정책 흐름에 영향을 줄 수 있는 이슈입니다.",
-                "watch_next": "후속 보도와 시장 반응을 지켜볼 필요가 있습니다.",
-                "one_liner": "이 이슈의 핵심 흐름을 한 줄로 점검합니다.",
+                "why_important": (
+                    f"「{headline}」은(는) 시장·정책 흐름에 영향을 줄 수 있는 이슈입니다."
+                ),
+                "watch_next": (
+                    f"「{headline}」의 후속 보도와 시장 반응을 지켜볼 필요가 있습니다."
+                ),
+                "one_liner": headline,
                 "source_name": a.get("source") or "",
                 "source_url": a.get("link") or "",
             }
@@ -823,8 +837,13 @@ def build_briefing(articles: list[dict[str, Any]], now: datetime) -> tuple[dict[
         .replace("{{date}}", now.strftime("%Y-%m-%d"))
         .replace("{{articles_json}}", json.dumps(payload, ensure_ascii=False, indent=2))
     )
+    briefing_timeout_ms = int(env("OLLAMA_BRIEFING_TIMEOUT_MS", "600000"))
     try:
-        parsed, raw = ollama_chat(read_prompt("briefing_system.md"), user)
+        parsed, raw = ollama_chat(
+            read_prompt("briefing_system.md"),
+            user,
+            timeout_ms=briefing_timeout_ms,
+        )
         if not isinstance(parsed, dict):
             raise RuntimeError(f"briefing JSON must be object, got {type(parsed)}: {raw[:500]}")
         return parsed, "llm"
