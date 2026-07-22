@@ -135,11 +135,17 @@ draft_start_aux_containers() {
   fi
 
   echo "==> compose up -d postgres"
-  _draft_compose up -d postgres
+  if ! _draft_compose up -d postgres; then
+    echo "!! compose up postgres failed — continuing (SQLite fallback may apply)" >&2
+  else
+    postgres_wait_ready || true
+  fi
 
   if _draft_want_browserless; then
     echo "==> compose up -d browserless"
-    _draft_compose up -d browserless
+    if ! _draft_compose up -d browserless; then
+      echo "!! compose up browserless failed — continuing" >&2
+    fi
   else
     echo "==> skip browserless (PUBLISH_CARDS/DRAFT_START_BROWSERLESS off)"
   fi
@@ -151,8 +157,6 @@ draft_start_aux_containers() {
   if _draft_want_browserless && [[ -z "$BROWSERLESS_CONTAINER" ]]; then
     BROWSERLESS_CONTAINER="$(_draft_resolve_compose_container browserless)"
   fi
-
-  postgres_wait_ready
 }
 
 draft_start_ollama() {
@@ -202,6 +206,13 @@ draft_release_ollama() {
 
   echo "==> docker stop ${OLLAMA_CONTAINER} (before Discord / Approve)"
   docker stop "$OLLAMA_CONTAINER" >/dev/null 2>&1 || true
+}
+
+# After all LLM work: stop ollama and aux so Approve wait does not hold RAM/CPU.
+draft_release_after_llm() {
+  echo "==> release containers after LLM (before Discord / Approve)"
+  draft_release_ollama || true
+  draft_stop_aux_containers || true
 }
 
 draft_stop_aux_containers() {
