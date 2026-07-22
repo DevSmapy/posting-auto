@@ -14,6 +14,7 @@ import html
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -241,6 +242,35 @@ def as_bool_drop(value: Any) -> bool:
     if isinstance(value, str):
         return value.strip().lower() in {"1", "true", "yes", "y"}
     return bool(value)
+
+
+def release_ollama_after_llm() -> None:
+    """Unload model and stop ollama before Discord wait — frees RAM early.
+
+    Shell trap still stops remaining aux containers (postgres/browserless) on exit.
+    """
+    if not as_bool_drop(env("OLLAMA_AUTO_CONTAINER", "1")):
+        return
+    script = ROOT / "scripts" / "draft_lifecycle.sh"
+    if not script.is_file():
+        print(f"   !! missing {script.name}; skip ollama release")
+        return
+    print("==> release ollama (before Discord / Approve)")
+    env_prefix = {
+        "OLLAMA_AUTO_CONTAINER": env("OLLAMA_AUTO_CONTAINER", "1"),
+        "OLLAMA_CONTAINER": env("OLLAMA_CONTAINER", "ollama"),
+        "OLLAMA_MODEL": env("OLLAMA_MODEL", "qwen2.5:7b"),
+        "ROOT": str(ROOT),
+    }
+    try:
+        subprocess.run(
+            ["bash", "-c", f'source "{script}" && draft_release_ollama'],
+            check=False,
+            env={**os.environ, **env_prefix},
+            cwd=str(ROOT),
+        )
+    except OSError as exc:
+        print(f"   !! ollama release failed: {exc}")
 
 
 def ollama_options() -> dict[str, Any]:
@@ -1151,6 +1181,9 @@ def main() -> int:
     print(f"   title: {briefing.get('title')}")
     print(f"   generation: {generation_mode}")
     print(f"   wrote {run_dir}")
+
+    # LLM work is done — free ollama RAM before Discord wait / Approve.
+    release_ollama_after_llm()
 
     try:
         if mode == "dry_run":
