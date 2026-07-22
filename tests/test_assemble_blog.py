@@ -106,8 +106,36 @@ class AssembleBlogMarkdownTest(unittest.TestCase):
         self.assertNotIn("watchlist:", md.lower())
         self.assertNotIn("Google 뉴스에서", md)
         self.assertIn("오늘 주요 경제·시장 이슈를 정리합니다 | 오늘의 경제 브리핑 (2026-07-20)", md)
-        self.assertTrue(briefing["stories"][0]["one_liner"].endswith("점검합니다."))
-        self.assertNotEqual(briefing["stories"][0]["one_liner"], articles[0]["title"][:20])
+        story = briefing["stories"][0]
+        self.assertEqual(story["one_liner"], articles[0]["title"])
+        self.assertIn(articles[0]["title"], story["why_important"])
+        self.assertIn(articles[0]["title"], story["watch_next"])
+
+    def test_heuristic_story_fields_differ_by_headline(self) -> None:
+        articles = [
+            {
+                "title": "금리 인상 이슈",
+                "snippet": "내용 A",
+                "source": "s1",
+                "link": "https://ex.com/a",
+            },
+            {
+                "title": "환율 급등 이슈",
+                "snippet": "내용 B",
+                "source": "s2",
+                "link": "https://ex.com/b",
+            },
+        ]
+        briefing = build_briefing_heuristic(
+            articles, datetime(2026, 7, 22, tzinfo=timezone.utc)
+        )
+        s0, s1 = briefing["stories"]
+        self.assertEqual(s0["one_liner"], "금리 인상 이슈")
+        self.assertEqual(s1["one_liner"], "환율 급등 이슈")
+        self.assertNotEqual(s0["why_important"], s1["why_important"])
+        self.assertNotEqual(s0["watch_next"], s1["watch_next"])
+        self.assertIn("금리 인상 이슈", s0["why_important"])
+        self.assertIn("환율 급등 이슈", s1["watch_next"])
 
     def test_heuristic_title_not_joined_headlines(self) -> None:
         articles = [

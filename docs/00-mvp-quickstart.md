@@ -82,11 +82,13 @@ docker compose ps
 cd "/Users/leeyongkyun/포스팅 자동화"
 source .venv/bin/activate
 
-# (권장) Ollama 컨테이너 CPU 상한 — M2 Air
+# (권장) Ollama 컨테이너 CPU/메모리 상한 — M2 Air + Desktop ~12GB
+# Desktop Settings의 Memory와 컨테이너 --memory는 별개입니다.
 chmod +x scripts/limit_ollama_resources.sh
-./scripts/limit_ollama_resources.sh   # 기본 2 CPU / 6GB
+./scripts/limit_ollama_resources.sh   # 기본 4 CPU / 10GB
 
-MVP_MODE=dry_run python scripts/mvp_pipeline.py
+# 아침 권장: 중요도는 heuristic, 브리핑만 LLM 1회
+RANK_MODE=heuristic BRIEFING_MODE=llm MVP_MODE=dry_run python scripts/mvp_pipeline.py
 ```
 
 결과: `output/<시각>/candidates.json`, `ranked.json`, `briefing.json`  
@@ -100,9 +102,10 @@ MVP_MODE=dry_run python scripts/mvp_pipeline.py
 python scripts/smoke_discord.py    # 또는 smoke_telegram.py
 python scripts/smoke_seen_urls.py
 
-MVP_MODE=draft python scripts/mvp_pipeline.py
-# Approve → output/<시각>/briefing.md 저장 (에디터에 붙여넣기)
-# 또는: ./scripts/run_draft.sh
+# 권장: postgres(+browserless) · ollama start → LLM → ollama stop → Discord Approve → aux stop
+./scripts/run_draft.sh
+# 또는 수동으로 컨테이너를 켠 채:
+# MVP_MODE=draft OLLAMA_AUTO_CONTAINER=0 DRAFT_AUTO_AUX=0 python scripts/mvp_pipeline.py
 ```
 
 토큰 없이 게이트만 검증할 때:
@@ -110,6 +113,7 @@ MVP_MODE=draft python scripts/mvp_pipeline.py
 ```bash
 MVP_MODE=draft NOTIFY_CHANNEL=auto \
   RANK_MODE=heuristic BRIEFING_MODE=heuristic \
+  OLLAMA_AUTO_CONTAINER=0 DRAFT_AUTO_AUX=0 \
   python scripts/mvp_pipeline.py
 ```
 
@@ -128,7 +132,15 @@ python scripts/test_notify_window.py
 0 7 * * 1-5 cd "/Users/leeyongkyun/포스팅 자동화" && ./scripts/run_draft.sh >>./output/cron.log 2>&1
 ```
 
-`ollama` / `postgres`가 07:00에 떠 있어야 합니다. 포스팅 목표 시각(예: 08:00)은 수동 붙여넣기 기준이며 코드로 강제하지 않습니다.
+`./scripts/run_draft.sh` 수명주기:
+
+1. `postgres` (+ `browserless` if `PUBLISH_CARDS`) · `ollama` **start**
+2. 랭킹·브리핑 LLM
+3. **ollama + aux stop** (Discord 발송/Approve 대기 전 — 메모리 반환)
+4. Discord Approve 대기 → Approve 시 aux 재기동 → `briefing.md`
+5. 종료 시 남은 컨테이너 **stop** (`OLLAMA_AUTO_CONTAINER`/`DRAFT_AUTO_AUX`는 run_draft가 1로 켬)
+
+Docker Desktop은 켜 두세요. 포스팅 목표 시각(예: 08:00)은 수동 붙여넣기 기준이며 코드로 강제하지 않습니다.
 
 | `MVP_MODE` | 동작 |
 |------------|------|
@@ -136,12 +148,21 @@ python scripts/test_notify_window.py
 | `draft` | 초안 → Approve 대기 → `briefing.md` |
 | `publish` | Approve 없이 바로 `briefing.md` |
 
-CPU가 여전히 높으면 `.env`에서:
+CPU가 여전히 높거나 브리핑이 타임아웃되면 `.env`에서:
 
 ```bash
-OLLAMA_NUM_THREAD=2
-NEWS_LLM_CANDIDATES=8
+OLLAMA_NUM_THREAD=4
+OLLAMA_BRIEFING_TIMEOUT_MS=600000
 RANK_MODE=heuristic   # 랭킹만 규칙 기반, 브리핑만 LLM
+BRIEFING_MODE=llm
+# 500/restart 안내가 나면 한 번:
+# OLLAMA_DOCKER_RESTART=1 ./scripts/run_draft.sh
+```
+
+컨테이너 한도를 Desktop에 맞춘 뒤:
+
+```bash
+OLLAMA_DOCKER_MEMORY=10g OLLAMA_DOCKER_CPUS=4 ./scripts/limit_ollama_resources.sh
 ```
 
 ---

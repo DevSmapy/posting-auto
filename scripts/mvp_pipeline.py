@@ -14,6 +14,7 @@ import html
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -243,6 +244,55 @@ def as_bool_drop(value: Any) -> bool:
     return bool(value)
 
 
+def release_ollama_after_llm() -> None:
+    """Unload model and stop ollama before Discord wait — frees RAM early.
+
+    Default off so bare `python scripts/mvp_pipeline.py` does not stop a
+    manually started container. `run_draft.sh` exports OLLAMA_AUTO_CONTAINER=1.
+    Also stops postgres/browserless when DRAFT_AUTO_AUX=1 (restart before publish).
+    """
+    auto_ollama = as_bool_drop(env("OLLAMA_AUTO_CONTAINER", "0"))
+    auto_aux = as_bool_drop(env("DRAFT_AUTO_AUX", "0"))
+    if not auto_ollama and not auto_aux:
+        return
+    _run_draft_lifecycle("draft_release_after_llm")
+
+
+def ensure_aux_before_publish() -> None:
+    """Bring postgres/browserless back up after Approve wait (if managed)."""
+    if not as_bool_drop(env("DRAFT_AUTO_AUX", "0")):
+        return
+    _run_draft_lifecycle("draft_start_aux_containers")
+
+
+def _run_draft_lifecycle(fn_name: str) -> None:
+    script = ROOT / "scripts" / "draft_lifecycle.sh"
+    if not script.is_file():
+        print(f"   !! missing {script.name}; skip {fn_name}")
+        return
+    env_prefix = {
+        "OLLAMA_AUTO_CONTAINER": env("OLLAMA_AUTO_CONTAINER", "0") or "0",
+        "DRAFT_AUTO_AUX": env("DRAFT_AUTO_AUX", "0") or "0",
+        "OLLAMA_CONTAINER": env("OLLAMA_CONTAINER", "ollama"),
+        "OLLAMA_MODEL": env("OLLAMA_MODEL", "qwen2.5:7b"),
+        "ROOT": str(ROOT),
+    }
+    try:
+        subprocess.run(
+            ["bash", "-c", f'source "{script}" && {fn_name}'],
+            check=False,
+            env={**os.environ, **env_prefix},
+            cwd=str(ROOT),
+        )
+    except OSError as exc:
+        print(f"   !! {fn_name} failed: {exc}")
+
+
+def briefing_timeout_ms() -> int:
+    """OLLAMA_BRIEFING_TIMEOUT_MS → OLLAMA_TIMEOUT_MS → 600000."""
+    return int(env("OLLAMA_BRIEFING_TIMEOUT_MS") or env("OLLAMA_TIMEOUT_MS", "600000"))
+
+
 def ollama_options() -> dict[str, Any]:
     opts: dict[str, Any] = {
         "temperature": float(env("OLLAMA_TEMPERATURE", "0.3")),
@@ -254,11 +304,18 @@ def ollama_options() -> dict[str, Any]:
     return opts
 
 
-def ollama_chat(system: str, user: str) -> tuple[Any, str]:
+def ollama_chat(
+    system: str,
+    user: str,
+    *,
+    timeout_ms: int | None = None,
+) -> tuple[Any, str]:
     model = env("OLLAMA_MODEL", "qwen2.5:14b")
-    timeout = int(env("OLLAMA_TIMEOUT_MS", "180000")) / 1000
+    if timeout_ms is None:
+        timeout_ms = int(env("OLLAMA_TIMEOUT_MS", "180000"))
+    timeout = timeout_ms / 1000
     url = f"{ollama_base()}/api/chat"
-    payload = {
+    payload: dict[str, Any] = {
         "model": model,
         "stream": False,
         "format": "json",
@@ -268,6 +325,9 @@ def ollama_chat(system: str, user: str) -> tuple[Any, str]:
             {"role": "user", "content": user},
         ],
     }
+    keep_alive = env("OLLAMA_KEEP_ALIVE", "30m")
+    if keep_alive:
+        payload["keep_alive"] = keep_alive
     last_err: Exception | None = None
     for _attempt in range(2):
         try:
@@ -458,9 +518,13 @@ def build_briefing_heuristic(articles: list[dict[str, Any]], now: datetime) -> d
             {
                 "headline": headline,
                 "what_happened": what,
-                "why_important": "시장·정책 흐름에 영향을 줄 수 있는 이슈입니다.",
-                "watch_next": "후속 보도와 시장 반응을 지켜볼 필요가 있습니다.",
-                "one_liner": "이 이슈의 핵심 흐름을 한 줄로 점검합니다.",
+                "why_important": (
+                    f"「{headline}」은(는) 시장·정책 흐름에 영향을 줄 수 있는 이슈입니다."
+                ),
+                "watch_next": (
+                    f"「{headline}」의 후속 보도와 시장 반응을 지켜볼 필요가 있습니다."
+                ),
+                "one_liner": headline,
                 "source_name": a.get("source") or "",
                 "source_url": a.get("link") or "",
             }
@@ -823,8 +887,13 @@ def build_briefing(articles: list[dict[str, Any]], now: datetime) -> tuple[dict[
         .replace("{{date}}", now.strftime("%Y-%m-%d"))
         .replace("{{articles_json}}", json.dumps(payload, ensure_ascii=False, indent=2))
     )
+    briefing_timeout_ms_value = briefing_timeout_ms()
     try:
-        parsed, raw = ollama_chat(read_prompt("briefing_system.md"), user)
+        parsed, raw = ollama_chat(
+            read_prompt("briefing_system.md"),
+            user,
+            timeout_ms=briefing_timeout_ms_value,
+        )
         if not isinstance(parsed, dict):
             raise RuntimeError(f"briefing JSON must be object, got {type(parsed)}: {raw[:500]}")
         return parsed, "llm"
@@ -1093,45 +1162,61 @@ def main() -> int:
         f"heuristic_min={env('HEURISTIC_MIN_SCORE', '8')} "
         f"llm_candidates={env('NEWS_LLM_CANDIDATES', '10')}"
     )
-    print("==> fetching Google News RSS")
-    candidates = fetch_candidates(now)
-    candidates = store.filter_new(candidates)
-    print(f"   candidates in window (capped, after seen_urls): {len(candidates)}")
-    (run_dir / "candidates.json").write_text(
-        json.dumps([{k: v for k, v in a.items() if k != "published_dt"} for a in candidates], ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    if not candidates:
-        print("No candidates in news window. Exit.")
-        if mode in {"draft", "publish"}:
-            notifier.send_text(f"[경제브리핑] {now.date()} 창 내 후보 0건 — 스킵")
-        store.close()
-        return 0
-
-    print("==> Ollama importance ranking")
-    picked = rank_articles(candidates, now, run_dir=run_dir)
-    print(f"   picked: {len(picked)}")
-    (run_dir / "ranked.json").write_text(
-        json.dumps([{k: v for k, v in a.items() if k != "published_dt"} for a in picked], ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    if not picked:
-        print("No articles after ranking. Exit.")
-        store.close()
-        return 1
-
-    print("==> Ollama briefing")
-    briefing, generation_mode = build_briefing(picked, now)
-    briefing["blog_html"] = assemble_blog_html(briefing)
-    (run_dir / "briefing.json").write_text(
-        json.dumps(briefing, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    print(f"   title: {briefing.get('title')}")
-    print(f"   generation: {generation_mode}")
-    print(f"   wrote {run_dir}")
-
     try:
+        print("==> fetching Google News RSS")
+        candidates = fetch_candidates(now)
+        candidates = store.filter_new(candidates)
+        print(f"   candidates in window (capped, after seen_urls): {len(candidates)}")
+        (run_dir / "candidates.json").write_text(
+            json.dumps(
+                [{k: v for k, v in a.items() if k != "published_dt"} for a in candidates],
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        if not candidates:
+            print("No candidates in news window. Exit.")
+            if mode in {"draft", "publish"}:
+                notifier.send_text(f"[경제브리핑] {now.date()} 창 내 후보 0건 — 스킵")
+            return 0
+
+        briefing: dict[str, Any] | None = None
+        generation_mode = "heuristic"
+        picked: list[dict[str, Any]] = []
+        # Rank + briefing may raise; always free ollama/aux before Discord / exit.
+        try:
+            print("==> Ollama importance ranking")
+            picked = rank_articles(candidates, now, run_dir=run_dir)
+            print(f"   picked: {len(picked)}")
+            (run_dir / "ranked.json").write_text(
+                json.dumps(
+                    [{k: v for k, v in a.items() if k != "published_dt"} for a in picked],
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            if not picked:
+                print("No articles after ranking. Exit.")
+                return 1
+
+            print("==> Ollama briefing")
+            briefing, generation_mode = build_briefing(picked, now)
+            briefing["blog_html"] = assemble_blog_html(briefing)
+            (run_dir / "briefing.json").write_text(
+                json.dumps(briefing, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            print(f"   title: {briefing.get('title')}")
+            print(f"   generation: {generation_mode}")
+            print(f"   wrote {run_dir}")
+        finally:
+            release_ollama_after_llm()
+
+        if briefing is None:
+            return 1
+
         if mode == "dry_run":
             print("Done (dry_run). Set MVP_MODE=draft for Approve→markdown, or publish to export.md.")
             return 0
@@ -1143,12 +1228,16 @@ def main() -> int:
             if not notifier.wait_for_approve(preview):
                 print("Done (draft skipped). seen_urls not updated.")
                 return 0
+            ensure_aux_before_publish()
+            store.reopen()
             run_publish(
                 briefing, picked, now, run_dir, store, notifier, generation_mode=generation_mode
             )
             return 0
 
         if mode == "publish":
+            ensure_aux_before_publish()
+            store.reopen()
             run_publish(
                 briefing, picked, now, run_dir, store, notifier, generation_mode=generation_mode
             )
@@ -1158,6 +1247,8 @@ def main() -> int:
         return 1
     finally:
         store.close()
+        # No-candidates path never entered the LLM try/finally — still free containers.
+        release_ollama_after_llm()
 
 
 if __name__ == "__main__":

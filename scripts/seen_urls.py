@@ -119,6 +119,12 @@ class SeenUrlsStore:
             self._pg.close()
             self._pg = None
 
+    def reopen(self) -> None:
+        """Re-open after postgres was stopped/started during Approve wait."""
+        self.close()
+        self.backend = "none"
+        self._connect()
+
     @contextmanager
     def _sqlite(self) -> Iterator[sqlite3.Connection]:
         conn = sqlite3.connect(self._sqlite_path)
