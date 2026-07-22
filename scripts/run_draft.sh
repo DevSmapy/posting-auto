@@ -3,9 +3,10 @@
 # Cron: 0 7 * * 1-5  (NOTIFY_SEND_AT controls Discord send time, default 07:50)
 # Usage: ./scripts/run_draft.sh
 #
-# Starts the ollama container, warms the model, runs the pipeline, then unloads
-# the model and stops the container (trap EXIT) so RAM is freed between runs.
-# Disable with OLLAMA_AUTO_CONTAINER=0.
+# Starts postgres (+ browserless if cards) and ollama, warms the model, runs the
+# pipeline. After LLM work, mvp_pipeline stops ollama *before* Discord Approve.
+# Remaining containers stop on EXIT. Disable with OLLAMA_AUTO_CONTAINER=0 /
+# DRAFT_AUTO_AUX=0.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -16,6 +17,15 @@ if [[ -f .venv/bin/activate ]]; then
   source .venv/bin/activate
 fi
 
+# Capture caller/cron overrides BEFORE sourcing .env. Otherwise .env's
+# MVP_MODE=dry_run (common for manual mvp_pipeline) would win and skip Discord Approve.
+# Prefer: CLI env > run_draft defaults > .env (python load_dotenv won't override exports).
+_caller_mvp_mode="${MVP_MODE-}"
+_caller_rank_mode="${RANK_MODE-}"
+_caller_briefing_mode="${BRIEFING_MODE-}"
+_caller_auto_container="${OLLAMA_AUTO_CONTAINER-}"
+_caller_auto_aux="${DRAFT_AUTO_AUX-}"
+
 if [[ -f .env ]]; then
   # shellcheck disable=SC1091
   set -a
@@ -23,23 +33,23 @@ if [[ -f .env ]]; then
   set +a
 fi
 
-# Morning path: one LLM call for briefing (ranking stays heuristic).
-export RANK_MODE="${RANK_MODE:-heuristic}"
-export BRIEFING_MODE="${BRIEFING_MODE:-llm}"
-export MVP_MODE="${MVP_MODE:-draft}"
+# Morning path: Approve draft + one LLM briefing (ranking heuristic).
+export MVP_MODE="${_caller_mvp_mode:-draft}"
+export RANK_MODE="${_caller_rank_mode:-heuristic}"
+export BRIEFING_MODE="${_caller_briefing_mode:-llm}"
 # Prefer Discord when configured; otherwise factory falls back.
 export NOTIFY_CHANNEL="${NOTIFY_CHANNEL:-}"
-export OLLAMA_AUTO_CONTAINER="${OLLAMA_AUTO_CONTAINER:-1}"
+export OLLAMA_AUTO_CONTAINER="${_caller_auto_container:-1}"
+export DRAFT_AUTO_AUX="${_caller_auto_aux:-1}"
 
 # shellcheck disable=SC1091
-source "$ROOT/scripts/ollama_lifecycle.sh"
+source "$ROOT/scripts/draft_lifecycle.sh"
 
 cleanup() {
-  ollama_cleanup_container || true
+  draft_cleanup_all || true
 }
 trap cleanup EXIT
 
-ollama_start_container
-ollama_warm_model
+draft_start_all
 
 python scripts/mvp_pipeline.py
