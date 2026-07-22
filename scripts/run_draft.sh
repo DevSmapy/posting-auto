@@ -25,6 +25,11 @@ _caller_rank_mode="${RANK_MODE-}"
 _caller_briefing_mode="${BRIEFING_MODE-}"
 _caller_auto_container="${OLLAMA_AUTO_CONTAINER-}"
 _caller_auto_aux="${DRAFT_AUTO_AUX-}"
+_caller_notify_from_cli=0
+if [ "${NOTIFY_CHANNEL+set}" = set ]; then
+  _caller_notify_channel="$NOTIFY_CHANNEL"
+  _caller_notify_from_cli=1
+fi
 
 if [[ -f .env ]]; then
   # shellcheck disable=SC1091
@@ -38,7 +43,11 @@ export MVP_MODE="${_caller_mvp_mode:-draft}"
 export RANK_MODE="${_caller_rank_mode:-heuristic}"
 export BRIEFING_MODE="${_caller_briefing_mode:-llm}"
 # Prefer Discord when configured; otherwise factory falls back.
-export NOTIFY_CHANNEL="${NOTIFY_CHANNEL:-}"
+if [ "$_caller_notify_from_cli" = 1 ]; then
+  export NOTIFY_CHANNEL="$_caller_notify_channel"
+else
+  export NOTIFY_CHANNEL="${NOTIFY_CHANNEL:-}"
+fi
 export OLLAMA_AUTO_CONTAINER="${_caller_auto_container:-1}"
 export DRAFT_AUTO_AUX="${_caller_auto_aux:-1}"
 
