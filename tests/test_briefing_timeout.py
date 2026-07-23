@@ -12,7 +12,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from mvp_pipeline import (  # noqa: E402
+    _generation_mode_label,
     briefing_timeout_ms,
+    ollama_options,
     release_ollama_after_llm,
     story_timeout_ms,
 )
@@ -62,6 +64,27 @@ class StoryTimeoutTest(unittest.TestCase):
         }
         with patch.dict(os.environ, env, clear=True):
             self.assertEqual(story_timeout_ms(), 120000)
+
+
+class OllamaOptionsTest(unittest.TestCase):
+    def test_num_ctx_defaults_to_4096_when_unset(self) -> None:
+        env = {k: v for k, v in os.environ.items() if k != "OLLAMA_NUM_CTX"}
+        with patch.dict(os.environ, env, clear=True):
+            self.assertEqual(ollama_options()["num_ctx"], 4096)
+
+    def test_num_ctx_respects_env(self) -> None:
+        with patch.dict(os.environ, {"OLLAMA_NUM_CTX": "2048"}, clear=False):
+            self.assertEqual(ollama_options()["num_ctx"], 2048)
+
+
+class GenerationModeLabelTest(unittest.TestCase):
+    def test_known_modes(self) -> None:
+        self.assertEqual(_generation_mode_label("llm"), "llm")
+        self.assertEqual(_generation_mode_label("mixed"), "mixed")
+        self.assertEqual(_generation_mode_label("heuristic"), "heuristic")
+
+    def test_unknown_defaults_to_llm(self) -> None:
+        self.assertEqual(_generation_mode_label("other"), "llm")
 
 
 class ReleaseLifecycleDefaultTest(unittest.TestCase):

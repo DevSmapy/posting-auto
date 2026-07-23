@@ -303,14 +303,16 @@ def briefing_timeout_ms() -> int:
 
 
 def ollama_options() -> dict[str, Any]:
-    opts: dict[str, Any] = {
+    """Match draft_lifecycle ollama_warm_model defaults (num_ctx/num_thread)."""
+    return {
         "temperature": float(env("OLLAMA_TEMPERATURE", "0.3")),
         "num_thread": int(env("OLLAMA_NUM_THREAD", "4")),
+        "num_ctx": int(env("OLLAMA_NUM_CTX", "4096")),
     }
-    num_ctx = env("OLLAMA_NUM_CTX")
-    if num_ctx:
-        opts["num_ctx"] = int(num_ctx)
-    return opts
+
+
+def _generation_mode_label(generation_mode: str) -> str:
+    return generation_mode if generation_mode in {"heuristic", "mixed", "llm"} else "llm"
 
 
 def ollama_chat(
@@ -1120,7 +1122,7 @@ def preview_text(
     picked: list[dict[str, Any]],
     generation_mode: str = "llm",
 ) -> str:
-    mode_label = generation_mode if generation_mode in {"heuristic", "mixed", "llm"} else "llm"
+    mode_label = _generation_mode_label(generation_mode)
     lines = [
         f"[초안] {briefing.get('title', '')}",
         f"생성: {mode_label}",
@@ -1192,7 +1194,7 @@ def run_publish(
             ig_media_id = instagram_carousel(image_urls, f"{caption}\n\n{tags_h}".strip())
             print(f"   ig media id: {ig_media_id}")
 
-    mode_label = generation_mode if generation_mode in {"heuristic", "mixed", "llm"} else "llm"
+    mode_label = _generation_mode_label(generation_mode)
     caption = (
         f"[마크다운 준비됨]\n생성: {mode_label}\n{briefing.get('title')}\n"
         f"경로: {md_path}\n에디터에 붙여넣기 하세요."

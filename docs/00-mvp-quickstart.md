@@ -131,8 +131,10 @@ python scripts/test_notify_window.py
 cron은 `.zshrc`를 읽지 않으므로 `scripts/cron_run_draft.sh`가 PATH에 docker를 넣고 `run_draft.sh`를 실행합니다.
 
 ```cron
-0 7 * * 1-5 "/Users/leeyongkyun/포스팅 자동화/scripts/cron_run_draft.sh" >>"/Users/leeyongkyun/포스팅 자동화/output/cron.log" 2>&1
+0 7 * * 1-5 "/ABSOLUTE/PATH/TO/REPO/scripts/cron_run_draft.sh" >>"/ABSOLUTE/PATH/TO/REPO/output/cron.log" 2>&1
 ```
+
+`/ABSOLUTE/PATH/TO/REPO`를 이 저장소의 실제 절대 경로로 바꾸세요.
 
 `./scripts/run_draft.sh` 수명주기:
 

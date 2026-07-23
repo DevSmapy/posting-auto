@@ -10,7 +10,7 @@
 | From 호스트 스크립트 | `http://127.0.0.1:11434` (`OLLAMA_HOST_URL`) |
 | API | `POST /api/chat`, `stream: false`, `format: "json"` |
 | temperature | `0.2`~`0.4` |
-| timeout | 건당 스토리 기본 `120000` ms (`OLLAMA_STORY_TIMEOUT_MS`) |
+| timeout | 건당 스토리: `.env.example` 권장 `300000` ms (`OLLAMA_STORY_TIMEOUT_MS`); 미설정 시 폴백 `120000` ms |
 
 모델 pull 예:
 

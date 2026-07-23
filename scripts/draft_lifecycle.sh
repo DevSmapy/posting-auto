@@ -125,6 +125,8 @@ ollama_ensure_runtime_env() {
     return 0
   fi
 
+  # Standalone/external ollama (not posting-auto compose profile). Re-apply
+  # inspect'd networks/restart/runtime/binds so n8n hostname reachability survives.
   local image port
   image="$(docker inspect -f '{{.Config.Image}}' "$OLLAMA_CONTAINER")"
   port="$(docker inspect -f '{{(index (index .HostConfig.PortBindings "11434/tcp") 0).HostPort}}' "$OLLAMA_CONTAINER" 2>/dev/null || true)"
@@ -136,6 +138,36 @@ ollama_ensure_runtime_env() {
     [[ -n "$b" ]] && bind_args+=(-v "$b")
   done < <(docker inspect -f '{{range .HostConfig.Binds}}{{println .}}{{end}}' "$OLLAMA_CONTAINER")
 
+  local -a nets=()
+  local n
+  while IFS= read -r n; do
+    [[ -n "$n" ]] && nets+=("$n")
+  done < <(docker inspect -f '{{range $k, $_ := .NetworkSettings.Networks}}{{println $k}}{{end}}' "$OLLAMA_CONTAINER")
+
+  local restart_name restart_max
+  restart_name="$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' "$OLLAMA_CONTAINER" 2>/dev/null || true)"
+  restart_max="$(docker inspect -f '{{.HostConfig.RestartPolicy.MaximumRetryCount}}' "$OLLAMA_CONTAINER" 2>/dev/null || true)"
+  local -a restart_args=()
+  if [[ -n "$restart_name" && "$restart_name" != "no" ]]; then
+    if [[ "$restart_name" == "on-failure" && -n "$restart_max" && "$restart_max" != "0" ]]; then
+      restart_args=(--restart "on-failure:${restart_max}")
+    else
+      restart_args=(--restart "$restart_name")
+    fi
+  fi
+
+  local runtime
+  runtime="$(docker inspect -f '{{.HostConfig.Runtime}}' "$OLLAMA_CONTAINER" 2>/dev/null || true)"
+  local -a runtime_args=()
+  if [[ -n "$runtime" && "$runtime" != "runc" && "$runtime" != "io.containerd.runc.v2" ]]; then
+    runtime_args=(--runtime "$runtime")
+  fi
+
+  local -a network_create_args=()
+  if ((${#nets[@]} > 0)); then
+    network_create_args=(--network "${nets[0]}")
+  fi
+
   echo "==> recreate ${OLLAMA_CONTAINER}: OLLAMA_LOAD_TIMEOUT ${cur_load:-unset}→${want_load}, OLLAMA_KEEP_ALIVE ${cur_keep:-unset}→${want_keep}"
   docker stop "$OLLAMA_CONTAINER" >/dev/null 2>&1 || true
   docker rm "$OLLAMA_CONTAINER" >/dev/null
@@ -145,13 +177,24 @@ ollama_ensure_runtime_env() {
     -e OLLAMA_HOST=0.0.0.0:11434 \
     -e "OLLAMA_LOAD_TIMEOUT=${want_load}" \
     -e "OLLAMA_KEEP_ALIVE=${want_keep}" \
+    "${network_create_args[@]}" \
+    "${restart_args[@]}" \
+    "${runtime_args[@]}" \
     "${bind_args[@]}" \
     "$image" >/dev/null
+
+  local i
+  for ((i = 1; i < ${#nets[@]}; i++)); do
+    docker network connect "${nets[i]}" "$OLLAMA_CONTAINER" >/dev/null 2>&1 || true
+  done
+
   # Preserve resource caps (lost on recreate; docker update cannot set Env).
   local cpus="${OLLAMA_DOCKER_CPUS:-4.0}"
   local memory="${OLLAMA_DOCKER_MEMORY:-10g}"
   docker update --cpus="$cpus" --memory="$memory" --memory-swap="$memory" "$OLLAMA_CONTAINER" >/dev/null 2>&1 || true
-  echo "   recreated (${image}, port=${port}, cpus=${cpus}, memory=${memory})"
+  local nets_disp="${nets[*]}"
+  nets_disp="${nets_disp:-bridge}"
+  echo "   recreated (${image}, port=${port}, nets=${nets_disp}, cpus=${cpus}, memory=${memory})"
 }
 
 ollama_warm_model() {
