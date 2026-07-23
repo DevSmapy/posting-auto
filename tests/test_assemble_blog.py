@@ -14,7 +14,10 @@ from mvp_pipeline import (  # noqa: E402
     _clean_rss_snippet,
     _safe_source_url,
     assemble_blog_markdown,
+    assemble_briefing_from_stories,
+    build_briefing,
     build_briefing_heuristic,
+    heuristic_story_fields,
     preview_text,
 )
 
@@ -182,6 +185,102 @@ class AssembleBlogMarkdownTest(unittest.TestCase):
         preview = preview_text(BRIEFING_V2, [], generation_mode="heuristic")
         self.assertIn("생성: heuristic", preview)
         self.assertNotIn("생성: heuristic", assemble_blog_markdown(BRIEFING_V2))
+        mixed = preview_text(BRIEFING_V2, [], generation_mode="mixed")
+        self.assertIn("생성: mixed", mixed)
+
+    def test_assemble_core_summary_from_one_liners(self) -> None:
+        stories = [
+            {
+                "headline": "재작성 A",
+                "what_happened": "사실 A",
+                "why_important": "중요 A",
+                "watch_next": "주시 A",
+                "one_liner": "한줄 A",
+                "source_name": "매체A",
+                "source_url": "https://example.com/a",
+            },
+            {
+                "headline": "재작성 B",
+                "what_happened": "사실 B",
+                "why_important": "중요 B",
+                "watch_next": "주시 B",
+                "one_liner": "한줄 B",
+                "source_name": "매체B",
+                "source_url": "https://example.com/b",
+            },
+        ]
+        briefing = assemble_briefing_from_stories(
+            stories, datetime(2026, 7, 23, tzinfo=timezone.utc)
+        )
+        self.assertEqual(briefing["core_summary"], ["한줄 A", "한줄 B"])
+        self.assertEqual(briefing["stories"][0]["source_url"], "https://example.com/a")
+        self.assertEqual(briefing["stories"][1]["source_name"], "매체B")
+        self.assertEqual(briefing["slides"][0]["type"], "cover")
+        self.assertEqual(briefing["slides"][-1]["type"], "disclaimer")
+
+    def test_build_briefing_mixed_on_partial_llm_fail(self) -> None:
+        import os
+        from unittest.mock import patch
+
+        articles = [
+            {
+                "id": "aaaaaaaa",
+                "title": "기사 1",
+                "snippet": "스니펫 1",
+                "source": "s1",
+                "link": "https://ex.com/1",
+                "topic": "business",
+                "score": 9,
+                "reason": "r1",
+            },
+            {
+                "id": "bbbbbbbb",
+                "title": "기사 2",
+                "snippet": "스니펫 2",
+                "source": "s2",
+                "link": "https://ex.com/2",
+                "topic": "business",
+                "score": 8,
+                "reason": "r2",
+            },
+        ]
+        llm_story = {
+            "headline": "LLM 헤드",
+            "what_happened": "LLM 사실",
+            "why_important": "LLM 중요",
+            "watch_next": "LLM 주시",
+            "one_liner": "LLM 한줄",
+            "source_name": "s1",
+            "source_url": "https://ex.com/1",
+        }
+
+        def fake_summarize(article, now):  # noqa: ARG001
+            if article["id"] == "aaaaaaaa":
+                return llm_story
+            raise RuntimeError("timeout")
+
+        with patch.dict(os.environ, {"BRIEFING_MODE": "llm", "ALLOW_BRIEFING_FALLBACK": "1"}):
+            with patch("mvp_pipeline.summarize_story_llm", side_effect=fake_summarize):
+                briefing, mode = build_briefing(
+                    articles, datetime(2026, 7, 23, tzinfo=timezone.utc)
+                )
+        self.assertEqual(mode, "mixed")
+        self.assertEqual(briefing["stories"][0]["one_liner"], "LLM 한줄")
+        self.assertEqual(briefing["stories"][1]["one_liner"], "기사 2")
+        self.assertEqual(briefing["core_summary"], ["LLM 한줄", "기사 2"])
+        self.assertEqual(briefing["stories"][1]["source_url"], "https://ex.com/2")
+
+    def test_heuristic_story_fields_sets_source_from_article(self) -> None:
+        story = heuristic_story_fields(
+            {
+                "title": "제목",
+                "snippet": "짧은 스니펫",
+                "source": "원천",
+                "link": "https://ex.com/x",
+            }
+        )
+        self.assertEqual(story["source_name"], "원천")
+        self.assertEqual(story["source_url"], "https://ex.com/x")
 
     def test_source_url_allows_only_http_and_https(self) -> None:
         self.assertEqual(_safe_source_url("https://example.com"), "https://example.com")

@@ -288,20 +288,31 @@ def _run_draft_lifecycle(fn_name: str) -> None:
         print(f"   !! {fn_name} failed: {exc}")
 
 
+def story_timeout_ms() -> int:
+    """OLLAMA_STORY_TIMEOUT_MS → OLLAMA_BRIEFING_TIMEOUT_MS → OLLAMA_TIMEOUT_MS → 120000."""
+    return int(
+        env("OLLAMA_STORY_TIMEOUT_MS")
+        or env("OLLAMA_BRIEFING_TIMEOUT_MS")
+        or env("OLLAMA_TIMEOUT_MS", "120000")
+    )
+
+
 def briefing_timeout_ms() -> int:
-    """OLLAMA_BRIEFING_TIMEOUT_MS → OLLAMA_TIMEOUT_MS → 600000."""
-    return int(env("OLLAMA_BRIEFING_TIMEOUT_MS") or env("OLLAMA_TIMEOUT_MS", "600000"))
+    """Deprecated alias — prefer story_timeout_ms() for per-article calls."""
+    return story_timeout_ms()
 
 
 def ollama_options() -> dict[str, Any]:
-    opts: dict[str, Any] = {
+    """Match draft_lifecycle ollama_warm_model defaults (num_ctx/num_thread)."""
+    return {
         "temperature": float(env("OLLAMA_TEMPERATURE", "0.3")),
         "num_thread": int(env("OLLAMA_NUM_THREAD", "4")),
+        "num_ctx": int(env("OLLAMA_NUM_CTX", "4096")),
     }
-    num_ctx = env("OLLAMA_NUM_CTX")
-    if num_ctx:
-        opts["num_ctx"] = int(num_ctx)
-    return opts
+
+
+def _generation_mode_label(generation_mode: str) -> str:
+    return generation_mode if generation_mode in {"heuristic", "mixed", "llm"} else "llm"
 
 
 def ollama_chat(
@@ -495,10 +506,44 @@ def _clean_rss_snippet(raw: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def build_briefing_heuristic(articles: list[dict[str, Any]], now: datetime) -> dict[str, Any]:
-    """LLM 없이 발행 경로 스모크·폴백용 브리핑."""
+def heuristic_story_fields(article: dict[str, Any], index: int = 1) -> dict[str, Any]:
+    """Single-story fallback fields (no envelope)."""
+    headline = article.get("title") or f"이슈 {index}"
+    cleaned = _clean_rss_snippet(article.get("snippet") or "")
+    if not cleaned or len(cleaned) > 120 or cleaned.startswith(headline):
+        what = headline
+    else:
+        what = cleaned
+    return {
+        "headline": headline,
+        "what_happened": what,
+        "why_important": (
+            f"「{headline}」은(는) 시장·정책 흐름에 영향을 줄 수 있는 이슈입니다."
+        ),
+        "watch_next": (
+            f"「{headline}」의 후속 보도와 시장 반응을 지켜볼 필요가 있습니다."
+        ),
+        "one_liner": headline,
+        "source_name": article.get("source") or "",
+        "source_url": article.get("link") or "",
+    }
+
+
+def assemble_briefing_from_stories(
+    stories: list[dict[str, Any]],
+    now: datetime,
+) -> dict[str, Any]:
+    """Build full briefing envelope from per-story objects (rule-based)."""
     date = now.strftime("%Y-%m-%d")
-    stories: list[dict[str, Any]] = []
+    n = len(stories)
+    one_liners = [
+        str(s.get("one_liner") or s.get("headline") or "").strip()
+        for s in stories
+        if (s.get("one_liner") or s.get("headline"))
+    ]
+    core = one_liners[:5] if one_liners else (
+        [f"오늘 선정 이슈 {n}건을 정리했습니다."] if n else ["오늘 주요 경제 뉴스를 정리했습니다."]
+    )
     slides: list[dict[str, str]] = [
         {
             "type": "cover",
@@ -506,36 +551,10 @@ def build_briefing_heuristic(articles: list[dict[str, Any]], now: datetime) -> d
             "body": "오늘의 주요 경제 뉴스",
         }
     ]
-    for i, a in enumerate(articles, start=1):
-        headline = a.get("title") or f"이슈 {i}"
-        cleaned = _clean_rss_snippet(a.get("snippet") or "")
-        # Avoid Google News cluster dumps: prefer a short title-based line.
-        if not cleaned or len(cleaned) > 120 or cleaned.startswith(headline):
-            what = headline
-        else:
-            what = cleaned
-        stories.append(
-            {
-                "headline": headline,
-                "what_happened": what,
-                "why_important": (
-                    f"「{headline}」은(는) 시장·정책 흐름에 영향을 줄 수 있는 이슈입니다."
-                ),
-                "watch_next": (
-                    f"「{headline}」의 후속 보도와 시장 반응을 지켜볼 필요가 있습니다."
-                ),
-                "one_liner": headline,
-                "source_name": a.get("source") or "",
-                "source_url": a.get("link") or "",
-            }
-        )
-        slides.append(
-            {
-                "type": "story",
-                "headline": headline[:80],
-                "body": what[:160],
-            }
-        )
+    for s in stories:
+        hl = str(s.get("headline") or "")[:80]
+        body = str(s.get("what_happened") or s.get("one_liner") or "")[:160]
+        slides.append({"type": "story", "headline": hl, "body": body})
     slides.append(
         {
             "type": "disclaimer",
@@ -543,14 +562,13 @@ def build_briefing_heuristic(articles: list[dict[str, Any]], now: datetime) -> d
             "body": "정보 안내용이며 투자 권유가 아닙니다.",
         }
     )
-    n = len(articles)
     return {
         "title": f"오늘 주요 경제·시장 이슈를 정리합니다 | 오늘의 경제 브리핑 ({date})",
         "intro": (
             "오늘 아침 경제·시장에서 주목할 이슈를 정리했습니다. "
             "각 이슈의 배경과 앞으로 확인할 점을 함께 살펴봅니다."
         ),
-        "core_summary": [f"오늘 선정 이슈 {n}건을 정리했습니다."] if n else ["오늘 주요 경제 뉴스를 정리했습니다."],
+        "core_summary": core,
         "stories": stories,
         "market_impact": {
             "positive": ["주요 이슈가 시장 관심을 높이고 있습니다."],
@@ -579,6 +597,14 @@ def build_briefing_heuristic(articles: list[dict[str, Any]], now: datetime) -> d
         "caption": f"{date} 경제 브리핑",
         "hashtags": ["경제", "뉴스", "브리핑"],
     }
+
+
+def build_briefing_heuristic(articles: list[dict[str, Any]], now: datetime) -> dict[str, Any]:
+    """LLM 없이 발행 경로 스모크·폴백용 브리핑."""
+    stories = [
+        heuristic_story_fields(a, index=i) for i, a in enumerate(articles, start=1)
+    ]
+    return assemble_briefing_from_stories(stories, now)
 
 
 def _core_summary(briefing: dict[str, Any]) -> list[str]:
@@ -865,43 +891,89 @@ def assemble_blog_markdown(briefing: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _normalize_story_llm(
+    parsed: Any,
+    article: dict[str, Any],
+) -> dict[str, Any]:
+    if not isinstance(parsed, dict):
+        raise RuntimeError(f"story JSON must be object, got {type(parsed)}")
+    headline = str(parsed.get("headline") or article.get("title") or "").strip()
+    what = str(parsed.get("what_happened") or "").strip()
+    why = str(parsed.get("why_important") or "").strip()
+    watch = str(parsed.get("watch_next") or "").strip()
+    one = str(parsed.get("one_liner") or "").strip()
+    if not what or not why or not watch or not one:
+        raise RuntimeError("story JSON missing required fields")
+    return {
+        "headline": headline or (article.get("title") or ""),
+        "what_happened": what,
+        "why_important": why,
+        "watch_next": watch,
+        "one_liner": one,
+        "source_name": article.get("source") or "",
+        "source_url": article.get("link") or "",
+    }
+
+
+def summarize_story_llm(article: dict[str, Any], now: datetime) -> dict[str, Any]:
+    """One article → story fields via persona prompt."""
+    snippet = _clean_rss_snippet(article.get("snippet") or "")
+    if len(snippet) > 400:
+        snippet = snippet[:400].rstrip() + "…"
+    payload = {
+        "title": article.get("title"),
+        "snippet": snippet,
+        "source": article.get("source"),
+        "link": article.get("link"),
+        "topic": article.get("topic"),
+        "score": article.get("score"),
+        "reason": article.get("reason"),
+    }
+    user = (
+        read_prompt("story_user.md")
+        .replace("{{date}}", now.strftime("%Y-%m-%d"))
+        .replace("{{article_json}}", json.dumps(payload, ensure_ascii=False, indent=2))
+    )
+    parsed, raw = ollama_chat(
+        read_prompt("story_system.md"),
+        user,
+        timeout_ms=story_timeout_ms(),
+    )
+    try:
+        return _normalize_story_llm(parsed, article)
+    except RuntimeError:
+        raise RuntimeError(f"bad story JSON: {raw[:500]}") from None
+
+
 def build_briefing(articles: list[dict[str, Any]], now: datetime) -> tuple[dict[str, Any], str]:
     if env("BRIEFING_MODE", "llm").lower() == "heuristic":
         print("   briefing mode=heuristic")
         return build_briefing_heuristic(articles, now), "heuristic"
 
-    payload = [
-        {
-            "title": a["title"],
-            "snippet": a["snippet"],
-            "source": a["source"],
-            "link": a["link"],
-            "topic": a["topic"],
-            "score": a.get("score"),
-            "reason": a.get("reason"),
-        }
-        for a in articles
-    ]
-    user = (
-        read_prompt("briefing_user.md")
-        .replace("{{date}}", now.strftime("%Y-%m-%d"))
-        .replace("{{articles_json}}", json.dumps(payload, ensure_ascii=False, indent=2))
-    )
-    briefing_timeout_ms_value = briefing_timeout_ms()
-    try:
-        parsed, raw = ollama_chat(
-            read_prompt("briefing_system.md"),
-            user,
-            timeout_ms=briefing_timeout_ms_value,
-        )
-        if not isinstance(parsed, dict):
-            raise RuntimeError(f"briefing JSON must be object, got {type(parsed)}: {raw[:500]}")
-        return parsed, "llm"
-    except Exception as exc:  # noqa: BLE001
-        if env("ALLOW_BRIEFING_FALLBACK", "1").lower() in {"1", "true", "yes"}:
-            print(f"   !! LLM briefing failed: {exc} — heuristic fallback")
-            return build_briefing_heuristic(articles, now), "heuristic"
-        raise
+    stories: list[dict[str, Any]] = []
+    llm_ok = 0
+    allow_fb = env("ALLOW_BRIEFING_FALLBACK", "1").lower() in {"1", "true", "yes"}
+    n = len(articles)
+    for idx, article in enumerate(articles, start=1):
+        print(f"   LLM story {idx}/{n} id={(article.get('id') or '')[:8]}…")
+        try:
+            stories.append(summarize_story_llm(article, now))
+            llm_ok += 1
+        except Exception as exc:  # noqa: BLE001
+            if not allow_fb:
+                raise
+            print(f"   !! story LLM failed: {exc} — heuristic story fallback")
+            stories.append(heuristic_story_fields(article, index=idx))
+
+    briefing = assemble_briefing_from_stories(stories, now)
+    if llm_ok == 0:
+        mode = "heuristic"
+    elif llm_ok == n:
+        mode = "llm"
+    else:
+        mode = "mixed"
+    print(f"   stories llm={llm_ok}/{n} → generation={mode}")
+    return briefing, mode
 
 
 def screenshot_html(html_doc: str, out_path: Path) -> None:
@@ -1050,7 +1122,7 @@ def preview_text(
     picked: list[dict[str, Any]],
     generation_mode: str = "llm",
 ) -> str:
-    mode_label = "heuristic" if generation_mode == "heuristic" else "llm"
+    mode_label = _generation_mode_label(generation_mode)
     lines = [
         f"[초안] {briefing.get('title', '')}",
         f"생성: {mode_label}",
@@ -1122,7 +1194,7 @@ def run_publish(
             ig_media_id = instagram_carousel(image_urls, f"{caption}\n\n{tags_h}".strip())
             print(f"   ig media id: {ig_media_id}")
 
-    mode_label = "heuristic" if generation_mode == "heuristic" else "llm"
+    mode_label = _generation_mode_label(generation_mode)
     caption = (
         f"[마크다운 준비됨]\n생성: {mode_label}\n{briefing.get('title')}\n"
         f"경로: {md_path}\n에디터에 붙여넣기 하세요."
