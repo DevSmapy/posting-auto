@@ -11,6 +11,9 @@ OLLAMA_AUTO_CONTAINER="${OLLAMA_AUTO_CONTAINER:-1}"
 OLLAMA_DOCKER_RESTART="${OLLAMA_DOCKER_RESTART:-0}"
 OLLAMA_WAIT_SEC="${OLLAMA_WAIT_SEC:-90}"
 OLLAMA_WARM="${OLLAMA_WARM:-1}"
+# Cold load of 7B on Mac/Docker CPU often exceeds 3m; default 10m.
+OLLAMA_WARM_TIMEOUT_SEC="${OLLAMA_WARM_TIMEOUT_SEC:-600}"
+OLLAMA_KEEP_ALIVE="${OLLAMA_KEEP_ALIVE:-30m}"
 
 POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-}"
 BROWSERLESS_CONTAINER="${BROWSERLESS_CONTAINER:-}"
@@ -95,12 +98,19 @@ ollama_warm_model() {
     echo "==> skip model warm (OLLAMA_WARM=${OLLAMA_WARM})"
     return 0
   fi
-  echo "==> warm model ${OLLAMA_MODEL}"
-  curl -fsS --max-time 180 "${OLLAMA_HOST_URL}/api/chat" \
+  local timeout_sec="${OLLAMA_WARM_TIMEOUT_SEC:-600}"
+  local keep_alive="${OLLAMA_KEEP_ALIVE:-30m}"
+  echo "==> warm model ${OLLAMA_MODEL} (timeout=${timeout_sec}s keep_alive=${keep_alive})"
+  # Soft-fail: do not abort run_draft (set -e). First story call can still load the model.
+  if curl -fsS --max-time "${timeout_sec}" "${OLLAMA_HOST_URL}/api/chat" \
     -H 'Content-Type: application/json' \
-    -d "{\"model\":\"${OLLAMA_MODEL}\",\"stream\":false,\"keep_alive\":\"30m\",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}]}" \
-    >/dev/null
-  echo "   warm ok"
+    -d "{\"model\":\"${OLLAMA_MODEL}\",\"stream\":false,\"keep_alive\":\"${keep_alive}\",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}]}" \
+    >/dev/null; then
+    echo "   warm ok"
+  else
+    echo "!! warm failed or timed out after ${timeout_sec}s — continuing; first LLM call may load the model" >&2
+  fi
+  return 0
 }
 
 _draft_start_named() {

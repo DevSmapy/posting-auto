@@ -4,7 +4,8 @@
 # Usage: ./scripts/run_draft.sh
 #
 # Starts postgres (+ browserless if cards) and ollama, warms the model, runs the
-# pipeline. After LLM work, mvp_pipeline stops ollama *before* Discord Approve.
+# pipeline. Warm uses OLLAMA_WARM_TIMEOUT_SEC (default 600); warm failure does not
+# abort the draft. After LLM work, mvp_pipeline stops ollama *before* Discord Approve.
 # Remaining containers stop on EXIT. Disable with OLLAMA_AUTO_CONTAINER=0 /
 # DRAFT_AUTO_AUX=0.
 set -euo pipefail
