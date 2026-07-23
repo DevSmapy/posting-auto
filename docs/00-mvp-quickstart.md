@@ -134,7 +134,7 @@ python scripts/test_notify_window.py
 
 `./scripts/run_draft.sh` 수명주기:
 
-1. `postgres` (+ `browserless` if `PUBLISH_CARDS`) · `ollama` **start** → 모델 warm (`OLLAMA_WARM_TIMEOUT_SEC` 기본 600초; 실패해도 draft 계속)
+1. `postgres` (+ `browserless` if `PUBLISH_CARDS`) · `ollama` **start** (필요 시 `OLLAMA_LOAD_TIMEOUT` 반영 재생성) → 모델 warm (**스토리와 동일 `num_ctx`/`num_thread`**, 기본 600초; 실패해도 draft 계속)
 2. 랭킹·스토리 건당 LLM
 3. **ollama + aux stop** (Discord 발송/Approve 대기 전 — 메모리 반환)
 4. Discord Approve 대기 → Approve 시 aux 재기동 → `briefing.md`
@@ -152,7 +152,9 @@ CPU가 여전히 높거나 스토리 요약이 타임아웃되면 `.env`에서:
 
 ```bash
 OLLAMA_NUM_THREAD=4
-OLLAMA_STORY_TIMEOUT_MS=180000
+OLLAMA_NUM_CTX=4096          # warm과 스토리 LLM이 같은 값이어야 함 (다르면 재로드)
+OLLAMA_STORY_TIMEOUT_MS=300000
+OLLAMA_LOAD_TIMEOUT=10m       # 컨테이너 env — run_draft가 다르면 ollama 재생성
 OLLAMA_WARM_TIMEOUT_SEC=600
 RANK_MODE=heuristic   # 랭킹만 규칙 기반, 스토리만 건당 LLM
 BRIEFING_MODE=llm

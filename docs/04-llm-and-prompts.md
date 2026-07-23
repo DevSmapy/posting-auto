@@ -35,6 +35,9 @@ curl http://127.0.0.1:11434/api/tags
 
 건당 타임아웃: `OLLAMA_STORY_TIMEOUT_MS` → `OLLAMA_BRIEFING_TIMEOUT_MS` → `OLLAMA_TIMEOUT_MS` → **120000**
 
+서버 로드 한도: 컨테이너 `OLLAMA_LOAD_TIMEOUT` (기본 10m; `run_draft`가 미설정 시 재생성).  
+warm은 스토리와 **같은 `options`(num_ctx/num_thread)** 로 호출해 runner 재로드를 막습니다.
+
 생성 모드 로그: `llm` (전원 성공) | `mixed` (일부 폴백) | `heuristic` (전부 폴백 또는 `BRIEFING_MODE=heuristic`)
 
 ---

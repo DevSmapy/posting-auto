@@ -14,6 +14,11 @@ OLLAMA_WARM="${OLLAMA_WARM:-1}"
 # Cold load of 7B on Mac/Docker CPU often exceeds 3m; default 10m.
 OLLAMA_WARM_TIMEOUT_SEC="${OLLAMA_WARM_TIMEOUT_SEC:-600}"
 OLLAMA_KEEP_ALIVE="${OLLAMA_KEEP_ALIVE:-30m}"
+# Server-side model load budget (container env). Default Ollama is 5m — too short here.
+OLLAMA_LOAD_TIMEOUT="${OLLAMA_LOAD_TIMEOUT:-10m}"
+OLLAMA_NUM_THREAD="${OLLAMA_NUM_THREAD:-4}"
+OLLAMA_NUM_CTX="${OLLAMA_NUM_CTX:-4096}"
+OLLAMA_TEMPERATURE="${OLLAMA_TEMPERATURE:-0.3}"
 
 POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-}"
 BROWSERLESS_CONTAINER="${BROWSERLESS_CONTAINER:-}"
@@ -93,6 +98,62 @@ postgres_wait_ready() {
   return 0
 }
 
+ollama_container_env_value() {
+  local key="$1"
+  docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$OLLAMA_CONTAINER" 2>/dev/null \
+    | awk -F= -v k="$key" '$1==k {print substr($0, index($0,"=")+1); exit}'
+}
+
+# Recreate ollama if LOAD_TIMEOUT / KEEP_ALIVE env differ (docker update cannot change Env).
+ollama_ensure_runtime_env() {
+  if ! _draft_auto_on; then
+    return 0
+  fi
+  if ! command -v docker >/dev/null 2>&1; then
+    return 0
+  fi
+  if ! docker inspect "$OLLAMA_CONTAINER" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local want_load="${OLLAMA_LOAD_TIMEOUT:-10m}"
+  local want_keep="${OLLAMA_KEEP_ALIVE:-30m}"
+  local cur_load cur_keep
+  cur_load="$(ollama_container_env_value OLLAMA_LOAD_TIMEOUT)"
+  cur_keep="$(ollama_container_env_value OLLAMA_KEEP_ALIVE)"
+  if [[ "$cur_load" == "$want_load" && "$cur_keep" == "$want_keep" ]]; then
+    return 0
+  fi
+
+  local image port
+  image="$(docker inspect -f '{{.Config.Image}}' "$OLLAMA_CONTAINER")"
+  port="$(docker inspect -f '{{(index (index .HostConfig.PortBindings "11434/tcp") 0).HostPort}}' "$OLLAMA_CONTAINER" 2>/dev/null || true)"
+  port="${port:-11434}"
+
+  local -a bind_args=()
+  local b
+  while IFS= read -r b; do
+    [[ -n "$b" ]] && bind_args+=(-v "$b")
+  done < <(docker inspect -f '{{range .HostConfig.Binds}}{{println .}}{{end}}' "$OLLAMA_CONTAINER")
+
+  echo "==> recreate ${OLLAMA_CONTAINER}: OLLAMA_LOAD_TIMEOUT ${cur_load:-unset}→${want_load}, OLLAMA_KEEP_ALIVE ${cur_keep:-unset}→${want_keep}"
+  docker stop "$OLLAMA_CONTAINER" >/dev/null 2>&1 || true
+  docker rm "$OLLAMA_CONTAINER" >/dev/null
+
+  docker run -d --name "$OLLAMA_CONTAINER" \
+    -p "${port}:11434" \
+    -e OLLAMA_HOST=0.0.0.0:11434 \
+    -e "OLLAMA_LOAD_TIMEOUT=${want_load}" \
+    -e "OLLAMA_KEEP_ALIVE=${want_keep}" \
+    "${bind_args[@]}" \
+    "$image" >/dev/null
+  # Preserve resource caps (lost on recreate; docker update cannot set Env).
+  local cpus="${OLLAMA_DOCKER_CPUS:-4.0}"
+  local memory="${OLLAMA_DOCKER_MEMORY:-10g}"
+  docker update --cpus="$cpus" --memory="$memory" --memory-swap="$memory" "$OLLAMA_CONTAINER" >/dev/null 2>&1 || true
+  echo "   recreated (${image}, port=${port}, cpus=${cpus}, memory=${memory})"
+}
+
 ollama_warm_model() {
   if ! _ollama_truthy "${OLLAMA_WARM}"; then
     echo "==> skip model warm (OLLAMA_WARM=${OLLAMA_WARM})"
@@ -100,13 +161,35 @@ ollama_warm_model() {
   fi
   local timeout_sec="${OLLAMA_WARM_TIMEOUT_SEC:-600}"
   local keep_alive="${OLLAMA_KEEP_ALIVE:-30m}"
-  echo "==> warm model ${OLLAMA_MODEL} (timeout=${timeout_sec}s keep_alive=${keep_alive})"
-  # Soft-fail: do not abort run_draft (set -e). First story call can still load the model.
+  local num_thread="${OLLAMA_NUM_THREAD:-4}"
+  local num_ctx="${OLLAMA_NUM_CTX:-4096}"
+  local temperature="${OLLAMA_TEMPERATURE:-0.3}"
+  # Must match mvp_pipeline ollama_options() — mismatched num_ctx forces a cold reload.
+  echo "==> warm model ${OLLAMA_MODEL} (timeout=${timeout_sec}s keep_alive=${keep_alive} num_ctx=${num_ctx} num_thread=${num_thread})"
+  local payload
+  payload="$(
+    cat <<EOF
+{
+  "model": "${OLLAMA_MODEL}",
+  "stream": false,
+  "format": "json",
+  "keep_alive": "${keep_alive}",
+  "options": {
+    "temperature": ${temperature},
+    "num_thread": ${num_thread},
+    "num_ctx": ${num_ctx}
+  },
+  "messages": [
+    {"role": "user", "content": "{\"ok\":true} 만 JSON으로 반환"}
+  ]
+}
+EOF
+  )"
   if curl -fsS --max-time "${timeout_sec}" "${OLLAMA_HOST_URL}/api/chat" \
     -H 'Content-Type: application/json' \
-    -d "{\"model\":\"${OLLAMA_MODEL}\",\"stream\":false,\"keep_alive\":\"${keep_alive}\",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}]}" \
+    -d "$payload" \
     >/dev/null; then
-    echo "   warm ok"
+    echo "   warm ok (same options as story LLM)"
   else
     echo "!! warm failed or timed out after ${timeout_sec}s — continuing; first LLM call may load the model" >&2
   fi
@@ -182,6 +265,7 @@ draft_start_ollama() {
     echo "!! container '${OLLAMA_CONTAINER}' not found. Create it first, then re-run." >&2
     return 1
   fi
+  ollama_ensure_runtime_env
   _draft_start_named "$OLLAMA_CONTAINER"
   ollama_wait_ready
 }
