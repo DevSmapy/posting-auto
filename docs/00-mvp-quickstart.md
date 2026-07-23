@@ -128,8 +128,10 @@ python scripts/test_notify_window.py
 월–금만 (`1-5`). 토·일은 돌리지 않습니다.  
 파이프라인은 07:00에 시작하고, Discord Approve 초안은 `.env`의 `NOTIFY_SEND_AT`(기본 07:50)에 보냅니다.
 
+cron은 `.zshrc`를 읽지 않으므로 `scripts/cron_run_draft.sh`가 PATH에 docker를 넣고 `run_draft.sh`를 실행합니다.
+
 ```cron
-0 7 * * 1-5 cd "/Users/leeyongkyun/포스팅 자동화" && ./scripts/run_draft.sh >>./output/cron.log 2>&1
+0 7 * * 1-5 "/Users/leeyongkyun/포스팅 자동화/scripts/cron_run_draft.sh" >>"/Users/leeyongkyun/포스팅 자동화/output/cron.log" 2>&1
 ```
 
 `./scripts/run_draft.sh` 수명주기:
