@@ -121,7 +121,18 @@ MVP_MODE=draft NOTIFY_CHANNEL=auto \
 
 ```bash
 python scripts/test_notify_window.py
+python -m unittest discover -s tests
 ```
+
+### 카드뉴스 로컬 미리보기 (Ollama / R2 / IG 불필요)
+
+```bash
+docker compose up -d browserless   # PNG용 (선택; Chrome만 있어도 됨)
+python scripts/preview_cardnews.py
+# → output/cardnews-preview/  (HTML · PNG · instagram_post.txt)
+```
+
+슬라이드·인스타 본문 포맷: [05. 발행](05-publishing.md).
 
 ### 평일 07:00 cron 예시 (macOS/Linux)
 

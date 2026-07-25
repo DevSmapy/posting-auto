@@ -67,8 +67,50 @@ Approve 후 채널에 `briefing.md` 파일이 첨부됩니다 (붙여넣기용).
 
 ---
 
-## 카드뉴스 / Instagram (옵션)
+## 카드뉴스 / Instagram
 
-`PUBLISH_CARDS=1` 일 때만 Approve 후 카드 렌더·R2·인스타를 시도합니다. 기본은 `0`(마크다운만).
+카드 슬라이드·인스타 게시글 본문은 [`scripts/cards/`](../scripts/cards/) OOP 패키지가 조립합니다.
+
+| 모듈 | 역할 |
+|------|------|
+| `CardAssembler` | cover / story / disclaimer 슬라이드 |
+| `InstagramCaptionBuilder` | 게시글 본문(훅·포인트·CTA·면책) + 해시태그 |
+| `CardRenderer` | HTML·PNG·`caption.txt` / `instagram_post.txt` |
+
+### 로컬 미리보기 (R2 / IG 불필요)
+
+```bash
+docker compose up -d browserless   # PNG가 필요할 때 (또는 로컬 Chrome)
+python scripts/preview_cardnews.py
+# → output/cardnews-preview/
+#    slides.json, slide-*.html, slide-*.png(가능 시),
+#    caption.txt, hashtags.txt, instagram_post.txt
+```
+
+PNG 백엔드: Browserless(`BROWSERLESS_URL`) → 실패 시 로컬 Chrome. 둘 다 없으면 HTML·캡션만 저장합니다.
+
+### 인스타 게시글 본문
+
+```text
+{브랜드} · {YYYY.MM.DD}
+{후킹 한 줄}
+
+오늘의 포인트
+1) …
+2) …
+
+자세한 해설은 프로필 링크·블로그 브리핑에서 이어갑니다.
+
+※ 정보 안내용이며 투자 권유가 아닙니다.
+
+#경제뉴스 #증시 …
+```
+
+`full_text`는 Graph API 한도(2100자)에 맞춰 자릅니다. IG 미연동 시 `instagram_post.txt`를 수동 복붙하면 됩니다.
+
+### 파이프라인 (`PUBLISH_CARDS`)
+
+`PUBLISH_CARDS=1`일 때만 Approve 후 카드 렌더·R2·인스타를 시도합니다. 기본은 `0`(마크다운만).  
+R2/IG가 없어도 로컬 `run_dir/cards/`에 HTML·PNG·캡션은 남습니다.
 
 다음: [06. 설치·설정](06-setup.md)

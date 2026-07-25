@@ -19,37 +19,43 @@
       width: 1080px;
       height: 1080px;
       font-family: "Noto Sans KR", sans-serif;
-      background: var(--bg);
+      background:
+        radial-gradient(ellipse at 0% 100%, #1a2430 0%, transparent 40%),
+        var(--bg);
       color: var(--fg);
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      padding: 88px 80px;
+      padding: 96px 88px;
     }
     .index {
-      font-size: 26px;
+      font-size: 28px;
       color: var(--accent);
       font-weight: 700;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.12em;
     }
     h1 {
-      margin-top: 56px;
-      font-size: 64px;
-      line-height: 1.25;
+      margin-top: 48px;
+      font-size: 58px;
+      line-height: 1.28;
       font-weight: 900;
+      letter-spacing: -0.02em;
+      max-width: 14ch;
+      word-break: keep-all;
     }
     .divider {
-      margin: 40px 0;
+      margin: 36px 0;
       height: 2px;
       background: var(--line);
-      width: 120px;
+      width: 96px;
     }
     .body {
-      font-size: 40px;
+      font-size: 38px;
       line-height: 1.45;
       color: var(--muted);
       font-weight: 500;
       max-width: 18ch;
+      word-break: keep-all;
     }
     .footer {
       font-size: 22px;
