@@ -104,15 +104,17 @@ def main() -> int:
     caption_text = ""
 
     if args.bundle == "editorial_carousel":
-        pack = EditorialCarouselTemplate(brand=config.brand or "BRAND")
+        # Keep brand as a visible placeholder for the reusable UI system
+        pack = EditorialCarouselTemplate(brand="BRAND")
         for out_dir in targets:
             print(f"==> export editorial UI → {out_dir}")
             result = pack.export(out_dir, render_png=not args.no_png)
-            if result.get("png"):
+            png_list = list(result.get("png") or [])
+            if png_list or list(out_dir.glob("slide-*.png")):
                 png_ok = True
             caption_text = (out_dir / "instagram_post.txt").read_text(encoding="utf-8")
             print(f"   slides: 8 (1080×1350 placeholders)")
-            print(f"   meta: {result['meta']}")
+            print(f"   png: {len(png_list)}  meta: {result['meta']}")
     elif args.bundle == "daily_briefing":
         bundle_meta = get_bundle("daily_briefing")
         card_bundle = CardAssembler(config).assemble(
