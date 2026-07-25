@@ -132,7 +132,8 @@ python scripts/preview_cardnews.py
 # → output/cardnews-preview/  (HTML · PNG · instagram_post.txt)
 ```
 
-슬라이드·인스타 본문 포맷: [05. 발행](05-publishing.md).
+슬라이드·인스타 본문 포맷: [05. 발행](05-publishing.md).  
+템플릿 구조·에디토리얼 UI: [09. 카드 템플릿](09-card-templates.md).
 
 ### 평일 07:00 cron 예시 (macOS/Linux)
 

@@ -79,6 +79,8 @@ Approve 후 채널에 `briefing.md` 파일이 첨부됩니다 (붙여넣기용).
 
 ### 템플릿 묶음 카탈로그
 
+상세(루트 HTML vs `editorial/`, 재사용 원리, 새 템플릿 추가): **[09. 카드 템플릿](09-card-templates.md)**.
+
 경제/사회 뉴스용 템플릿 정의는 [`scripts/cards/bundles/`](../scripts/cards/bundles/)에 JSON으로 저장합니다.
 
 | id | 이름 | 장수 | 비고 |
