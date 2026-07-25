@@ -33,6 +33,7 @@ from cards import (  # noqa: E402
     list_bundles,
     recommend_for_economy_society,
 )
+from cards.editorial import EditorialCarouselTemplate  # noqa: E402
 from cards.fixtures import sample_related_keywords, sample_stories  # noqa: E402
 from cards.fixtures_why_cause_impact import (  # noqa: E402
     CAPTION_HOOK,
@@ -74,10 +75,10 @@ def main() -> int:
     )
     parser.add_argument(
         "--bundle",
-        default="why_cause_impact",
+        default="editorial_carousel",
         help=(
-            "Template bundle id (default: why_cause_impact). "
-            "Use 'daily_briefing' for cover+stories+disclaimer sample."
+            "Template bundle id (default: editorial_carousel UI template). "
+            "Also: why_cause_impact, daily_briefing, ..."
         ),
     )
     parser.add_argument(
@@ -95,14 +96,30 @@ def main() -> int:
     now = datetime.now(tz)
     config = CardFormatConfig.from_env()
 
-    if args.bundle == "daily_briefing":
+    targets = [args.out]
+    if args.artifacts:
+        targets.append(args.artifacts)
+
+    png_ok = False
+    caption_text = ""
+
+    if args.bundle == "editorial_carousel":
+        pack = EditorialCarouselTemplate(brand=config.brand or "BRAND")
+        for out_dir in targets:
+            print(f"==> export editorial UI → {out_dir}")
+            result = pack.export(out_dir, render_png=not args.no_png)
+            if result.get("png"):
+                png_ok = True
+            caption_text = (out_dir / "instagram_post.txt").read_text(encoding="utf-8")
+            print(f"   slides: 8 (1080×1350 placeholders)")
+            print(f"   meta: {result['meta']}")
+    elif args.bundle == "daily_briefing":
         bundle_meta = get_bundle("daily_briefing")
         card_bundle = CardAssembler(config).assemble(
             sample_stories(),
             now,
             related_keywords=sample_related_keywords(),
         )
-        # annotate for export meta
         from cards.models import CardBundle as CB
 
         card_bundle = CB(
@@ -111,18 +128,26 @@ def main() -> int:
             related_keywords=card_bundle.related_keywords,
             template_id=bundle_meta.id,
         )
+        renderer = CardRenderer(config)
+        for out_dir in targets:
+            print(f"==> export → {out_dir}  (template={card_bundle.template_id})")
+            result = renderer.export(card_bundle, out_dir, render_png=not args.no_png)
+            if result.get("png"):
+                png_ok = True
+            caption_text = card_bundle.post.full_text
+            print(f"   slides: {len(card_bundle.slides)}")
     else:
         template = get_bundle(args.bundle)
         if template.id != "why_cause_impact":
             print(
                 f"!! No fixture fill for {template.id!r} yet — "
-                "using why_cause_impact example structure only if counts match."
+                "use --bundle editorial_carousel or why_cause_impact."
             )
         filled = why_cause_impact_example()
         if len(filled) != len(template.slides):
             raise SystemExit(
                 f"fixture slides={len(filled)} != template {template.id} "
-                f"slides={len(template.slides)}. Use --bundle why_cause_impact."
+                f"slides={len(template.slides)}."
             )
         card_bundle = NarrativeAssembler(config).assemble(
             filled,
@@ -131,26 +156,18 @@ def main() -> int:
             related_keywords=why_cause_impact_keywords(),
             caption_hook=CAPTION_HOOK,
         )
-
-    renderer = CardRenderer(config)
-    targets = [args.out]
-    if args.artifacts:
-        targets.append(args.artifacts)
-
-    png_ok = False
-    for out_dir in targets:
-        print(f"==> export → {out_dir}  (template={card_bundle.template_id})")
-        result = renderer.export(card_bundle, out_dir, render_png=not args.no_png)
-        png_list = result.get("png") or []
-        if png_list:
-            png_ok = True
-        print(f"   slides: {len(card_bundle.slides)}")
-        print(f"   caption chars: {len(card_bundle.post.full_text)}")
-        print(f"   instagram_post: {result['instagram_post']}")
+        renderer = CardRenderer(config)
+        for out_dir in targets:
+            print(f"==> export → {out_dir}  (template={card_bundle.template_id})")
+            result = renderer.export(card_bundle, out_dir, render_png=not args.no_png)
+            if result.get("png"):
+                png_ok = True
+            caption_text = card_bundle.post.full_text
+            print(f"   slides: {len(card_bundle.slides)}")
 
     print()
     print("--- Instagram post preview ---")
-    print(card_bundle.post.full_text)
+    print(caption_text.strip())
     print("--- end ---")
 
     if args.no_png:

@@ -26,12 +26,13 @@ from cards.fixtures_why_cause_impact import (  # noqa: E402
 
 
 class TemplateCatalogTest(unittest.TestCase):
-    def test_six_bundles_loaded(self) -> None:
+    def test_bundles_loaded(self) -> None:
         bundles = list_bundles()
-        self.assertEqual(len(bundles), 6)
+        self.assertGreaterEqual(len(bundles), 6)
         ids = {b.id for b in bundles}
         self.assertIn("why_cause_impact", ids)
         self.assertIn("daily_briefing", ids)
+        self.assertIn("editorial_carousel", ids)
 
     def test_recommend_why_cause_impact(self) -> None:
         picked = recommend_for_economy_society()

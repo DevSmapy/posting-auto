@@ -83,12 +83,15 @@ Approve 후 채널에 `briefing.md` 파일이 첨부됩니다 (붙여넣기용).
 
 | id | 이름 | 장수 | 비고 |
 |----|------|------|------|
-| `why_cause_impact` | Why→원인→영향→전망 | 8 | **경제/사회 기본 추천** |
+| `editorial_carousel` | 에디토리얼 UI 템플릿 | 8 | **1080×1350 재사용 UI** (플레이스홀더만) |
+| `why_cause_impact` | Why→원인→영향→전망 | 8 | 콘텐츠 예시 추천 |
 | `myth_vs_truth` | 오해 vs 진실 | 7 | |
 | `five_min_class` | 5분 경제 교실 | 6 | |
 | `numbers` | 숫자로 보는 경제 | 6 | |
 | `storytelling` | 스토리텔링 경제 | 6 | |
 | `daily_briefing` | 오늘의 이슈 브리핑 | 5~7 | 기존 MVP 호환 |
+
+에디토리얼 UI (`templates/cards/editorial/`): Info/Number/Quote/Impact Card, Timeline, Flow, Highlight Box 등. 실제 뉴스 문구 없이 플레이스홀더만 포함.
 
 ```bash
 python scripts/preview_cardnews.py --list-bundles
@@ -98,11 +101,12 @@ python scripts/preview_cardnews.py --list-bundles
 
 ```bash
 docker compose up -d browserless   # PNG가 필요할 때 (또는 로컬 Chrome)
-python scripts/preview_cardnews.py --bundle why_cause_impact
+python scripts/preview_cardnews.py --bundle editorial_carousel
 # → output/cardnews-preview/
-#    slides.json, slide-*.html, slide-*.png(가능 시),
+#    slide-01..08.html/.png (1080×1350), placeholders.json, template_meta.json,
 #    caption.txt, hashtags.txt, instagram_post.txt
 ```
+
 
 PNG 백엔드: Browserless(`BROWSERLESS_URL`) → 실패 시 로컬 Chrome. 둘 다 없으면 HTML·캡션만 저장합니다.
 

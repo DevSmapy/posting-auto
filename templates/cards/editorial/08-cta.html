@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <style>{{DESIGN_SYSTEM_CSS}}
+    .cta-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      gap: 28px;
+    }
+    .logo {
+      width: 96px;
+      height: 96px;
+      border-radius: 28px;
+      background: var(--color-primary);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      font-weight: 700;
+      box-shadow: var(--shadow);
+    }
+    .cta-title {
+      font-size: 48px;
+      font-weight: 700;
+      line-height: 1.3;
+      max-width: 14ch;
+      word-break: keep-all;
+    }
+    .actions {
+      display: flex;
+      gap: 16px;
+      margin-top: 12px;
+    }
+    .action {
+      width: 220px;
+      padding: 28px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+    .action .icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      background: var(--color-soft);
+      color: var(--color-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .action .icon.accent { background: rgba(245,158,11,.14); color: var(--color-accent); }
+    .action .icon svg {
+      width: 28px; height: 28px; stroke: currentColor; fill: none;
+      stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+    }
+    .action .txt {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--color-text);
+    }
+    .follow-btn {
+      margin-top: 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 18px 36px;
+      border-radius: 999px;
+      background: var(--color-primary);
+      color: #fff;
+      font-size: 26px;
+      font-weight: 700;
+      box-shadow: var(--shadow);
+    }
+    .disclaimer {
+      margin-top: 8px;
+      font-size: 20px;
+      color: var(--color-text-secondary);
+      font-weight: 400;
+    }
+  </style>
+</head>
+<body>
+  <div class="slide">
+    <div class="label"><span class="dot"></span> CTA</div>
+    <div class="cta-wrap">
+      <div class="logo">{{logo_mark}}</div>
+      <h1 class="cta-title">{{cta_title}}</h1>
+      <p class="body">{{cta_subtitle}}</p>
+      <div class="actions">
+        <div class="card action">
+          <div class="icon accent"><svg viewBox="0 0 24 24"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></div>
+          <div class="txt">{{action_save}}</div>
+        </div>
+        <div class="card action">
+          <div class="icon"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="2"/><circle cx="6" cy="12" r="2"/><circle cx="18" cy="19" r="2"/><path d="M8 12h8M8 12l8-6M8 12l8 6"/></svg></div>
+          <div class="txt">{{action_share}}</div>
+        </div>
+        <div class="card action">
+          <div class="icon accent"><svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></svg></div>
+          <div class="txt">{{action_follow}}</div>
+        </div>
+      </div>
+      <div class="follow-btn">{{follow_button}}</div>
+      <p class="disclaimer">{{disclaimer}}</p>
+    </div>
+    <div class="footer-meta">
+      <span class="brand">{{brand}}</span>
+      <span class="page">08 / 08</span>
+    </div>
+  </div>
+</body>
+</html>

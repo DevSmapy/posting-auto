@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <style>{{DESIGN_SYSTEM_CSS}}
+    .head { margin-top: 40px; margin-bottom: 40px; }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    .impact-card {
+      min-height: 280px;
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .impact-card .group {
+      font-size: 30px;
+      font-weight: 700;
+      word-break: keep-all;
+    }
+  </style>
+</head>
+<body>
+  <div class="slide">
+    <div class="label"><span class="dot"></span> Impact</div>
+    <div class="head">
+      <h1 class="h2">{{title}}</h1>
+      <p class="body" style="margin-top:16px;">{{subtitle}}</p>
+    </div>
+    <div class="grid">
+      <div class="impact-card">
+        <div class="icon-badge"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3"/><path d="M5 19c1.5-3 4-4.5 7-4.5S17.5 16 19 19"/></svg></div>
+        <div class="group">{{card_1_group}}</div>
+        <p class="body-sm">{{card_1_body}}</p>
+      </div>
+      <div class="impact-card">
+        <div class="icon-badge accent"><svg viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M8 8V6a4 4 0 0 1 8 0v2"/></svg></div>
+        <div class="group">{{card_2_group}}</div>
+        <p class="body-sm">{{card_2_body}}</p>
+      </div>
+      <div class="impact-card">
+        <div class="icon-badge"><svg viewBox="0 0 24 24"><path d="M3 17l5-5 4 3 7-8"/><path d="M14 7h7v7"/></svg></div>
+        <div class="group">{{card_3_group}}</div>
+        <p class="body-sm">{{card_3_body}}</p>
+      </div>
+      <div class="impact-card">
+        <div class="icon-badge accent"><svg viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M6 20V10l6-4 6 4v10"/><path d="M10 20v-6h4v6"/></svg></div>
+        <div class="group">{{card_4_group}}</div>
+        <p class="body-sm">{{card_4_body}}</p>
+      </div>
+    </div>
+    <div class="footer-meta">
+      <span class="brand">{{brand}}</span>
+      <span class="page">05 / 08</span>
+    </div>
+  </div>
+</body>
+</html>

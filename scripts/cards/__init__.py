@@ -12,6 +12,7 @@ from .caption import InstagramCaptionBuilder
 from .config import CardFormatConfig
 from .copy import CardCopyRules
 from .models import CardBundle, InstagramPost, Slide, SlideType
+from .editorial import EditorialCarouselTemplate, placeholder_content
 from .narrative import NarrativeAssembler
 from .renderer import CardRenderer, CardTemplateRenderer
 
@@ -22,6 +23,7 @@ __all__ = [
     "CardFormatConfig",
     "CardRenderer",
     "CardTemplateRenderer",
+    "EditorialCarouselTemplate",
     "InstagramCaptionBuilder",
     "InstagramPost",
     "NarrativeAssembler",
@@ -31,5 +33,6 @@ __all__ = [
     "get_bundle",
     "list_bundles",
     "load_design_guide",
+    "placeholder_content",
     "recommend_for_economy_society",
 ]

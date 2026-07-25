@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <style>{{DESIGN_SYSTEM_CSS}}
+    .head { margin-top: 40px; margin-bottom: 40px; }
+    .number-list { display: flex; flex-direction: column; gap: 20px; }
+    .number-card {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+      padding: 28px;
+    }
+    .number-card .content { flex: 1; }
+    .number-card .title-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .number-card .n {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--color-accent);
+      letter-spacing: 0.04em;
+    }
+    .number-card .title {
+      font-size: 30px;
+      font-weight: 700;
+      word-break: keep-all;
+    }
+  </style>
+</head>
+<body>
+  <div class="slide">
+    <div class="label"><span class="dot"></span> Background</div>
+    <div class="head">
+      <h1 class="h2">{{title}}</h1>
+      <p class="body" style="margin-top:16px;">{{subtitle}}</p>
+    </div>
+    <div class="number-list">
+      <div class="number-card">
+        <div class="icon-badge"><svg viewBox="0 0 24 24"><path d="M3 12h18"/><path d="M12 3v18"/></svg></div>
+        <div class="content">
+          <div class="title-row"><span class="n">01</span><div class="title">{{card_1_title}}</div></div>
+          <p class="body-sm">{{card_1_body}}</p>
+        </div>
+      </div>
+      <div class="number-card">
+        <div class="icon-badge accent"><svg viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M5 8h14"/><path d="M7 12h10"/><path d="M9 16h6"/></svg></div>
+        <div class="content">
+          <div class="title-row"><span class="n">02</span><div class="title">{{card_2_title}}</div></div>
+          <p class="body-sm">{{card_2_body}}</p>
+        </div>
+      </div>
+      <div class="number-card">
+        <div class="icon-badge"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg></div>
+        <div class="content">
+          <div class="title-row"><span class="n">03</span><div class="title">{{card_3_title}}</div></div>
+          <p class="body-sm">{{card_3_body}}</p>
+        </div>
+      </div>
+    </div>
+    <div class="footer-meta">
+      <span class="brand">{{brand}}</span>
+      <span class="page">03 / 08</span>
+    </div>
+  </div>
+</body>
+</html>
