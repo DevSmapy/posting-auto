@@ -1,0 +1,61 @@
+{
+  "id": "why_cause_impact",
+  "index": 1,
+  "name_ko": "Why? → 원인 → 영향 → 전망",
+  "name_en": "Why → Cause → Impact → Future",
+  "badge": "가장 범용적",
+  "purpose": "일반 뉴스 보도·해설. 사건→원인→영향→전망 흐름으로 경제/사회 이슈를 설명한다.",
+  "card_count": 8,
+  "recommended_topics": ["경제뉴스", "사회뉴스", "정책", "시장 이슈"],
+  "fit_score_economy_society": 5,
+  "slides": [
+    {
+      "role": "hook",
+      "label": "Hook",
+      "title_hint": "도발적 질문",
+      "purpose": "관심을 끄는 한 줄 질문으로 시작"
+    },
+    {
+      "role": "event",
+      "label": "무슨 일?",
+      "title_hint": "사건 요약",
+      "purpose": "무슨 일이 있었는지 사실만 짧게"
+    },
+    {
+      "role": "cause",
+      "label": "왜?",
+      "title_hint": "배경·원인",
+      "purpose": "왜 이런 일이 생겼는지"
+    },
+    {
+      "role": "analysis",
+      "label": "핵심",
+      "title_hint": "핵심 분석",
+      "purpose": "이 뉴스의 진짜 포인트"
+    },
+    {
+      "role": "impact",
+      "label": "영향",
+      "title_hint": "영향 범위",
+      "purpose": "주식·환율·소비자 등 누구에게 영향이 있는지"
+    },
+    {
+      "role": "outlook",
+      "label": "전망",
+      "title_hint": "앞으로",
+      "purpose": "시나리오 A/B 등 다음 흐름"
+    },
+    {
+      "role": "summary",
+      "label": "한 줄",
+      "title_hint": "한 줄 요약",
+      "purpose": "기억에 남는 결론"
+    },
+    {
+      "role": "cta",
+      "label": "CTA",
+      "title_hint": "저장·공유·팔로우",
+      "purpose": "행동 유도 + 면책"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "name": "공통 디자인 가이드",
+  "name_en": "Shared design guide",
+  "colors": {
+    "deep_blue": "#0B1F3A",
+    "purple": "#5B4B8A",
+    "green": "#2F9E6A",
+    "orange": "#F08A24",
+    "light_blue": "#6EB6FF",
+    "foreground": "#F5F7FA",
+    "muted": "#A8B3C4"
+  },
+  "fonts": {
+    "title": "Pretendard Bold",
+    "body": "Pretendard Regular",
+    "fallback": "Noto Sans KR"
+  },
+  "icon_style": "simple_line_or_flat_2d",
+  "layout_rules": [
+    "카드당 핵심 메시지 1개",
+    "텍스트는 짧고 크게",
+    "아이콘·도식 활용",
+    "여백을 충분히 확보"
+  ],
+  "ops_tips": [
+    "주 2~3회 시리즈로 게시",
+    "시리즈명·카드 번호 일관 유지",
+    "마지막 카드에 CTA 포함"
+  ]
+}

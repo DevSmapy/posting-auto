@@ -1,0 +1,49 @@
+{
+  "id": "numbers",
+  "index": 4,
+  "name_ko": "숫자로 보는 경제",
+  "name_en": "Economy Through Numbers",
+  "badge": null,
+  "purpose": "특정 지표·수치(예: CPI 3.0%)를 중심으로 뉴스를 해석한다.",
+  "card_count": 6,
+  "recommended_topics": ["물가", "고용", "GDP", "실적", "통계 발표"],
+  "fit_score_economy_society": 4,
+  "slides": [
+    {
+      "role": "number",
+      "label": "오늘의 숫자",
+      "title_hint": "큰 숫자 강조",
+      "purpose": "핵심 수치를 크게 보여줌"
+    },
+    {
+      "role": "definition",
+      "label": "이 숫자는?",
+      "title_hint": "지표 정의",
+      "purpose": "지표가 무엇인지"
+    },
+    {
+      "role": "why",
+      "label": "왜 중요?",
+      "title_hint": "중요성",
+      "purpose": "이 숫자가 중요한 이유"
+    },
+    {
+      "role": "trend",
+      "label": "과거 vs 현재",
+      "title_hint": "추이 비교",
+      "purpose": "이전 수치·추세와 비교"
+    },
+    {
+      "role": "outlook",
+      "label": "전망",
+      "title_hint": "앞으로의 흐름",
+      "purpose": "수치 기반 전망"
+    },
+    {
+      "role": "summary",
+      "label": "한 줄",
+      "title_hint": "한 줄 요약",
+      "purpose": "마무리"
+    }
+  ]
+}

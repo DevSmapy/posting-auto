@@ -17,47 +17,77 @@ from .models import CardBundle, Slide, SlideType
 
 
 class CardTemplateRenderer:
-    """Fill HTML templates for cover / story / disclaimer slides."""
+    """Fill HTML templates for cover / story / disclaimer / hook / cta slides."""
 
     def __init__(self, config: CardFormatConfig | None = None) -> None:
         self.config = config or CardFormatConfig.from_env()
 
     def render_slide(self, slide: Slide) -> str:
         brand = self.config.brand
+        if slide.label:
+            label = slide.label
+        elif slide.role:
+            label = slide.role
+        elif slide.type == SlideType.STORY:
+            label = "이슈"
+        else:
+            label = slide.type.value
+        index = slide.index or "01"
+        headline = self._nl(slide.headline)
+        body = self._nl(slide.body)
+
+        if slide.type == SlideType.HOOK:
+            return self._fill(
+                "hook.html",
+                label=label,
+                index=index,
+                headline=headline,
+                body=body,
+                brand=brand,
+            )
+        if slide.type == SlideType.CTA:
+            return self._fill(
+                "cta.html",
+                label=label,
+                index=index,
+                headline=headline,
+                body=body,
+                brand=brand,
+            )
         if slide.type == SlideType.COVER:
-            # body may contain date\ntheme — show as multiline in template
             return self._fill(
                 "cover.html",
-                headline=slide.headline,
-                body=slide.body.replace("\n", "<br />"),
+                headline=headline,
+                body=body,
                 brand=brand,
             )
         if slide.type == SlideType.DISCLAIMER:
             return self._fill(
                 "disclaimer.html",
-                headline=slide.headline,
-                body=slide.body,
+                headline=headline,
+                body=body,
                 brand=brand,
             )
-        index = slide.index or "01"
         return self._fill(
             "slide.html",
+            label=label,
             index=index,
-            headline=slide.headline,
-            body=slide.body,
+            headline=headline,
+            body=body,
             brand=brand,
         )
+
+    @staticmethod
+    def _nl(text: str) -> str:
+        """Convert newlines to a marker that _fill will turn into <br />."""
+        return (text or "").replace("\r\n", "\n").replace("\n", "{{BR}}")
 
     def _fill(self, name: str, **kwargs: str) -> str:
         path = self.config.templates_dir / name
         text = path.read_text(encoding="utf-8")
         for key, value in kwargs.items():
-            # Allow intentional <br /> from cover body; escape other content first
-            if key == "body" and "<br" in value:
-                parts = value.split("<br />")
-                safe = "<br />".join(html.escape(p) for p in parts)
-            else:
-                safe = html.escape(value)
+            parts = value.split("{{BR}}")
+            safe = "<br />".join(html.escape(p) for p in parts)
             text = text.replace("{{" + key + "}}", safe)
         return text
 
@@ -87,8 +117,12 @@ class CardRenderer:
         html_paths: list[Path] = []
         png_paths: list[Path] = []
 
+        meta = {
+            "template_id": bundle.template_id,
+            "slides": bundle.slides_as_dicts(),
+        }
         (out_dir / "slides.json").write_text(
-            json.dumps(bundle.slides_as_dicts(), ensure_ascii=False, indent=2),
+            json.dumps(meta, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
         caption_path = out_dir / "caption.txt"
@@ -197,7 +231,6 @@ class CardRenderer:
             found = shutil.which(name)
             if found:
                 return found
-        # Common absolute path in this agent environment
         agent_chrome = Path("/usr/local/bin/google-chrome")
         if agent_chrome.is_file():
             return str(agent_chrome)

@@ -77,11 +77,28 @@ Approve 후 채널에 `briefing.md` 파일이 첨부됩니다 (붙여넣기용).
 | `InstagramCaptionBuilder` | 게시글 본문(훅·포인트·CTA·면책) + 해시태그 |
 | `CardRenderer` | HTML·PNG·`caption.txt` / `instagram_post.txt` |
 
+### 템플릿 묶음 카탈로그
+
+경제/사회 뉴스용 템플릿 정의는 [`scripts/cards/bundles/`](../scripts/cards/bundles/)에 JSON으로 저장합니다.
+
+| id | 이름 | 장수 | 비고 |
+|----|------|------|------|
+| `why_cause_impact` | Why→원인→영향→전망 | 8 | **경제/사회 기본 추천** |
+| `myth_vs_truth` | 오해 vs 진실 | 7 | |
+| `five_min_class` | 5분 경제 교실 | 6 | |
+| `numbers` | 숫자로 보는 경제 | 6 | |
+| `storytelling` | 스토리텔링 경제 | 6 | |
+| `daily_briefing` | 오늘의 이슈 브리핑 | 5~7 | 기존 MVP 호환 |
+
+```bash
+python scripts/preview_cardnews.py --list-bundles
+```
+
 ### 로컬 미리보기 (R2 / IG 불필요)
 
 ```bash
 docker compose up -d browserless   # PNG가 필요할 때 (또는 로컬 Chrome)
-python scripts/preview_cardnews.py
+python scripts/preview_cardnews.py --bundle why_cause_impact
 # → output/cardnews-preview/
 #    slides.json, slide-*.html, slide-*.png(가능 시),
 #    caption.txt, hashtags.txt, instagram_post.txt

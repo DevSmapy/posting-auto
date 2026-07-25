@@ -1,0 +1,32 @@
+{
+  "id": "daily_briefing",
+  "index": 6,
+  "name_ko": "오늘의 이슈 브리핑",
+  "name_en": "Daily Multi-Issue Briefing",
+  "badge": "기존 MVP 호환",
+  "purpose": "하루 여러 이슈를 cover + 이슈 슬라이드 + 면책으로 짧게 훑는 데일리 브리핑형. (기존 assemble 경로와 대응)",
+  "card_count": "5~7",
+  "recommended_topics": ["장전 브리핑", "다주제 요약", "데일리 캐러셀"],
+  "fit_score_economy_society": 4,
+  "slides": [
+    {
+      "role": "cover",
+      "label": "표지",
+      "title_hint": "브랜드 + 날짜 + 테마",
+      "purpose": "오늘의 브리핑 표지"
+    },
+    {
+      "role": "story",
+      "label": "이슈",
+      "title_hint": "이슈별 헤드라인 + 한 줄",
+      "purpose": "선정 이슈 3~5건 (반복)"
+    },
+    {
+      "role": "disclaimer",
+      "label": "면책",
+      "title_hint": "참고·면책",
+      "purpose": "투자 권유 아님 고지"
+    }
+  ],
+  "notes": "이미지 세트에 명시되지 않은 운영형 템플릿. 프로젝트 기존 카드 흐름을 6번째 묶음으로 문서화해 카탈로그를 완성한다."
+}

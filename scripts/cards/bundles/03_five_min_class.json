@@ -1,0 +1,49 @@
+{
+  "id": "five_min_class",
+  "index": 3,
+  "name_ko": "5분 경제 교실",
+  "name_en": "5-Minute Economy Class",
+  "badge": null,
+  "purpose": "어려운 경제 개념을 쉽게 풀어 설명하는 교육형 템플릿.",
+  "card_count": 6,
+  "recommended_topics": ["인플레이션", "금리", "환율", "기초 경제 개념"],
+  "fit_score_economy_society": 3,
+  "slides": [
+    {
+      "role": "topic",
+      "label": "오늘의 주제",
+      "title_hint": "개념 소개",
+      "purpose": "오늘 다룰 개념 제시"
+    },
+    {
+      "role": "definition",
+      "label": "용어",
+      "title_hint": "쉬운 정의",
+      "purpose": "한 줄 정의"
+    },
+    {
+      "role": "example",
+      "label": "예시",
+      "title_hint": "생활 속 비유",
+      "purpose": "라면·커피 가격 등 쉬운 비유"
+    },
+    {
+      "role": "news_link",
+      "label": "뉴스 연결",
+      "title_hint": "최근 이슈와 연결",
+      "purpose": "개념을 헤드라인과 연결"
+    },
+    {
+      "role": "invest_impact",
+      "label": "투자 영향",
+      "title_hint": "시장에 미치는 영향",
+      "purpose": "투자·생활에 주는 영향"
+    },
+    {
+      "role": "summary",
+      "label": "정리",
+      "title_hint": "핵심 한 줄",
+      "purpose": "기억할 포인트"
+    }
+  ]
+}

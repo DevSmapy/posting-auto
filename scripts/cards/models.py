@@ -11,6 +11,9 @@ class SlideType(str, Enum):
     COVER = "cover"
     STORY = "story"
     DISCLAIMER = "disclaimer"
+    HOOK = "hook"
+    CTA = "cta"
+    NUMBER = "number"
 
 
 @dataclass(frozen=True)
@@ -19,6 +22,8 @@ class Slide:
     headline: str
     body: str
     index: str | None = None
+    role: str | None = None
+    label: str | None = None
 
     def to_dict(self) -> dict[str, str]:
         data = {
@@ -28,6 +33,10 @@ class Slide:
         }
         if self.index:
             data["index"] = self.index
+        if self.role:
+            data["role"] = self.role
+        if self.label:
+            data["label"] = self.label
         return data
 
     @classmethod
@@ -42,6 +51,8 @@ class Slide:
             headline=str(raw.get("headline") or ""),
             body=str(raw.get("body") or ""),
             index=str(raw["index"]) if raw.get("index") else None,
+            role=str(raw["role"]) if raw.get("role") else None,
+            label=str(raw["label"]) if raw.get("label") else None,
         )
 
 
@@ -66,6 +77,7 @@ class CardBundle:
     slides: tuple[Slide, ...]
     post: InstagramPost
     related_keywords: tuple[str, ...] = field(default_factory=tuple)
+    template_id: str | None = None
 
     def slides_as_dicts(self) -> list[dict[str, str]]:
         return [s.to_dict() for s in self.slides]
