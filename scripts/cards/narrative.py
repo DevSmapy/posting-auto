@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from .bundles import TemplateBundle, get_bundle, recommend_for_economy_society
+from .bundles import BundleSlideSpec, TemplateBundle, get_bundle, recommend_for_economy_society
 from .caption import InstagramCaptionBuilder
 from .config import CardFormatConfig
 from .models import CardBundle, InstagramPost, Slide, SlideType
@@ -46,16 +46,9 @@ class NarrativeAssembler:
                 else recommend_for_economy_society()
             )
 
-        if len(filled_slides) != len(template.slides):
-            raise ValueError(
-                f"bundle {template.id} expects {len(template.slides)} slides, "
-                f"got {len(filled_slides)}"
-            )
-
+        paired = self._expand_with_repeatable(template, filled_slides)
         slides: list[Slide] = []
-        for i, (spec, filled) in enumerate(
-            zip(template.slides, filled_slides, strict=True), start=1
-        ):
+        for i, (spec, filled) in enumerate(paired, start=1):
             role = str(filled.get("role") or spec.role)
             slide_type = _ROLE_TO_TYPE.get(role, SlideType.STORY)
             slides.append(
@@ -70,7 +63,6 @@ class NarrativeAssembler:
             )
 
         keywords = related_keywords or list(template.recommended_topics[:5])
-        # Build Instagram caption from narrative points (skip hook/cta extremes optionally)
         story_like = [
             {
                 "headline": s.headline,
@@ -81,17 +73,19 @@ class NarrativeAssembler:
         ]
         post = self.captions.build(story_like, now, related_keywords=keywords)
         if caption_hook:
-            # Prefers explicit hook line at top of body
             lines = post.body.split("\n")
             if len(lines) >= 2:
                 lines[1] = caption_hook
                 body = "\n".join(lines)
                 tags = " ".join(f"#{t}" for t in post.hashtags)
                 full = f"{body}\n\n{tags}".strip() if tags else body
-                if len(full) > self.config.caption_max_chars:
-                    full = full[: self.config.caption_max_chars - 1] + "…"
+                hashtags = post.hashtags
+                if 0 < self.config.caption_max_chars < len(full):
+                    full = full[: self.config.caption_max_chars - 1].rstrip() + "…"
+                    body = full
+                    hashtags = tuple(t for t in hashtags if f"#{t}" in full)
                 post = InstagramPost(
-                    body=body, hashtags=post.hashtags, full_text=full
+                    body=body, hashtags=hashtags, full_text=full
                 )
 
         return CardBundle(
@@ -100,3 +94,56 @@ class NarrativeAssembler:
             related_keywords=tuple(keywords),
             template_id=template.id,
         )
+
+    def _expand_with_repeatable(
+        self,
+        template: TemplateBundle,
+        filled_slides: list[dict[str, Any]],
+    ) -> list[tuple[BundleSlideSpec, dict[str, Any]]]:
+        """Match filled slides to specs, expanding repeatable slots via min/max."""
+        if not any(s.repeatable for s in template.slides):
+            if len(filled_slides) != len(template.slides):
+                raise ValueError(
+                    f"bundle {template.id} expects {len(template.slides)} slides, "
+                    f"got {len(filled_slides)}"
+                )
+            return list(zip(template.slides, filled_slides, strict=True))
+
+        paired: list[tuple[BundleSlideSpec, dict[str, Any]]] = []
+        fi = 0
+        specs = template.slides
+        for si, spec in enumerate(specs):
+            if not spec.repeatable:
+                if fi >= len(filled_slides):
+                    raise ValueError(
+                        f"bundle {template.id}: missing filled slide for role={spec.role!r}"
+                    )
+                paired.append((spec, filled_slides[fi]))
+                fi += 1
+                continue
+
+            remaining_fixed = sum(1 for s in specs[si + 1 :] if not s.repeatable)
+            available = len(filled_slides) - fi - remaining_fixed
+            min_c = spec.min_count if spec.min_count is not None else 1
+            max_c = spec.max_count if spec.max_count is not None else available
+            if available < min_c or available > max_c:
+                raise ValueError(
+                    f"bundle {template.id}: repeatable role={spec.role!r} "
+                    f"expects {min_c}–{max_c} items, got {available} "
+                    f"(total filled={len(filled_slides)})"
+                )
+            for _ in range(available):
+                paired.append((spec, filled_slides[fi]))
+                fi += 1
+
+        if fi != len(filled_slides):
+            raise ValueError(
+                f"bundle {template.id}: {len(filled_slides) - fi} unused filled slides"
+            )
+
+        total = len(paired)
+        if template.id == "daily_briefing" and not (5 <= total <= 7):
+            raise ValueError(
+                f"bundle daily_briefing must emit 5–7 cards, got {total}"
+            )
+        return paired

@@ -986,19 +986,34 @@ def screenshot_html(html_doc: str, out_path: Path) -> None:
 
 
 def _bundle_from_briefing(briefing: dict[str, Any], now: datetime | None = None) -> CardBundle:
-    """Rebuild CardBundle from briefing slides/caption (or stories)."""
+    """Rebuild CardBundle preferring reviewed slides/caption over re-assembly."""
     config = CardFormatConfig.from_env()
     clock = now or datetime.now(TZ)
-    stories = list(briefing.get("stories") or [])
     keywords = [str(k) for k in (briefing.get("related_keywords") or [])]
+    raw_slides = list(briefing.get("slides") or [])
+    body = str(briefing.get("caption") or "")
+    full = str(briefing.get("instagram_post") or "")
+    hashtags = tuple(str(t).lstrip("#") for t in (briefing.get("hashtags") or []))
+
+    # Prefer already-assembled/reviewed card content when present.
+    if raw_slides and (body or full):
+        slides = tuple(Slide.from_dict(s) for s in raw_slides)
+        if not full:
+            tags = " ".join(f"#{t}" for t in hashtags)
+            full = f"{body}\n\n{tags}".strip() if tags else body
+        return CardBundle(
+            slides=slides,
+            post=InstagramPost(body=body, hashtags=hashtags, full_text=full),
+            related_keywords=tuple(keywords),
+        )
+
+    stories = list(briefing.get("stories") or [])
     if stories:
         return CardAssembler(config).assemble(
             stories, clock, related_keywords=keywords or None
         )
-    slides = tuple(Slide.from_dict(s) for s in (briefing.get("slides") or []))
-    hashtags = tuple(str(t).lstrip("#") for t in (briefing.get("hashtags") or []))
-    body = str(briefing.get("caption") or "")
-    full = str(briefing.get("instagram_post") or "")
+
+    slides = tuple(Slide.from_dict(s) for s in raw_slides)
     if not full:
         tags = " ".join(f"#{t}" for t in hashtags)
         full = f"{body}\n\n{tags}".strip() if tags else body
@@ -1009,9 +1024,13 @@ def _bundle_from_briefing(briefing: dict[str, Any], now: datetime | None = None)
     )
 
 
-def render_cards(briefing: dict[str, Any], out_dir: Path) -> list[Path]:
+def render_cards(
+    briefing: dict[str, Any],
+    out_dir: Path,
+    now: datetime | None = None,
+) -> list[Path]:
     """Export card HTML/PNG + Instagram caption files; return PNG paths."""
-    bundle = _bundle_from_briefing(briefing)
+    bundle = _bundle_from_briefing(briefing, now=now)
     result = CardRenderer(CardFormatConfig.from_env()).export(
         bundle, out_dir, render_png=True
     )
@@ -1172,7 +1191,7 @@ def run_publish(
         cards_dir = run_dir / "cards"
         cards_dir.mkdir(exist_ok=True)
         try:
-            paths = render_cards(briefing, cards_dir)
+            paths = render_cards(briefing, cards_dir, now)
         except Exception as exc:  # noqa: BLE001
             print(f"   !! card render skipped: {exc}")
             paths = []

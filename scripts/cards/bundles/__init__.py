@@ -17,6 +17,9 @@ class BundleSlideSpec:
     label: str
     title_hint: str
     purpose: str
+    repeatable: bool = False
+    min_count: int | None = None
+    max_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -41,6 +44,9 @@ class TemplateBundle:
                 label=str(s["label"]),
                 title_hint=str(s["title_hint"]),
                 purpose=str(s["purpose"]),
+                repeatable=bool(s.get("repeatable", False)),
+                min_count=int(s["min_count"]) if s.get("min_count") is not None else None,
+                max_count=int(s["max_count"]) if s.get("max_count") is not None else None,
             )
             for s in raw.get("slides") or []
         )

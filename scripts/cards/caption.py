@@ -53,14 +53,29 @@ class InstagramCaptionBuilder:
             ]
         )
         body = "\n".join(lines).strip()
-        hashtags = self._merge_hashtags(related_keywords or [])
-        tags_line = " ".join(f"#{t}" for t in hashtags)
+        candidates = self._merge_hashtags(related_keywords or [])
+        max_chars = self.config.caption_max_chars
+
+        # Prefer keeping body intact; fit as many hashtags as fit in remaining budget.
+        if max_chars > 0 and len(body) > max_chars:
+            body = self._truncate(body, max_chars)
+            return InstagramPost(body=body, hashtags=(), full_text=body)
+
+        retained: list[str] = []
+        tags_line = ""
+        for tag in candidates:
+            trial = retained + [tag]
+            trial_line = " ".join(f"#{t}" for t in trial)
+            full_trial = f"{body}\n\n{trial_line}"
+            if max_chars > 0 and len(full_trial) > max_chars:
+                break
+            retained = trial
+            tags_line = trial_line
+
         full = f"{body}\n\n{tags_line}".strip() if tags_line else body
-        full = self._truncate(full, self.config.caption_max_chars)
-        # Keep body in sync if truncate cut into tags (prefer keeping body intact)
-        if len(full) < len(body):
-            body = full
-        return InstagramPost(body=body, hashtags=tuple(hashtags), full_text=full)
+        return InstagramPost(
+            body=body, hashtags=tuple(retained), full_text=full
+        )
 
     def _merge_hashtags(self, related: list[str]) -> list[str]:
         seen: set[str] = set()

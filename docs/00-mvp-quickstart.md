@@ -129,7 +129,9 @@ python -m unittest discover -s tests
 ```bash
 docker compose up -d browserless   # PNG용 (선택; Chrome만 있어도 됨)
 python scripts/preview_cardnews.py
-# → output/cardnews-preview/  (HTML · PNG · instagram_post.txt)
+# → output/cardnews-preview/
+#    HTML·caption/instagram_post.txt 는 항상 생성
+#    PNG 는 Browserless 또는 로컬 Chrome 등 스크린샷 백엔드가 있을 때만 생성
 ```
 
 슬라이드·인스타 본문 포맷: [05. 발행](05-publishing.md).  

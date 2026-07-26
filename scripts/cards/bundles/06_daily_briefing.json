@@ -19,7 +19,10 @@
       "role": "story",
       "label": "이슈",
       "title_hint": "이슈별 헤드라인 + 한 줄",
-      "purpose": "선정 이슈 3~5건 (반복)"
+      "purpose": "선정 이슈 3~5건 (반복)",
+      "repeatable": true,
+      "min_count": 3,
+      "max_count": 5
     },
     {
       "role": "disclaimer",
@@ -28,5 +31,5 @@
       "purpose": "투자 권유 아님 고지"
     }
   ],
-  "notes": "이미지 세트에 명시되지 않은 운영형 템플릿. 프로젝트 기존 카드 흐름을 6번째 묶음으로 문서화해 카탈로그를 완성한다."
+  "notes": "story 슬롯은 3~5회 반복. 최종 카드 수는 cover+stories+disclaimer = 5~7장. NarrativeAssembler가 repeatable 메타로 확장·검증한다."
 }

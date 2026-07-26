@@ -31,6 +31,9 @@ class CardAssembler:
         now: datetime,
         related_keywords: list[str] | None = None,
     ) -> CardBundle:
+        # Contract: upstream should pass 3–5 stories so the deck is 5–7 slides.
+        # Clamp overflow; allow fewer than 3 for thin news days / tests.
+        stories = list(stories[:5])
         keywords = related_keywords
         if keywords is None:
             keywords = ["경제", "증시", "브리핑", "시장", "뉴스"]

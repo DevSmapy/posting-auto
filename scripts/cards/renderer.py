@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -14,6 +15,8 @@ import requests
 
 from .config import CardFormatConfig
 from .models import CardBundle, Slide, SlideType
+
+_PLACEHOLDER_RE = re.compile(r"\{\{(\w+)\}\}")
 
 
 class CardTemplateRenderer:
@@ -85,11 +88,16 @@ class CardTemplateRenderer:
     def _fill(self, name: str, **kwargs: str) -> str:
         path = self.config.templates_dir / name
         text = path.read_text(encoding="utf-8")
-        for key, value in kwargs.items():
+
+        def repl(match: re.Match[str]) -> str:
+            key = match.group(1)
+            if key not in kwargs:
+                return match.group(0)
+            value = kwargs[key]
             parts = value.split("{{BR}}")
-            safe = "<br />".join(html.escape(p) for p in parts)
-            text = text.replace("{{" + key + "}}", safe)
-        return text
+            return "<br />".join(html.escape(p) for p in parts)
+
+        return _PLACEHOLDER_RE.sub(repl, text)
 
 
 class CardRenderer:

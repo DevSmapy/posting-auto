@@ -110,10 +110,15 @@ def main() -> int:
             print(f"==> export editorial UI → {out_dir}")
             result = pack.export(out_dir, render_png=not args.no_png)
             png_list = list(result.get("png") or [])
-            if png_list or list(out_dir.glob("slide-*.png")):
+            html_list = list(result.get("html") or [])
+            if png_list:
                 png_ok = True
             caption_text = (out_dir / "instagram_post.txt").read_text(encoding="utf-8")
-            print(f"   slides: 8 (1080×1350 placeholders)")
+            print(
+                "   slides:",
+                len(html_list),
+                "(1080×1350 placeholders)",
+            )
             print(f"   png: {len(png_list)}  meta: {result['meta']}")
     elif args.bundle == "daily_briefing":
         bundle_meta = get_bundle("daily_briefing")

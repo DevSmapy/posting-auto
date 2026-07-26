@@ -56,12 +56,51 @@ class NarrativeAssemblerTest(unittest.TestCase):
         self.assertEqual(bundle.slides[-1].type.value, "cta")
         self.assertEqual(bundle.template_id, "why_cause_impact")
         self.assertIn("미국", bundle.post.full_text)
+        self.assertIn(CAPTION_HOOK, bundle.post.body)
+        for tag in bundle.post.hashtags:
+            self.assertIn(f"#{tag}", bundle.post.full_text)
 
         renderer = CardTemplateRenderer(CardFormatConfig())
         for slide in bundle.slides:
             html_doc = renderer.render_slide(slide)
             self.assertNotIn("{{", html_doc)
             self.assertIn("<br />", html_doc)  # multiline headlines/bodies
+
+    def test_daily_briefing_repeatable_story_slot(self) -> None:
+        now = datetime(2026, 7, 25, tzinfo=timezone.utc)
+        template = get_bundle("daily_briefing")
+        self.assertTrue(any(s.repeatable for s in template.slides))
+        filled = [
+            {"role": "cover", "headline": "표지", "body": "테마"},
+            {"role": "story", "headline": "이슈1", "body": "한줄1"},
+            {"role": "story", "headline": "이슈2", "body": "한줄2"},
+            {"role": "story", "headline": "이슈3", "body": "한줄3"},
+            {"role": "disclaimer", "headline": "면책", "body": "투자 권유 아님"},
+        ]
+        bundle = NarrativeAssembler(CardFormatConfig()).assemble(
+            filled, now, bundle=template
+        )
+        self.assertEqual(len(bundle.slides), 5)
+        self.assertEqual(bundle.slides[0].role, "cover")
+        self.assertEqual(bundle.slides[-1].role, "disclaimer")
+
+        filled5 = filled[:1] + [
+            {"role": "story", "headline": f"이슈{i}", "body": f"한줄{i}"}
+            for i in range(1, 6)
+        ] + filled[-1:]
+        bundle5 = NarrativeAssembler(CardFormatConfig()).assemble(
+            filled5, now, bundle=template
+        )
+        self.assertEqual(len(bundle5.slides), 7)
+
+        with self.assertRaises(ValueError):
+            NarrativeAssembler(CardFormatConfig()).assemble(
+                filled[:1]
+                + [{"role": "story", "headline": "x", "body": "y"}]
+                + filled[-1:],
+                now,
+                bundle=template,
+            )
 
 
 if __name__ == "__main__":

@@ -68,11 +68,15 @@ class InstagramCaptionBuilderTest(unittest.TestCase):
         self.assertIn("금리", post.hashtags)
         self.assertIn("#경제뉴스", post.full_text)
         self.assertLessEqual(len(post.full_text), 2100)
+        for tag in post.hashtags:
+            self.assertIn(f"#{tag}", post.full_text)
 
     def test_truncates_to_caption_max(self) -> None:
         cfg = CardFormatConfig(caption_max_chars=80, max_hashtags=2)
         post = InstagramCaptionBuilder(cfg).build(sample_stories(), self.now)
         self.assertLessEqual(len(post.full_text), 80)
+        for tag in post.hashtags:
+            self.assertIn(f"#{tag}", post.full_text)
 
     def test_empty_stories_fallback(self) -> None:
         post = self.builder.build([], self.now)
@@ -92,6 +96,23 @@ class CardAssemblerTest(unittest.TestCase):
         self.assertEqual(bundle.slides[1].index, "01")
         self.assertTrue(bundle.post.body)
         self.assertTrue(bundle.post.hashtags)
+
+    def test_boundary_story_counts_and_clamp(self) -> None:
+        now = datetime(2026, 7, 25, tzinfo=timezone.utc)
+        base = sample_stories()
+        three = CardAssembler(CardFormatConfig()).assemble(base, now)
+        self.assertEqual(len(three.slides), 5)  # cover+3+disclaimer
+        five_stories = base + [
+            {**base[0], "headline": "네 번째", "one_liner": "네 번째 한줄"},
+            {**base[1], "headline": "다섯 번째", "one_liner": "다섯 번째 한줄"},
+        ]
+        five = CardAssembler(CardFormatConfig()).assemble(five_stories, now)
+        self.assertEqual(len(five.slides), 7)
+        six = five_stories + [
+            {**base[2], "headline": "여섯 번째", "one_liner": "여섯 번째 한줄"}
+        ]
+        clamped = CardAssembler(CardFormatConfig()).assemble(six, now)
+        self.assertEqual(len(clamped.slides), 7)  # 6th story dropped
 
     def test_pipeline_briefing_uses_cards(self) -> None:
         now = datetime(2026, 7, 25, tzinfo=timezone.utc)
@@ -119,6 +140,20 @@ class CardTemplateRendererTest(unittest.TestCase):
             html_doc = renderer.render_slide(slide)
             self.assertNotIn("{{", html_doc)
             self.assertIn(slide.headline, html_doc)
+
+    def test_fill_does_not_rescan_substituted_values(self) -> None:
+        renderer = CardTemplateRenderer(CardFormatConfig())
+        # Injected value contains a placeholder-like token that must remain literal.
+        html_doc = renderer._fill(
+            "slide.html",
+            label="이슈",
+            index="01",
+            headline="제목에 {{body}} 토큰",
+            body="본문",
+            brand="BRAND",
+        )
+        self.assertIn("제목에 {{body}} 토큰", html_doc)
+        self.assertIn("본문", html_doc)
 
 
 if __name__ == "__main__":
