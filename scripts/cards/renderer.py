@@ -188,9 +188,15 @@ class CardRenderer:
             ) from chrome_exc
 
     def _screenshot_browserless(self, html_doc: str, out_path: Path) -> None:
-        endpoint = f"{self.config.browserless_url}/chrome/screenshot"
+        # ghcr.io/browserless/chromium → /chromium/screenshot (not /chrome/…)
+        path = self.config.browserless_screenshot_path or "/chromium/screenshot"
+        endpoint = f"{self.config.browserless_url}{path}"
+        params = {}
+        if self.config.browserless_token:
+            params["token"] = self.config.browserless_token
         resp = requests.post(
             endpoint,
+            params=params or None,
             json={
                 "html": html_doc,
                 "options": {"type": "png", "fullPage": False},
@@ -239,7 +245,11 @@ class CardRenderer:
             found = shutil.which(name)
             if found:
                 return found
-        agent_chrome = Path("/usr/local/bin/google-chrome")
-        if agent_chrome.is_file():
-            return str(agent_chrome)
+        for candidate in (
+            Path("/usr/local/bin/google-chrome"),
+            Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+            Path("/Applications/Chromium.app/Contents/MacOS/Chromium"),
+        ):
+            if candidate.is_file():
+                return str(candidate)
         return None

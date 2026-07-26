@@ -32,7 +32,11 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    shm_size: "2gb"
     environment:
+      # Must match BROWSERLESS_TOKEN in .env (open-source image requires a token).
+      TOKEN: ${BROWSERLESS_TOKEN:-local-dev-token}
+      HOST: "0.0.0.0"
       CONCURRENT: 5
       TIMEOUT: 60000
 

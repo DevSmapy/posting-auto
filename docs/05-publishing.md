@@ -110,7 +110,7 @@ python scripts/preview_cardnews.py --bundle editorial_carousel
 ```
 
 
-PNG 백엔드: Browserless(`BROWSERLESS_URL`) → 실패 시 로컬 Chrome. 둘 다 없으면 HTML·캡션만 저장합니다.
+PNG 백엔드: Browserless(`BROWSERLESS_URL` + `BROWSERLESS_TOKEN`, 기본 경로 `/chromium/screenshot`) → 실패 시 로컬 Chrome. 둘 다 없으면 HTML·캡션만 저장합니다. Compose의 `browserless`는 `ghcr.io/browserless/chromium`이므로 `/chrome/screenshot`이 아니라 `/chromium/screenshot`을 씁니다.
 
 ### 인스타 게시글 본문
 

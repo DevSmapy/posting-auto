@@ -33,6 +33,9 @@ class CardFormatConfig:
     story_body_max_chars: int = 90
     headline_max_chars: int = 40
     browserless_url: str = "http://localhost:3000"
+    # Matches ghcr.io/browserless/chromium (compose default). Override for chrome/multi.
+    browserless_screenshot_path: str = "/chromium/screenshot"
+    browserless_token: str = ""
     screenshot_bin: str = ""
     templates_dir: Path = field(
         default_factory=lambda: Path(__file__).resolve().parents[2] / "templates" / "cards"
@@ -42,6 +45,9 @@ class CardFormatConfig:
     def from_env(cls) -> CardFormatConfig:
         base = _split_csv(_env("CARD_BASE_HASHTAGS"))
         screenshot = _env("CARD_SCREENSHOT_BIN")
+        path = _env("BROWSERLESS_SCREENSHOT_PATH", "/chromium/screenshot")
+        if path and not path.startswith("/"):
+            path = f"/{path}"
         return cls(
             brand=_env("CARD_BRAND") or "경제 브리핑",
             width=int(_env("CARD_WIDTH", "1080") or "1080"),
@@ -59,5 +65,7 @@ class CardFormatConfig:
             headline_max_chars=int(_env("CARD_HEADLINE_MAX", "40") or "40"),
             browserless_url=_env("BROWSERLESS_URL", "http://localhost:3000").rstrip("/")
             or "http://localhost:3000",
+            browserless_screenshot_path=path or "/chromium/screenshot",
+            browserless_token=_env("BROWSERLESS_TOKEN"),
             screenshot_bin=screenshot,
         )
