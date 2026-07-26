@@ -30,6 +30,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 load_dotenv(ROOT / ".env")
 
+from cards import (  # noqa: E402
+    CardAssembler,
+    CardBundle,
+    CardFormatConfig,
+    CardRenderer,
+    InstagramPost,
+    Slide,
+)
 from notify import get_notifier, resolve_channel  # noqa: E402
 from seen_urls import SeenUrlsStore  # noqa: E402
 
@@ -529,6 +537,17 @@ def heuristic_story_fields(article: dict[str, Any], index: int = 1) -> dict[str,
     }
 
 
+def _card_bundle_from_stories(
+    stories: list[dict[str, Any]],
+    now: datetime,
+    related_keywords: list[str] | None = None,
+) -> CardBundle:
+    """Assemble card slides + Instagram caption via scripts/cards."""
+    config = CardFormatConfig.from_env()
+    keywords = related_keywords or ["경제", "증시", "브리핑", "시장", "뉴스"]
+    return CardAssembler(config).assemble(stories, now, related_keywords=keywords)
+
+
 def assemble_briefing_from_stories(
     stories: list[dict[str, Any]],
     now: datetime,
@@ -544,24 +563,8 @@ def assemble_briefing_from_stories(
     core = one_liners[:5] if one_liners else (
         [f"오늘 선정 이슈 {n}건을 정리했습니다."] if n else ["오늘 주요 경제 뉴스를 정리했습니다."]
     )
-    slides: list[dict[str, str]] = [
-        {
-            "type": "cover",
-            "headline": f"{date} 경제 브리핑",
-            "body": "오늘의 주요 경제 뉴스",
-        }
-    ]
-    for s in stories:
-        hl = str(s.get("headline") or "")[:80]
-        body = str(s.get("what_happened") or s.get("one_liner") or "")[:160]
-        slides.append({"type": "story", "headline": hl, "body": body})
-    slides.append(
-        {
-            "type": "disclaimer",
-            "headline": "면책",
-            "body": "정보 안내용이며 투자 권유가 아닙니다.",
-        }
-    )
+    related_keywords = ["경제", "증시", "브리핑", "시장", "뉴스"]
+    card_bundle = _card_bundle_from_stories(stories, now, related_keywords)
     return {
         "title": f"오늘 주요 경제·시장 이슈를 정리합니다 | 오늘의 경제 브리핑 ({date})",
         "intro": (
@@ -591,11 +594,12 @@ def assemble_briefing_from_stories(
             "오늘도 핵심만 담아 전해드렸습니다. 내일 아침 브리핑에서도 "
             "중요한 흐름을 이어가겠습니다."
         ),
-        "related_keywords": ["경제", "증시", "브리핑", "시장", "뉴스"],
+        "related_keywords": related_keywords,
         "blog_tags": ["경제", "브리핑", "뉴스"],
-        "slides": slides,
-        "caption": f"{date} 경제 브리핑",
-        "hashtags": ["경제", "뉴스", "브리핑"],
+        "slides": card_bundle.slides_as_dicts(),
+        "caption": card_bundle.post.body,
+        "hashtags": list(card_bundle.post.hashtags),
+        "instagram_post": card_bundle.post.full_text,
     }
 
 
@@ -977,53 +981,60 @@ def build_briefing(articles: list[dict[str, Any]], now: datetime) -> tuple[dict[
 
 
 def screenshot_html(html_doc: str, out_path: Path) -> None:
-    base = env("BROWSERLESS_URL", "http://localhost:3000").rstrip("/")
-    endpoint = f"{base}/chrome/screenshot"
-    resp = requests.post(
-        endpoint,
-        json={
-            "html": html_doc,
-            "options": {"type": "png", "fullPage": False},
-            "viewport": {
-                "width": int(env("CARD_WIDTH", "1080")),
-                "height": int(env("CARD_HEIGHT", "1080")),
-                "deviceScaleFactor": 1,
-            },
-            "gotoOptions": {"waitUntil": "networkidle0", "timeout": 60000},
-        },
-        timeout=90,
+    """Screenshot HTML via CardRenderer (Browserless, then local Chrome)."""
+    CardRenderer(CardFormatConfig.from_env()).screenshot_html(html_doc, out_path)
+
+
+def _bundle_from_briefing(briefing: dict[str, Any], now: datetime | None = None) -> CardBundle:
+    """Rebuild CardBundle preferring reviewed slides/caption over re-assembly."""
+    config = CardFormatConfig.from_env()
+    clock = now or datetime.now(TZ)
+    keywords = [str(k) for k in (briefing.get("related_keywords") or [])]
+    raw_slides = list(briefing.get("slides") or [])
+    body = str(briefing.get("caption") or "")
+    full = str(briefing.get("instagram_post") or "")
+    hashtags = tuple(str(t).lstrip("#") for t in (briefing.get("hashtags") or []))
+
+    # Prefer already-assembled/reviewed card content when present.
+    if raw_slides and (body or full):
+        slides = tuple(Slide.from_dict(s) for s in raw_slides)
+        if not full:
+            tags = " ".join(f"#{t}" for t in hashtags)
+            full = f"{body}\n\n{tags}".strip() if tags else body
+        return CardBundle(
+            slides=slides,
+            post=InstagramPost(body=body, hashtags=hashtags, full_text=full),
+            related_keywords=tuple(keywords),
+        )
+
+    stories = list(briefing.get("stories") or [])
+    if stories:
+        return CardAssembler(config).assemble(
+            stories, clock, related_keywords=keywords or None
+        )
+
+    slides = tuple(Slide.from_dict(s) for s in raw_slides)
+    if not full:
+        tags = " ".join(f"#{t}" for t in hashtags)
+        full = f"{body}\n\n{tags}".strip() if tags else body
+    return CardBundle(
+        slides=slides,
+        post=InstagramPost(body=body, hashtags=hashtags, full_text=full),
+        related_keywords=tuple(keywords),
     )
-    resp.raise_for_status()
-    out_path.write_bytes(resp.content)
 
 
-def render_cards(briefing: dict[str, Any], out_dir: Path) -> list[Path]:
-    brand = env("CARD_BRAND") or "경제 브리핑"
-    slides = briefing.get("slides") or []
-    paths: list[Path] = []
-    story_i = 0
-    for i, slide in enumerate(slides, start=1):
-        stype = slide.get("type") or "story"
-        headline = slide.get("headline") or ""
-        body = slide.get("body") or ""
-        if stype == "cover":
-            html_doc = render_template("cover.html", headline=headline, body=body, brand=brand)
-        elif stype == "disclaimer":
-            html_doc = render_template("disclaimer.html", headline=headline, body=body, brand=brand)
-        else:
-            story_i += 1
-            html_doc = render_template(
-                "slide.html",
-                index=f"0{story_i}",
-                headline=headline,
-                body=body,
-                brand=brand,
-            )
-        path = out_dir / f"slide-{i:02d}.png"
-        screenshot_html(html_doc, path)
-        paths.append(path)
-        print(f"  card rendered: {path.name}")
-    return paths
+def render_cards(
+    briefing: dict[str, Any],
+    out_dir: Path,
+    now: datetime | None = None,
+) -> list[Path]:
+    """Export card HTML/PNG + Instagram caption files; return PNG paths."""
+    bundle = _bundle_from_briefing(briefing, now=now)
+    result = CardRenderer(CardFormatConfig.from_env()).export(
+        bundle, out_dir, render_png=True
+    )
+    return list(result.get("png") or [])  # type: ignore[arg-type]
 
 
 def upload_r2(paths: list[Path], prefix: str) -> list[str]:
@@ -1140,7 +1151,16 @@ def preview_text(
     lines.append("")
     lines.append("슬라이드:")
     for s in briefing.get("slides") or []:
-        lines.append(f"- [{s.get('type')}] {s.get('headline')}")
+        body = (s.get("body") or "").replace("\n", " ")
+        if len(body) > 60:
+            body = body[:59] + "…"
+        lines.append(f"- [{s.get('type')}] {s.get('headline')} — {body}")
+    ig_post = (briefing.get("instagram_post") or briefing.get("caption") or "").strip()
+    if ig_post:
+        lines.append("")
+        lines.append(f"인스타 본문 ({len(ig_post)}자):")
+        preview = ig_post if len(ig_post) <= 280 else ig_post[:279] + "…"
+        lines.append(preview)
     lines.append("")
     lines.append("Approve 시 briefing.md 저장 (수동 붙여넣기용)")
     lines.append("Discord: ✅ / ⏭  ·  Telegram: 버튼 또는 /approve /skip")
@@ -1167,11 +1187,11 @@ def run_publish(
 
     ig_media_id: str | None = None
     if env("PUBLISH_CARDS", "0").lower() in {"1", "true", "yes"}:
-        print("==> Render cards via Browserless")
+        print("==> Render cards (HTML/PNG + Instagram caption)")
         cards_dir = run_dir / "cards"
         cards_dir.mkdir(exist_ok=True)
         try:
-            paths = render_cards(briefing, cards_dir)
+            paths = render_cards(briefing, cards_dir, now)
         except Exception as exc:  # noqa: BLE001
             print(f"   !! card render skipped: {exc}")
             paths = []
@@ -1185,13 +1205,24 @@ def run_publish(
                 json.dumps(image_urls, ensure_ascii=False, indent=2), encoding="utf-8"
             )
         elif not env("R2_ACCESS_KEY_ID"):
-            print("R2 not configured — skip Instagram")
+            print("R2 not configured — skip Instagram (local cards kept)")
 
         if image_urls and env("IG_USER_ID") and env("META_ACCESS_TOKEN"):
-            caption = briefing.get("caption") or ""
-            tags_h = " ".join(f"#{t.lstrip('#')}" for t in (briefing.get("hashtags") or []))
+            ig_caption = (
+                briefing.get("instagram_post")
+                or "\n\n".join(
+                    p
+                    for p in (
+                        briefing.get("caption") or "",
+                        " ".join(
+                            f"#{t.lstrip('#')}" for t in (briefing.get("hashtags") or [])
+                        ),
+                    )
+                    if p
+                )
+            ).strip()
             print("==> Instagram carousel")
-            ig_media_id = instagram_carousel(image_urls, f"{caption}\n\n{tags_h}".strip())
+            ig_media_id = instagram_carousel(image_urls, ig_caption)
             print(f"   ig media id: {ig_media_id}")
 
     mode_label = _generation_mode_label(generation_mode)

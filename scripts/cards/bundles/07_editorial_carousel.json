@@ -1,0 +1,41 @@
+{
+  "id": "editorial_carousel",
+  "index": 7,
+  "name_ko": "에디토리얼 캐러셀 UI",
+  "name_en": "Editorial Instagram Carousel Template",
+  "badge": "UI/UX 템플릿 · 1080×1350",
+  "purpose": "경제/사회 뉴스용 재사용 가능한 Instagram 캐러셀 UI. 실제 뉴스 없이 플레이스홀더만 포함. 이후 콘텐츠만 교체.",
+  "card_count": 8,
+  "recommended_topics": ["경제뉴스", "사회뉴스", "에디토리얼", "핀테크 UI"],
+  "fit_score_economy_society": 4,
+  "canvas": {"width": 1080, "height": 1350, "margin": 64, "radius": 20},
+  "palette": {
+    "primary": "#163A70",
+    "accent": "#F59E0B",
+    "background": "#F7F8FA",
+    "card": "#FFFFFF",
+    "text": "#1F2937",
+    "secondary_text": "#6B7280"
+  },
+  "components": [
+    "Info Card",
+    "Number Card",
+    "Quote Card",
+    "Timeline",
+    "Flow Diagram",
+    "Statistic Card",
+    "Impact Card",
+    "CTA Footer",
+    "Highlight Box"
+  ],
+  "slides": [
+    {"role": "hook", "label": "Hook", "title_hint": "도발적 헤드라인", "purpose": "관심 유도"},
+    {"role": "event", "label": "What happened", "title_hint": "사건 요약 3줄", "purpose": "무슨 일"},
+    {"role": "cause", "label": "Background", "title_hint": "원인 카드 3", "purpose": "배경"},
+    {"role": "analysis", "label": "Core Analysis", "title_hint": "핵심 인사이트", "purpose": "분석"},
+    {"role": "impact", "label": "Impact", "title_hint": "영향 2×2", "purpose": "영향"},
+    {"role": "outlook", "label": "Future Outlook", "title_hint": "시나리오 A/B", "purpose": "전망"},
+    {"role": "summary", "label": "Summary", "title_hint": "한 줄 결론", "purpose": "요약"},
+    {"role": "cta", "label": "CTA", "title_hint": "저장·공유·팔로우", "purpose": "행동 유도"}
+  ]
+}

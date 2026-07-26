@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <style>{{DESIGN_SYSTEM_CSS}}
+    .title-row {
+      margin-top: 48px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+    }
+    .icon-row { display: flex; gap: 12px; }
+    .bullets {
+      margin-top: 56px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .bullet {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+      padding: 28px 28px;
+    }
+    .bullet-num {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: var(--color-primary);
+      color: #fff;
+      font-size: 20px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .bullet p {
+      font-size: 28px;
+      font-weight: 400;
+      line-height: 1.45;
+      color: var(--color-text);
+      word-break: keep-all;
+    }
+  </style>
+</head>
+<body>
+  <div class="slide">
+    <div class="label"><span class="dot"></span> What happened</div>
+    <div class="title-row">
+      <h1 class="h2">{{title}}</h1>
+      <div class="icon-row">
+        <div class="icon-badge" title="timeline">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        </div>
+        <div class="icon-badge accent" title="news">
+          <svg viewBox="0 0 24 24"><path d="M4 5h12v14H4z"/><path d="M16 8h4v11a2 2 0 0 1-2 2"/><path d="M7 9h6M7 13h6M7 17h4"/></svg>
+        </div>
+      </div>
+    </div>
+    <div class="bullets">
+      <div class="card bullet">
+        <div class="bullet-num">1</div>
+        <p>{{bullet_1}}</p>
+      </div>
+      <div class="card bullet">
+        <div class="bullet-num">2</div>
+        <p>{{bullet_2}}</p>
+      </div>
+      <div class="card bullet">
+        <div class="bullet-num">3</div>
+        <p>{{bullet_3}}</p>
+      </div>
+    </div>
+    <div class="footer-meta">
+      <span class="brand">{{brand}}</span>
+      <span class="page">02 / 08</span>
+    </div>
+  </div>
+</body>
+</html>

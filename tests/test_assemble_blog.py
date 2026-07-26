@@ -208,15 +208,25 @@ class AssembleBlogMarkdownTest(unittest.TestCase):
                 "source_name": "매체B",
                 "source_url": "https://example.com/b",
             },
+            {
+                "headline": "재작성 C",
+                "what_happened": "사실 C",
+                "why_important": "중요 C",
+                "watch_next": "주시 C",
+                "one_liner": "한줄 C",
+                "source_name": "매체C",
+                "source_url": "https://example.com/c",
+            },
         ]
         briefing = assemble_briefing_from_stories(
             stories, datetime(2026, 7, 23, tzinfo=timezone.utc)
         )
-        self.assertEqual(briefing["core_summary"], ["한줄 A", "한줄 B"])
+        self.assertEqual(briefing["core_summary"], ["한줄 A", "한줄 B", "한줄 C"])
         self.assertEqual(briefing["stories"][0]["source_url"], "https://example.com/a")
         self.assertEqual(briefing["stories"][1]["source_name"], "매체B")
         self.assertEqual(briefing["slides"][0]["type"], "cover")
         self.assertEqual(briefing["slides"][-1]["type"], "disclaimer")
+        self.assertEqual(len(briefing["slides"]), 5)
 
     def test_build_briefing_mixed_on_partial_llm_fail(self) -> None:
         import os

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <style>{{DESIGN_SYSTEM_CSS}}
+    .hook-main { margin-top: 96px; }
+    .hook-sub { margin-top: 32px; max-width: 18ch; }
+    .hook-art {
+      margin-top: auto;
+      margin-bottom: 24px;
+      height: 360px;
+      border-radius: var(--radius);
+      background: linear-gradient(160deg, #EEF2FF 0%, #FFFFFF 55%, #FFF7ED 100%);
+      border: 1px solid var(--color-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--shadow);
+    }
+    .hook-art svg { width: 280px; height: 200px; }
+  </style>
+</head>
+<body>
+  <div class="slide">
+    <div class="label"><span class="dot"></span> {{category_label}}</div>
+    <div class="hook-main">
+      <h1 class="h1">{{headline}}</h1>
+      <p class="body hook-sub">{{subheadline}}</p>
+    </div>
+    <div class="hook-art" aria-hidden="true">
+      <!-- Economics illustration (flat) -->
+      <svg viewBox="0 0 280 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="24" y="40" width="232" height="136" rx="16" stroke="#163A70" stroke-width="3"/>
+        <path d="M48 140 L96 96 L132 118 L188 70 L232 98" stroke="#F59E0B" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="96" cy="96" r="6" fill="#163A70"/>
+        <circle cx="132" cy="118" r="6" fill="#163A70"/>
+        <circle cx="188" cy="70" r="6" fill="#F59E0B"/>
+        <rect x="48" y="156" width="40" height="8" rx="4" fill="#C7D2FE"/>
+        <rect x="96" y="156" width="64" height="8" rx="4" fill="#E5E7EB"/>
+        <rect x="200" y="28" width="48" height="48" rx="14" fill="#163A70"/>
+        <path d="M214 52 h20 M224 42 v20" stroke="#F59E0B" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div class="footer-meta">
+      <span class="brand">{{brand}}</span>
+      <span class="page">01 / 08</span>
+    </div>
+  </div>
+</body>
+</html>

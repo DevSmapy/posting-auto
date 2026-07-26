@@ -1,0 +1,49 @@
+{
+  "id": "storytelling",
+  "index": 5,
+  "name_ko": "스토리텔링 경제",
+  "name_en": "Storytelling Economy",
+  "badge": null,
+  "purpose": "뉴스 사건을 이야기 구조(상황→전개→이유→결과→우리→교훈)로 전달한다.",
+  "card_count": 6,
+  "recommended_topics": ["서사형 해설", "글로벌 이슈", "정책 스토리"],
+  "fit_score_economy_society": 3,
+  "slides": [
+    {
+      "role": "situation",
+      "label": "상황",
+      "title_hint": "이야기의 시작",
+      "purpose": "도입 상황"
+    },
+    {
+      "role": "event",
+      "label": "사건",
+      "title_hint": "시장을 움직인 촉매",
+      "purpose": "전개: 무슨 일이"
+    },
+    {
+      "role": "reason",
+      "label": "이유",
+      "title_hint": "배경 이야기",
+      "purpose": "왜 그런 일이"
+    },
+    {
+      "role": "result",
+      "label": "결과",
+      "title_hint": "가격·금리 변화",
+      "purpose": "무엇이 달라졌는지"
+    },
+    {
+      "role": "us",
+      "label": "우리에게",
+      "title_hint": "생활·투자 연결",
+      "purpose": "독자 삶에 닿는 지점"
+    },
+    {
+      "role": "message",
+      "label": "메시지",
+      "title_hint": "교훈",
+      "purpose": "마무리 메시지"
+    }
+  ]
+}

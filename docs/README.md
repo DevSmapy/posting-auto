@@ -13,6 +13,7 @@
 | 06 | [설치·설정](06-setup.md) | 체크리스트, 환경 변수, 로컬 실행 |
 | 07 | [워크플로](07-workflow.md) | n8n 노드 순서, DB, 에러 처리 |
 | 08 | [로드맵·운영](08-roadmap.md) | 구현 순서, MVP 기준, 트러블슈팅, 보안 |
+| 09 | [카드 템플릿](09-card-templates.md) | 루트 HTML vs editorial, 번들 카탈로그, 재사용 원리 |
 
 ```text
 docs/
@@ -25,5 +26,6 @@ docs/
 ├── 05-publishing.md
 ├── 06-setup.md
 ├── 07-workflow.md
-└── 08-roadmap.md
+├── 08-roadmap.md
+└── 09-card-templates.md
 ```

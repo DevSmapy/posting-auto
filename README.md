@@ -54,6 +54,7 @@ MVP_MODE=dry_run python scripts/mvp_pipeline.py
 | [docs/06-setup.md](docs/06-setup.md) | 사전 준비, 환경 변수 |
 | [docs/07-workflow.md](docs/07-workflow.md) | n8n 노드 흐름 |
 | [docs/08-roadmap.md](docs/08-roadmap.md) | 로드맵, 트러블슈팅, 보안 |
+| [docs/09-card-templates.md](docs/09-card-templates.md) | 카드 HTML 템플릿·번들·에디토리얼 UI |
 
 ---
 

@@ -148,10 +148,15 @@ LLM은 기사 1건당 아래 필드만 생성합니다. `source_name` / `source_
 
 조립 함수(`assemble_blog_markdown`)는 v1 JSON도 하위 호환으로 렌더링합니다.
 
-### 슬라이드 규칙
+### 슬라이드 · 인스타 본문 규칙
 
-- 총 5~7장: `cover` + `story`들 + `disclaimer`
-- `body`는 화면 기준 2줄 이내
+코드 `scripts/cards` (`CardAssembler`, `InstagramCaptionBuilder`)가 stories에서 조립합니다.
+
+- **Upstream 계약:** 파이프라인은 stories **3~5개**를 넘기는 것을 전제로 함 (`NEWS_PICK_COUNT` 기본 5). `CardAssembler`는 6개 이상이면 앞 5개로 clamp
+- **최종 슬라이드:** `cover` 1 + `story` N + `disclaimer` 1 → N이 3~5이면 항상 **5~7장** (N이 3 미만인 thin-day는 5장 미만 가능)
+- story `body`는 **`one_liner` 우선**, 화면 기준 2줄 이내
+- `caption` / `hashtags` / `instagram_post`: 훅 + 오늘의 포인트 + CTA + 면책 + 해시태그 (≤2100자). `hashtags`는 `full_text`에 남은 태그와 일치
+- LLM에 긴 캡션·HTML을 맡기지 않음 (블로그 조립과 동일 원칙)
 
 ### 블로그 마크다운 / HTML
 

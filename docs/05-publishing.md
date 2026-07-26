@@ -67,8 +67,73 @@ Approve 후 채널에 `briefing.md` 파일이 첨부됩니다 (붙여넣기용).
 
 ---
 
-## 카드뉴스 / Instagram (옵션)
+## 카드뉴스 / Instagram
 
-`PUBLISH_CARDS=1` 일 때만 Approve 후 카드 렌더·R2·인스타를 시도합니다. 기본은 `0`(마크다운만).
+카드 슬라이드·인스타 게시글 본문은 [`scripts/cards/`](../scripts/cards/) OOP 패키지가 조립합니다.
+
+| 모듈 | 역할 |
+|------|------|
+| `CardAssembler` | cover / story / disclaimer 슬라이드 |
+| `InstagramCaptionBuilder` | 게시글 본문(훅·포인트·CTA·면책) + 해시태그 |
+| `CardRenderer` | HTML·PNG·`caption.txt` / `instagram_post.txt` |
+
+### 템플릿 묶음 카탈로그
+
+상세(루트 HTML vs `editorial/`, 재사용 원리, 새 템플릿 추가): **[09. 카드 템플릿](09-card-templates.md)**.
+
+경제/사회 뉴스용 템플릿 정의는 [`scripts/cards/bundles/`](../scripts/cards/bundles/)에 JSON으로 저장합니다.
+
+| id | 이름 | 장수 | 비고 |
+|----|------|------|------|
+| `editorial_carousel` | 에디토리얼 UI 템플릿 | 8 | **1080×1350 재사용 UI** (플레이스홀더만) |
+| `why_cause_impact` | Why→원인→영향→전망 | 8 | 콘텐츠 예시 추천 |
+| `myth_vs_truth` | 오해 vs 진실 | 7 | |
+| `five_min_class` | 5분 경제 교실 | 6 | |
+| `numbers` | 숫자로 보는 경제 | 6 | |
+| `storytelling` | 스토리텔링 경제 | 6 | |
+| `daily_briefing` | 오늘의 이슈 브리핑 | 5~7 | 기존 MVP 호환 |
+
+에디토리얼 UI (`templates/cards/editorial/`): Info/Number/Quote/Impact Card, Timeline, Flow, Highlight Box 등. 실제 뉴스 문구 없이 플레이스홀더만 포함.
+
+```bash
+python scripts/preview_cardnews.py --list-bundles
+```
+
+### 로컬 미리보기 (R2 / IG 불필요)
+
+```bash
+docker compose up -d browserless   # PNG가 필요할 때 (또는 로컬 Chrome)
+python scripts/preview_cardnews.py --bundle editorial_carousel
+# → output/cardnews-preview/
+#    slide-01..08.html/.png (1080×1350), placeholders.json, template_meta.json,
+#    caption.txt, hashtags.txt, instagram_post.txt
+```
+
+
+PNG 백엔드: Browserless(`BROWSERLESS_URL` + `BROWSERLESS_TOKEN`, 기본 경로 `/chromium/screenshot`) → 실패 시 로컬 Chrome. 둘 다 없으면 HTML·캡션만 저장합니다. Compose의 `browserless`는 `ghcr.io/browserless/chromium`이므로 `/chrome/screenshot`이 아니라 `/chromium/screenshot`을 씁니다.
+
+### 인스타 게시글 본문
+
+```text
+{브랜드} · {YYYY.MM.DD}
+{후킹 한 줄}
+
+오늘의 포인트
+1) …
+2) …
+
+자세한 해설은 프로필 링크·블로그 브리핑에서 이어갑니다.
+
+※ 정보 안내용이며 투자 권유가 아닙니다.
+
+#경제뉴스 #증시 …
+```
+
+`full_text`는 Graph API 한도(2100자)에 맞춰 자릅니다. IG 미연동 시 `instagram_post.txt`를 수동 복붙하면 됩니다.
+
+### 파이프라인 (`PUBLISH_CARDS`)
+
+`PUBLISH_CARDS=1`일 때만 Approve 후 카드 렌더·R2·인스타를 시도합니다. 기본은 `0`(마크다운만).  
+R2/IG가 없어도 로컬 `run_dir/cards/`에 HTML·PNG·캡션은 남습니다.
 
 다음: [06. 설치·설정](06-setup.md)

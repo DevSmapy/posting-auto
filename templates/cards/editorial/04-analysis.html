@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <style>{{DESIGN_SYSTEM_CSS}}
+    .head { margin-top: 40px; margin-bottom: 32px; }
+    .dense {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 20px;
+      align-items: stretch;
+    }
+    .support {
+      margin-top: 20px;
+      padding: 28px;
+    }
+    .support li {
+      list-style: none;
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      font-size: 26px;
+      font-weight: 400;
+      line-height: 1.45;
+      color: var(--color-text);
+      padding: 12px 0;
+      border-bottom: 1px solid var(--color-border);
+      word-break: keep-all;
+    }
+    .support li:last-child { border-bottom: 0; }
+    .support li::before {
+      content: "";
+      width: 10px;
+      height: 10px;
+      margin-top: 10px;
+      border-radius: 50%;
+      background: var(--color-accent);
+      flex-shrink: 0;
+    }
+    .chart-card {
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      min-height: 420px;
+    }
+    .chart-card .cap {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--color-text-secondary);
+      margin-bottom: 20px;
+    }
+    .bars {
+      margin-top: auto;
+      display: flex;
+      align-items: flex-end;
+      gap: 16px;
+      height: 240px;
+      padding-bottom: 8px;
+    }
+    .bar {
+      flex: 1;
+      border-radius: 12px 12px 6px 6px;
+      background: #C7D2FE;
+    }
+    .bar.a { height: 45%; }
+    .bar.b { height: 70%; background: #93C5FD; }
+    .bar.c { height: 88%; background: var(--color-primary); }
+    .bar.d { height: 60%; background: #FCD34D; }
+    .axis {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 12px;
+      font-size: 18px;
+      color: var(--color-text-secondary);
+      font-weight: 400;
+    }
+  </style>
+</head>
+<body>
+  <div class="slide">
+    <div class="label"><span class="dot"></span> Core Analysis</div>
+    <div class="head">
+      <h1 class="h2">{{title}}</h1>
+    </div>
+    <div class="dense">
+      <div>
+        <div class="highlight-box">
+          <div class="title">{{key_takeaway}}</div>
+          <div class="sub">{{key_support}}</div>
+        </div>
+        <div class="card support">
+          <ul>
+            <li>{{bullet_1}}</li>
+            <li>{{bullet_2}}</li>
+            <li>{{bullet_3}}</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card chart-card">
+        <div class="cap">{{chart_label}}</div>
+        <div class="bars" aria-hidden="true">
+          <div class="bar a"></div>
+          <div class="bar b"></div>
+          <div class="bar c"></div>
+          <div class="bar d"></div>
+        </div>
+        <div class="axis">
+          <span>T-3</span><span>T-2</span><span>T-1</span><span>T</span>
+        </div>
+      </div>
+    </div>
+    <div class="footer-meta">
+      <span class="brand">{{brand}}</span>
+      <span class="page">04 / 08</span>
+    </div>
+  </div>
+</body>
+</html>

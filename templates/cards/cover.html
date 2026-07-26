@@ -3,54 +3,55 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@500;700;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
   <style>
     :root {
-      --bg: #0f1720;
-      --fg: #f4f1ea;
-      --muted: #9aa7b5;
-      --accent: #d4a574;
+      --bg: #0B1F3A;
+      --fg: #F5F7FA;
+      --muted: #A8B3C4;
+      --accent: #F08A24;
+      --light: #6EB6FF;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       width: 1080px;
       height: 1080px;
-      font-family: "Noto Sans KR", sans-serif;
+      font-family: "Pretendard", "Noto Sans KR", sans-serif;
       background:
-        radial-gradient(ellipse at 20% 0%, #1a2a3a 0%, transparent 50%),
-        radial-gradient(ellipse at 100% 100%, #243040 0%, transparent 45%),
+        radial-gradient(ellipse at 18% 0%, rgba(110, 182, 255, 0.22) 0%, transparent 52%),
+        radial-gradient(ellipse at 100% 100%, rgba(91, 75, 138, 0.35) 0%, transparent 48%),
         var(--bg);
       color: var(--fg);
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      padding: 88px 80px;
+      padding: 96px 88px;
     }
     .eyebrow {
-      font-size: 28px;
-      letter-spacing: 0.12em;
+      font-size: 26px;
+      letter-spacing: 0.18em;
       color: var(--accent);
       font-weight: 700;
-      text-transform: uppercase;
     }
     h1 {
-      margin-top: 48px;
-      font-size: 84px;
-      line-height: 1.15;
-      font-weight: 900;
-      max-width: 14ch;
+      margin-top: 40px;
+      font-size: 88px;
+      line-height: 1.12;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      max-width: 12ch;
     }
     .body {
-      margin-top: 36px;
-      font-size: 36px;
+      margin-top: 40px;
+      font-size: 34px;
+      line-height: 1.45;
       color: var(--muted);
       font-weight: 500;
+      max-width: 22ch;
     }
     .footer {
       font-size: 24px;
-      color: var(--muted);
+      color: var(--light);
       letter-spacing: 0.04em;
     }
   </style>

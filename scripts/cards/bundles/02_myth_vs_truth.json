@@ -1,0 +1,55 @@
+{
+  "id": "myth_vs_truth",
+  "index": 2,
+  "name_ko": "오해 vs 진실",
+  "name_en": "Misconception vs Truth",
+  "badge": null,
+  "purpose": "뉴스에 대한 흔한 오해를 바로잡고, 사실과 올바른 시각을 제시한다.",
+  "card_count": 7,
+  "recommended_topics": ["오보 정정", "과장 헤드라인", "투자 상식"],
+  "fit_score_economy_society": 4,
+  "slides": [
+    {
+      "role": "origin",
+      "label": "시작",
+      "title_hint": "오해가 생긴 이유",
+      "purpose": "왜 사람들이 이 뉴스를 오해하는지"
+    },
+    {
+      "role": "myth",
+      "label": "오해",
+      "title_hint": "흔한 잘못된 믿음",
+      "purpose": "널리 퍼진 오해 (X)"
+    },
+    {
+      "role": "truth",
+      "label": "진실",
+      "title_hint": "실제 사실",
+      "purpose": "실제 현실 (O)"
+    },
+    {
+      "role": "gap",
+      "label": "왜 헷갈릴까",
+      "title_hint": "오해의 논리 구멍",
+      "purpose": "오해가 생긴 논리 간극"
+    },
+    {
+      "role": "perspective",
+      "label": "시각",
+      "title_hint": "올바른 관점",
+      "purpose": "뉴스를 어떻게 봐야 하는지"
+    },
+    {
+      "role": "action",
+      "label": "전략",
+      "title_hint": "투자자·독자 전략",
+      "purpose": "지금 무엇을 하면 좋은지"
+    },
+    {
+      "role": "summary",
+      "label": "한 줄",
+      "title_hint": "한 줄 교훈",
+      "purpose": "마지막 교훈"
+    }
+  ]
+}
