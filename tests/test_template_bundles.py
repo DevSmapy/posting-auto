@@ -102,6 +102,42 @@ class NarrativeAssemblerTest(unittest.TestCase):
                 bundle=template,
             )
 
+    def test_caption_hook_truncates_body_before_hashtags(self) -> None:
+        now = datetime(2026, 7, 25, tzinfo=timezone.utc)
+        template = get_bundle("why_cause_impact")
+        # Tiny budget: body alone exceeds cap → no hashtags, body has ellipsis only.
+        tight = CardFormatConfig(caption_max_chars=40)
+        bundle = NarrativeAssembler(tight).assemble(
+            why_cause_impact_example(),
+            now,
+            bundle=template,
+            related_keywords=why_cause_impact_keywords(),
+            caption_hook=CAPTION_HOOK,
+        )
+        self.assertEqual(bundle.post.body, bundle.post.full_text)
+        self.assertEqual(bundle.post.hashtags, ())
+        self.assertNotIn("#", bundle.post.body)
+        self.assertTrue(bundle.post.body.endswith("…"))
+
+        # Room for body + some tags: drop overflowing tags, never partial tags.
+        mid = CardFormatConfig(caption_max_chars=900)
+        bundle2 = NarrativeAssembler(mid).assemble(
+            why_cause_impact_example(),
+            now,
+            bundle=template,
+            related_keywords=why_cause_impact_keywords(),
+            caption_hook=CAPTION_HOOK,
+        )
+        self.assertLessEqual(len(bundle2.post.full_text), 900)
+        self.assertGreater(len(bundle2.post.hashtags), 0)
+        for tag in bundle2.post.hashtags:
+            self.assertIn(f"#{tag}", bundle2.post.full_text)
+        # Body must stay free of hashtag text / partial fragments.
+        self.assertNotRegex(bundle2.post.body, r"#\w")
+        self.assertTrue(
+            bundle2.post.full_text.startswith(bundle2.post.body),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

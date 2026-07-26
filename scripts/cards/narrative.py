@@ -77,16 +77,26 @@ class NarrativeAssembler:
             if len(lines) >= 2:
                 lines[1] = caption_hook
                 body = "\n".join(lines)
-                tags = " ".join(f"#{t}" for t in post.hashtags)
-                full = f"{body}\n\n{tags}".strip() if tags else body
-                hashtags = post.hashtags
-                if 0 < self.config.caption_max_chars < len(full):
-                    full = full[: self.config.caption_max_chars - 1].rstrip() + "…"
-                    body = full
-                    hashtags = tuple(t for t in hashtags if f"#{t}" in full)
-                post = InstagramPost(
-                    body=body, hashtags=hashtags, full_text=full
-                )
+                max_chars = self.config.caption_max_chars
+                # Truncate plain body first so full_text never keeps partial tags.
+                if 0 < max_chars < len(body):
+                    body = InstagramCaptionBuilder._truncate(body, max_chars)
+                    post = InstagramPost(body=body, hashtags=(), full_text=body)
+                else:
+                    retained: list[str] = []
+                    tags_line = ""
+                    for tag in post.hashtags:
+                        trial = retained + [tag]
+                        trial_line = " ".join(f"#{t}" for t in trial)
+                        full_trial = f"{body}\n\n{trial_line}"
+                        if 0 < max_chars < len(full_trial):
+                            break
+                        retained = trial
+                        tags_line = trial_line
+                    full = f"{body}\n\n{tags_line}".strip() if tags_line else body
+                    post = InstagramPost(
+                        body=body, hashtags=tuple(retained), full_text=full
+                    )
 
         return CardBundle(
             slides=tuple(slides),

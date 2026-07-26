@@ -148,8 +148,9 @@ def main() -> int:
         if template.id != "why_cause_impact":
             print(
                 f"!! No fixture fill for {template.id!r} yet — "
-                "use --bundle editorial_carousel or why_cause_impact."
+                "use --bundle editorial_carousel, daily_briefing, or why_cause_impact."
             )
+            return 1
         filled = why_cause_impact_example()
         if len(filled) != len(template.slides):
             raise SystemExit(
