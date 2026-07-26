@@ -128,6 +128,8 @@ python -m unittest discover -s tests
 
 ```bash
 docker compose up -d browserless   # PNG용 (선택; Chrome만 있어도 됨)
+# .env 의 BROWSERLESS_TOKEN 은 compose TOKEN 과 같아야 함 (기본 local-dev-token)
+# chromium 이미지 REST 경로: /chromium/screenshot
 python scripts/preview_cardnews.py
 # → output/cardnews-preview/
 #    HTML·caption/instagram_post.txt 는 항상 생성
