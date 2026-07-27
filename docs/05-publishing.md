@@ -109,6 +109,13 @@ python scripts/preview_cardnews.py --bundle editorial_carousel
 #    caption.txt, hashtags.txt, instagram_post.txt
 ```
 
+과거 파이프라인 런의 `briefing.json`으로 카드를 다시 뽑을 때:
+
+```bash
+python scripts/preview_cardnews.py --from-run output/<YYYYMMDD_HHMMSS>
+# → output/<YYYYMMDD_HHMMSS>/cards-preview/
+# HTML만: --no-png
+```
 
 PNG 백엔드: Browserless(`BROWSERLESS_URL` + `BROWSERLESS_TOKEN`, 기본 경로 `/chromium/screenshot`) → 실패 시 로컬 Chrome. 둘 다 없으면 HTML·캡션만 저장합니다. Compose의 `browserless`는 `ghcr.io/browserless/chromium`이므로 `/chrome/screenshot`이 아니라 `/chromium/screenshot`을 씁니다.
 
