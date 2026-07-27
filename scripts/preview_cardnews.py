@@ -61,7 +61,10 @@ def _print_bundles() -> None:
 def _resolve_briefing_path(from_run: Path | None, briefing_json: Path | None) -> Path:
     if briefing_json is not None:
         return briefing_json
-    assert from_run is not None
+    if from_run is None:
+        raise SystemExit(
+            "!! internal error: need --from-run or --briefing-json to resolve path"
+        )
     return from_run / "briefing.json"
 
 
@@ -86,7 +89,7 @@ def _export_from_briefing(
     no_png: bool,
 ) -> tuple[bool, str]:
     """Rebuild cards from a pipeline briefing.json and export to targets."""
-    from mvp_pipeline import _bundle_from_briefing
+    from mvp_pipeline import bundle_from_briefing
 
     stories = list(briefing.get("stories") or [])
     slides = list(briefing.get("slides") or [])
@@ -95,7 +98,7 @@ def _export_from_briefing(
             "!! briefing JSON has neither 'stories' nor 'slides' — cannot build cards"
         )
 
-    card_bundle = _bundle_from_briefing(briefing, now=now)
+    card_bundle = bundle_from_briefing(briefing, now=now, config=config)
     if not card_bundle.slides:
         raise SystemExit("!! assembled card bundle has no slides")
 
@@ -180,7 +183,8 @@ def main() -> int:
         if any(a == "--bundle" or a.startswith("--bundle=") for a in sys.argv[1:]):
             print(
                 "!! --bundle is ignored when --from-run / --briefing-json is set "
-                "(daily_briefing assembly from briefing.json)."
+                "(daily_briefing assembly from briefing.json).",
+                file=sys.stderr,
             )
         briefing_path = _resolve_briefing_path(args.from_run, args.briefing_json)
         briefing = _load_briefing(briefing_path)
@@ -225,7 +229,7 @@ def main() -> int:
                 print(
                     "   slides:",
                     len(html_list),
-                    "(1080×1350 placeholders)",
+                    "(1080×1350 placeholders)",  # noqa: RUF001
                 )
                 print(f"   png: {len(png_list)}  meta: {result['meta']}")
         elif args.bundle == "daily_briefing":

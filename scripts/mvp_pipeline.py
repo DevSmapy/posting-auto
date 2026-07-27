@@ -985,9 +985,13 @@ def screenshot_html(html_doc: str, out_path: Path) -> None:
     CardRenderer(CardFormatConfig.from_env()).screenshot_html(html_doc, out_path)
 
 
-def _bundle_from_briefing(briefing: dict[str, Any], now: datetime | None = None) -> CardBundle:
+def bundle_from_briefing(
+    briefing: dict[str, Any],
+    now: datetime | None = None,
+    config: CardFormatConfig | None = None,
+) -> CardBundle:
     """Rebuild CardBundle preferring reviewed slides/caption over re-assembly."""
-    config = CardFormatConfig.from_env()
+    cfg = config or CardFormatConfig.from_env()
     clock = now or datetime.now(TZ)
     keywords = [str(k) for k in (briefing.get("related_keywords") or [])]
     raw_slides = list(briefing.get("slides") or [])
@@ -1009,7 +1013,7 @@ def _bundle_from_briefing(briefing: dict[str, Any], now: datetime | None = None)
 
     stories = list(briefing.get("stories") or [])
     if stories:
-        return CardAssembler(config).assemble(
+        return CardAssembler(cfg).assemble(
             stories, clock, related_keywords=keywords or None
         )
 
@@ -1030,8 +1034,9 @@ def render_cards(
     now: datetime | None = None,
 ) -> list[Path]:
     """Export card HTML/PNG + Instagram caption files; return PNG paths."""
-    bundle = _bundle_from_briefing(briefing, now=now)
-    result = CardRenderer(CardFormatConfig.from_env()).export(
+    config = CardFormatConfig.from_env()
+    bundle = bundle_from_briefing(briefing, now=now, config=config)
+    result = CardRenderer(config).export(
         bundle, out_dir, render_png=True
     )
     return list(result.get("png") or [])  # type: ignore[arg-type]
