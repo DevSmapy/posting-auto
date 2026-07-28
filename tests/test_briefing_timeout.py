@@ -151,7 +151,7 @@ class RuntimeBootstrapTest(unittest.TestCase):
 
 
 class DraftApproveFlowTest(unittest.TestCase):
-    def test_releases_aux_during_approve_wait_then_reacquires(self) -> None:
+    def test_two_stage_gates_then_cleanup(self) -> None:
         calls: list[str] = []
 
         class _Store:
@@ -167,15 +167,20 @@ class DraftApproveFlowTest(unittest.TestCase):
                 calls.append("store.close")
 
         class _Notifier:
-            def wait_for_approve(self, preview, image_paths=None):  # noqa: ANN001
-                calls.append("notifier.wait_for_approve")
-                return True
+            def wait_for_gate(self, stage, preview, **kwargs):  # noqa: ANN001
+                from notify.base import GateAction, GateStage
+
+                stage_s = GateStage(stage) if not isinstance(stage, GateStage) else stage
+                calls.append(f"gate:{stage_s.value}")
+                if stage_s == GateStage.CLEANUP:
+                    return GateAction.KEEP_FINAL
+                return GateAction.APPROVE
 
             def send_text(self, text):  # noqa: ANN001
                 calls.append("notifier.send_text")
 
         briefing = {"title": "draft", "slides": [], "core_summary": []}
-        picked = [{"title": "A", "score": 1}]
+        picked = [{"title": "A", "score": 1, "link": "https://example.com/a"}]
 
         with tempfile.TemporaryDirectory() as tmp:
             with (
@@ -184,6 +189,8 @@ class DraftApproveFlowTest(unittest.TestCase):
                     {
                         "MVP_MODE": "draft",
                         "OUTPUT_DIR": tmp,
+                        "CONTENT_RETRY_MAX": "3",
+                        "RENDER_RETRY_MAX": "3",
                     },
                     clear=False,
                 ),
@@ -191,7 +198,10 @@ class DraftApproveFlowTest(unittest.TestCase):
                 patch("mvp_pipeline.get_notifier", return_value=_Notifier()),
                 patch("mvp_pipeline.resolve_channel", return_value="slack"),
                 patch("mvp_pipeline.SeenUrlsStore", return_value=_Store()),
-                patch("mvp_pipeline.fetch_candidates", return_value=[{"id": "1", "title": "A"}]),
+                patch(
+                    "mvp_pipeline.fetch_candidates",
+                    return_value=[{"id": "1", "title": "A", "link": "https://example.com/a"}],
+                ),
                 patch("mvp_pipeline.rank_articles", return_value=picked),
                 patch("mvp_pipeline.build_briefing", return_value=(briefing, "llm")),
                 patch("mvp_pipeline.assemble_blog_html", return_value="<p>x</p>"),
@@ -220,13 +230,16 @@ class DraftApproveFlowTest(unittest.TestCase):
         self.assertEqual(
             calls,
             [
+                "wait_until_notify_send_at",
+                "gate:content",
                 "ensure_aux_before_publish",
                 "release_aux_after_approve_render",
-                "wait_until_notify_send_at",
-                "notifier.wait_for_approve",
+                "gate:render",
                 "ensure_aux_before_publish",
                 "store.reopen",
                 "run_publish",
+                "gate:cleanup",
+                "notifier.send_text",
                 "store.close",
             ],
         )

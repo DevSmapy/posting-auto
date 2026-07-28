@@ -16,6 +16,7 @@ Python 의존성·실행은 **uv** 기준입니다 (`uv sync`, `uv run python �
 | 07 | [워크플로](07-workflow.md) | n8n 노드 순서, DB, 에러 처리 |
 | 08 | [로드맵·운영](08-roadmap.md) | 구현 순서, MVP 기준, 트러블슈팅, 보안 |
 | 09 | [카드 템플릿](09-card-templates.md) | 루트 HTML vs editorial, 번들 카탈로그, 재사용 원리 |
+| 10 | [PR 관례](10-pr-conventions.md) | Summary / Changes / Notes 본문 포맷 |
 
 ```text
 docs/
@@ -29,5 +30,6 @@ docs/
 ├── 06-setup.md
 ├── 07-workflow.md
 ├── 08-roadmap.md
-└── 09-card-templates.md
+├── 09-card-templates.md
+└── 10-pr-conventions.md
 ```

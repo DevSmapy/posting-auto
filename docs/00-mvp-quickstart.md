@@ -95,7 +95,7 @@ RANK_MODE=heuristic BRIEFING_MODE=llm MVP_MODE=dry_run \
 결과: `output/<시각>/candidates.json`, `ranked.json`, `briefing.json`  
 랭킹이 비면 `importance_raw.json`을 보고, 자동으로 heuristic 폴백이 돕니다.
 
-### draft (Approve → 마크다운)
+### draft (2단계 게이트 → 마크다운)
 
 `.env`에 Discord, Telegram, 또는 Slack 토큰을 넣고 `NOTIFY_CHANNEL`을 고른 뒤:
 
@@ -103,12 +103,15 @@ RANK_MODE=heuristic BRIEFING_MODE=llm MVP_MODE=dry_run \
 uv run python scripts/smoke_discord.py    # 또는 smoke_telegram.py / smoke_slack.py
 uv run python scripts/smoke_seen_urls.py
 
-# 권장: postgres(+browserless) · ollama start → LLM → ollama stop → Discord Approve → aux stop
+# 권장: content gate → render gate → cleanup ask
 ./scripts/run_draft.sh
 # 또는 수동으로 컨테이너를 켠 채:
 # MVP_MODE=draft OLLAMA_AUTO_CONTAINER=0 DRAFT_AUTO_AUX=0 \
 #   uv run python scripts/mvp_pipeline.py
 ```
+
+로컬 트래킹 예: `git checkout -t origin/feat/draft-content-render-gates`  
+① 내용(✅/🔀/✍️) → ② 이미지(✅/🔁) → ③ cleanup. 재시도: `CONTENT_RETRY_MAX` / `RENDER_RETRY_MAX`.
 
 토큰 없이 게이트만 검증할 때:
 

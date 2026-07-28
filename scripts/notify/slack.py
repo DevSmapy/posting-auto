@@ -13,12 +13,38 @@ from typing import Any, Sequence
 
 import requests
 
-from .approve_copy import approve_footer, existing_image_paths
+from .approve_copy import (
+    approve_footer,
+    existing_image_paths,
+    gate_footer,
+    timeout_message,
+)
+from .base import GateAction, GateStage
 from .envutil import approve_timeout_sec, env
 
 API = "https://slack.com/api"
 APPROVE_EMOJI = "white_check_mark"
 SKIP_EMOJI = "next_track_button"
+RERANK_EMOJI = "twisted_rightwards_arrows"
+REWRITE_EMOJI = "writing_hand"
+RERENDER_EMOJI = "repeat"
+KEEP_ALL_EMOJI = "file_cabinet"
+
+_STAGE_EMOJIS: dict[GateStage, list[tuple[str, GateAction]]] = {
+    GateStage.CONTENT: [
+        (APPROVE_EMOJI, GateAction.APPROVE),
+        (RERANK_EMOJI, GateAction.RERANK),
+        (REWRITE_EMOJI, GateAction.REWRITE),
+    ],
+    GateStage.RENDER: [
+        (APPROVE_EMOJI, GateAction.APPROVE),
+        (RERENDER_EMOJI, GateAction.RERENDER),
+    ],
+    GateStage.CLEANUP: [
+        (APPROVE_EMOJI, GateAction.KEEP_FINAL),
+        (KEEP_ALL_EMOJI, GateAction.KEEP_ALL),
+    ],
+}
 
 
 class SlackNotifier:
@@ -233,3 +259,86 @@ class SlackNotifier:
         self.send_text(f"[타임아웃] {timeout}s 내 응답 없음 — 마크다운 저장 취소")
         print("   Approve timeout — skip export")
         return False
+
+    def wait_for_gate(
+        self,
+        stage: GateStage | str,
+        preview: str,
+        *,
+        image_paths: Sequence[Path] | None = None,
+        remaining: int | None = None,
+        max_retries: int | None = None,
+        run_id: str = "",
+        attempt: str = "",
+    ) -> GateAction:
+        timeout = approve_timeout_sec()
+        if not self.token or not self.channel_id:
+            raise RuntimeError("Slack gate requires SLACK_BOT_TOKEN and SLACK_CHANNEL_ID")
+
+        stage_s = GateStage(stage) if not isinstance(stage, GateStage) else stage
+        images = existing_image_paths(image_paths)
+        uploaded_images: list[Path] = []
+        for path in images:
+            try:
+                self._upload_file(path, f"카드 슬라이드: {path.name}")
+                uploaded_images.append(path)
+            except Exception as exc:  # noqa: BLE001
+                print(f"   !! Slack image upload failed ({path.name}): {exc}")
+
+        footer = gate_footer(
+            stage_s,
+            has_images=bool(uploaded_images),
+            remaining=remaining,
+            max_retries=max_retries,
+            run_id=run_id,
+            attempt=attempt,
+        )
+        body = preview[:3000] + footer
+        ts = self._post_message(body)
+        if not ts:
+            raise RuntimeError("Slack chat.postMessage returned empty ts")
+
+        bot_user = ""
+        try:
+            auth = self._api("auth.test", payload={})
+            bot_user = str(auth.get("user_id") or "")
+        except Exception as exc:  # noqa: BLE001
+            print(f"   !! Slack auth.test failed: {exc}")
+
+        mapping = _STAGE_EMOJIS[stage_s]
+        try:
+            for emoji, _action in mapping:
+                self._add_reaction(ts, emoji)
+        except Exception as exc:  # noqa: BLE001
+            print(f"   !! Slack seed reactions failed: {exc}")
+        print(f"   Slack {stage_s.value} gate sent — waiting…")
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                data = self._reaction_data(ts)
+                for emoji, action in mapping:
+                    users = [u for u in self._reaction_users(data, emoji) if u != bot_user]
+                    if users:
+                        return action
+            except Exception as exc:  # noqa: BLE001
+                response = getattr(exc, "response", None)
+                if (
+                    isinstance(response, requests.Response)
+                    and response.status_code == 429
+                ):
+                    retry_after = response.headers.get("Retry-After")
+                    try:
+                        delay = float(retry_after) if retry_after else 2.0
+                    except ValueError:
+                        delay = 2.0
+                    time.sleep(delay)
+                    continue
+                print(f"   !! Slack reaction poll error: {exc}")
+                time.sleep(2)
+                continue
+            time.sleep(2)
+
+        self.send_text(timeout_message(stage_s, timeout))
+        print(f"   {stage_s.value} gate timeout")
+        return GateAction.TIMEOUT
