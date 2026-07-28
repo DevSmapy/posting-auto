@@ -51,11 +51,13 @@ _draft_compose() {
 }
 
 _draft_want_browserless() {
+  # Draft Approve shows card PNGs before Approve — default ON.
+  # Set DRAFT_START_BROWSERLESS=0 to skip; PUBLISH_CARDS alone no longer gates this.
   if [[ -n "${DRAFT_START_BROWSERLESS}" ]]; then
     _ollama_truthy "${DRAFT_START_BROWSERLESS}"
     return $?
   fi
-  _ollama_truthy "${PUBLISH_CARDS:-0}"
+  return 0
 }
 
 _draft_resolve_compose_container() {
@@ -283,7 +285,7 @@ draft_start_aux_containers() {
       echo "!! compose up browserless failed — continuing" >&2
     fi
   else
-    echo "==> skip browserless (PUBLISH_CARDS/DRAFT_START_BROWSERLESS off)"
+    echo "==> skip browserless (DRAFT_START_BROWSERLESS=0)"
   fi
 
   # Optional explicit names (override compose discovery for stop later)

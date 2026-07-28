@@ -118,7 +118,7 @@ design-system.css  +  01~08.html({{슬롯}})  +  content dict
 ### 로컬 미리보기
 
 ```bash
-python scripts/preview_cardnews.py --bundle editorial_carousel
+uv run python scripts/preview_cardnews.py --bundle editorial_carousel
 # → output/cardnews-preview/ (또는 --out 경로)
 #    slide-01..08.html/.png
 #    placeholders.json, template_meta.json
@@ -145,7 +145,7 @@ HTML 파일 자체가 아니라 **어떤 슬라이드 순서로 글을 쓸지**�
 | `daily_briefing` | 오늘의 이슈 브리핑 | 5~7 | 루트 cover/slide/disclaimer |
 
 ```bash
-python scripts/preview_cardnews.py --list-bundles
+uv run python scripts/preview_cardnews.py --list-bundles
 ```
 
 공통 디자인 메모: [`design_guide.json`](../scripts/cards/bundles/design_guide.json)

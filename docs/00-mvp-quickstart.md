@@ -80,7 +80,7 @@ docker compose ps
 
 ```bash
 cd "/Users/leeyongkyun/포스팅 자동화"
-source .venv/bin/activate
+uv sync   # 최초 1회 또는 의존성 변경 시
 
 # (권장) Ollama 컨테이너 CPU/메모리 상한 — M2 Air + Desktop ~12GB
 # Desktop Settings의 Memory와 컨테이너 --memory는 별개입니다.
@@ -88,7 +88,8 @@ chmod +x scripts/limit_ollama_resources.sh
 ./scripts/limit_ollama_resources.sh   # 기본 4 CPU / 10GB
 
 # 아침 권장: 중요도는 heuristic, 브리핑만 LLM 1회
-RANK_MODE=heuristic BRIEFING_MODE=llm MVP_MODE=dry_run python scripts/mvp_pipeline.py
+RANK_MODE=heuristic BRIEFING_MODE=llm MVP_MODE=dry_run \
+  uv run python scripts/mvp_pipeline.py
 ```
 
 결과: `output/<시각>/candidates.json`, `ranked.json`, `briefing.json`  
@@ -96,16 +97,17 @@ RANK_MODE=heuristic BRIEFING_MODE=llm MVP_MODE=dry_run python scripts/mvp_pipeli
 
 ### draft (Approve → 마크다운)
 
-`.env`에 Discord 또는 Telegram 토큰을 넣고 `NOTIFY_CHANNEL`을 고른 뒤:
+`.env`에 Discord, Telegram, 또는 Slack 토큰을 넣고 `NOTIFY_CHANNEL`을 고른 뒤:
 
 ```bash
-python scripts/smoke_discord.py    # 또는 smoke_telegram.py
-python scripts/smoke_seen_urls.py
+uv run python scripts/smoke_discord.py    # 또는 smoke_telegram.py / smoke_slack.py
+uv run python scripts/smoke_seen_urls.py
 
 # 권장: postgres(+browserless) · ollama start → LLM → ollama stop → Discord Approve → aux stop
 ./scripts/run_draft.sh
 # 또는 수동으로 컨테이너를 켠 채:
-# MVP_MODE=draft OLLAMA_AUTO_CONTAINER=0 DRAFT_AUTO_AUX=0 python scripts/mvp_pipeline.py
+# MVP_MODE=draft OLLAMA_AUTO_CONTAINER=0 DRAFT_AUTO_AUX=0 \
+#   uv run python scripts/mvp_pipeline.py
 ```
 
 토큰 없이 게이트만 검증할 때:
@@ -114,14 +116,14 @@ python scripts/smoke_seen_urls.py
 MVP_MODE=draft NOTIFY_CHANNEL=auto \
   RANK_MODE=heuristic BRIEFING_MODE=heuristic \
   OLLAMA_AUTO_CONTAINER=0 DRAFT_AUTO_AUX=0 \
-  python scripts/mvp_pipeline.py
+  uv run python scripts/mvp_pipeline.py
 ```
 
 단위 체크 (네트워크 없음):
 
 ```bash
-python scripts/test_notify_window.py
-python -m unittest discover -s tests
+uv run python scripts/test_notify_window.py
+uv run python -m unittest discover -s tests -v
 ```
 
 ### 카드뉴스 로컬 미리보기 (Ollama / R2 / IG 불필요)
@@ -130,7 +132,7 @@ python -m unittest discover -s tests
 docker compose up -d browserless   # PNG용 (선택; Chrome만 있어도 됨)
 # .env 의 BROWSERLESS_TOKEN 은 compose TOKEN 과 같아야 함 (기본 local-dev-token)
 # chromium 이미지 REST 경로: /chromium/screenshot
-python scripts/preview_cardnews.py
+uv run python scripts/preview_cardnews.py
 # → output/cardnews-preview/
 #    HTML·caption/instagram_post.txt 는 항상 생성
 #    PNG 는 Browserless 또는 로컬 Chrome 등 스크린샷 백엔드가 있을 때만 생성

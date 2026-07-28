@@ -3,32 +3,34 @@
 ## 파이프라인
 
 ```text
-[Cron 07:30 KST]
+[Cron 07:00 KST / Manual]
        │
        ▼
 [Google News RSS: BUSINESS + NATION]
        │
        ▼
-[당일 pubDate 필터] → [URL/제목 중복 제거] → [피드순서·클러스터 신호]
+[전일15:00~now 창] → [seen_urls] → [피드순서·클러스터]
        │
        ▼
-[Ollama 중요도 점수] → 상위 후보
+[Ollama 중요도] → 상위 후보 → [Ollama 브리핑 JSON]
        │
        ▼
-[Ollama 브리핑 JSON]
+[카드 HTML → Browserless PNG]  ← Approve *전* 미리보기
        │
        ▼
-[Telegram 초안] Approve / Skip
+[Discord|Telegram|Slack] 이미지 확인 후 Approve / Skip
        │
        ├─ Skip → 종료
        │
        └─ Approve
             ├─▶ briefing.md (수동 붙여넣기)
-            └─▶ 카드 HTML → Browserless PNG → R2 → Instagram Carousel
+            └─▶ (PUBLISH_CARDS=1) R2 → Instagram Carousel
                     │
                     ▼
-              Telegram 결과 알림
+              채널 결과 / 부분실패 알림
 ```
+
+실행 본체는 **호스트 Python** (`scripts/mvp_pipeline.py`). n8n은 후속 오케스트레이션 옵션입니다.
 
 ## 프로세스 구성
 
@@ -38,7 +40,8 @@
 | Postgres | Docker | n8n 메타 + `seen_urls` |
 | Browserless | Docker | 카드 HTML → 1080×1080 PNG |
 | Ollama | **Docker Compose** (`ollama` 서비스) | 중요도·브리핑 |
-| Cloudflare R2 | 클라우드 | 인스타용 공개 이미지 URL |
+| Cloudflare R2 | 클라우드 | 인스타용 공개 이미지 URL (`scripts/publish`) |
+| Instagram Graph | 클라우드 | 캐러셀 게시 (`scripts/publish`) |
 
 같은 Compose 네트워크에서 n8n → `http://ollama:11434` 로 호출합니다.  
 호스트에서 `scripts/mvp_pipeline.py`를 돌릴 때는 포트 포워드된 `http://127.0.0.1:11434` (`OLLAMA_HOST_URL`)를 씁니다.
@@ -57,7 +60,7 @@
 | 카드 채널 | Instagram Graph API | 비즈니스/크리에이터 + 페이지 |
 | 카드 이미지 | HTML + Browserless | 한글 타이포·레이아웃 통제 |
 | 이미지 호스팅 | Cloudflare R2 | 인스타 Media API는 공개 HTTPS URL 필요 |
-| 승인 | Telegram Bot | 금융 콘텐츠 품질 게이트 |
+| 승인 | Discord(주력) / Telegram / Slack | 금융 콘텐츠 품질 게이트 · **이미지 확인 후 Approve** |
 
 ## 의도적으로 미룬 것 (Phase 2+)
 

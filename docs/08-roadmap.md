@@ -8,25 +8,26 @@
 | 1 | `docker-compose` + `.env.example` + `.gitignore` | 파일 존재, `docker compose up` 가능 |
 | 2 | Ollama 스모크 스크립트 | `./scripts/smoke_ollama.sh` |
 | 3 | `prompts/` + `templates/cards/` | 샘플 템플릿·프롬프트 존재 |
-| 4 | MVP 파이프라인 (RSS→중요도→브리핑) | `MVP_MODE=dry_run python scripts/mvp_pipeline.py` |
-| 5 | Notify draft → 마크다운 export | Discord/Telegram Approve 후 `briefing.md` |
-| 5b | (다음) Slack Approve 어댑터 | `NOTIFY_CHANNEL=slack` |
-| 6 | Browserless + R2 카드 렌더 | `PUBLISH_CARDS=1` 시 PNG·URL |
-| 7 | 인스타 캐러셀 | Meta 토큰 후 게시 |
+| 4 | MVP 파이프라인 (RSS→중요도→브리핑) | `MVP_MODE=dry_run uv run python scripts/mvp_pipeline.py` |
+| 5 | Notify draft → 마크다운 export | Discord/Telegram/Slack · **이미지 확인 후** Approve → `briefing.md` |
+| 5b | Slack Approve 어댑터 | `NOTIFY_CHANNEL=slack` (`scripts/notify/slack.py`) |
+| 6 | Browserless + R2 카드 렌더 | Approve 전 PNG 미리보기 · Approve 후 R2 (`scripts/publish`) |
+| 7 | 인스타 캐러셀 | Meta 토큰 후 게시 (`InstagramCarouselPublisher`, 2–10장) |
 | 8 | `seen_urls` + n8n 네이티브 노드화 | **Postgres `seen_urls` 파이프라인 연동됨** / n8n UI는 후속 |
 | 9 | (선택) 장후 16:30 마감 브리핑 | 워크플로 복제 |
 | 10 | (Phase 2) 네이버 섹션·조회수 랭킹 | 포털면 정렬이 필요할 때 |
 
-**코드로 준비된 단계:** 0–5, 8의 `seen_urls` (카드/인스타는 옵션).
+**코드로 준비된 단계:** 0–5, 5b, 6–7의 publish·notify(이미지 게이트)·논리 테스트, 8의 `seen_urls`.  
+실 Meta/R2/채널 연동은 자격 증명 후 로컬에서 확인합니다. **후속:** n8n 네이티브(8 UI), 16:30(9), Naver(10).
 
 ## MVP 성공 기준
 
-- [ ] 평일 07:30(또는 Manual)에 Discord/Telegram 초안이 온다 (`smoke_*` + `MVP_MODE=draft`)
+- [ ] 평일 초안에 Discord/Telegram/Slack으로 슬라이드 이미지가 오고 Approve 가능하다
 - [x] 초안 뉴스가 **전일 15:00~실행시각** Google News 토픽 기반이다
-- [x] Approve 시 `briefing.md`가 생긴다 (수동 붙여넣기; 티스토리 Open API 종료로 자동 발행 제거)
-- [ ] Approve 시 인스타 5~7장 캐러셀이 올라간다 (`PUBLISH_CARDS=1`)
+- [x] Approve 시 `briefing.md`가 생긴다 (수동 붙여넣기)
+- [ ] Approve 시 인스타 2~10장 캐러셀이 올라간다 (`PUBLISH_CARDS=1` + R2/Meta, 권장 구성 5~7장)
 - [x] 성공 확정한 URL은 다음날 재사용되지 않는다 (`seen_urls` Postgres)
-- [ ] 실패 시 단계가 Telegram에 보인다
+- [x] R2/인스타 단계 실패 시 채널에 단계 알림이 간다 (부분 성공 시에도 마크다운·seen_urls 유지)
 
 ## 트러블슈팅
 
@@ -38,6 +39,7 @@
 | 당일 기사 0건 | 타임존, `pubDate` 파싱, 주말/연휴 |
 | 잡뉴스 과다 | NATION 비중↓, 중요도 감점 강화, WATCHLIST 가점 |
 | 카드 한글 깨짐 | 웹폰트/Browserless 폰트 |
+| Approve에 이미지 없음 | Browserless/`CARD_SCREENSHOT_BIN`, `DRAFT_START_BROWSERLESS` |
 | 인스타 `image_url` | R2 URL 공개 HTTPS 여부 |
 | 티스토리 자동 발행 | Open API 종료 — `briefing.md` 수동 붙여넣기 |
 

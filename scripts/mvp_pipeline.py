@@ -39,6 +39,10 @@ from cards import (  # noqa: E402
     Slide,
 )
 from notify import get_notifier, resolve_channel  # noqa: E402
+from publish import (  # noqa: E402
+    PublishCardsPipeline,
+    PublishConfig,
+)
 from seen_urls import SeenUrlsStore  # noqa: E402
 
 TZ = ZoneInfo(os.getenv("NEWS_TIMEZONE", "Asia/Seoul"))
@@ -266,11 +270,49 @@ def release_ollama_after_llm() -> None:
     _run_draft_lifecycle("draft_release_after_llm")
 
 
+def ollama_is_ready() -> bool:
+    """Best-effort health check for the host-side Ollama HTTP endpoint."""
+    try:
+        r = requests.get(f"{ollama_base()}/api/tags", timeout=2)
+        return r.ok
+    except requests.RequestException:
+        return False
+
+
+def ensure_runtime_before_llm(mode: str) -> None:
+    """Align bare draft/publish runs with run_draft.sh startup behavior.
+
+    If Ollama is already reachable, leave the current runtime alone.
+    Otherwise, draft/publish should best-effort start the same managed
+    containers that run_draft.sh uses so direct `uv run ... mvp_pipeline.py`
+    behaves the same as the wrapper script.
+    """
+    if mode not in {"draft", "publish"}:
+        return
+    if ollama_is_ready():
+        return
+
+    if not as_bool_drop(env("OLLAMA_AUTO_CONTAINER", "0")):
+        os.environ["OLLAMA_AUTO_CONTAINER"] = "1"
+    if not as_bool_drop(env("DRAFT_AUTO_AUX", "0")):
+        os.environ["DRAFT_AUTO_AUX"] = "1"
+
+    print("==> Ollama not reachable — bootstrap draft runtime (same as run_draft.sh)")
+    _run_draft_lifecycle("draft_start_all")
+
+
 def ensure_aux_before_publish() -> None:
     """Bring postgres/browserless back up after Approve wait (if managed)."""
     if not as_bool_drop(env("DRAFT_AUTO_AUX", "0")):
         return
     _run_draft_lifecycle("draft_start_aux_containers")
+
+
+def release_aux_after_approve_render() -> None:
+    """Stop managed aux containers while waiting for Approve."""
+    if not as_bool_drop(env("DRAFT_AUTO_AUX", "0")):
+        return
+    _run_draft_lifecycle("draft_release_after_llm")
 
 
 def _run_draft_lifecycle(fn_name: str) -> None:
@@ -1042,102 +1084,15 @@ def render_cards(
     return list(result.get("png") or [])  # type: ignore[arg-type]
 
 
-def upload_r2(paths: list[Path], prefix: str) -> list[str]:
-    try:
-        import boto3
-    except ImportError as exc:
-        raise RuntimeError("boto3 required for R2 upload") from exc
-
-    endpoint = env("R2_ENDPOINT")
-    key_id = env("R2_ACCESS_KEY_ID")
-    secret = env("R2_SECRET_ACCESS_KEY")
-    bucket = env("R2_BUCKET")
-    public_base = env("R2_PUBLIC_BASE_URL").rstrip("/")
-    if not all([endpoint, key_id, secret, bucket, public_base]):
-        raise RuntimeError("R2_* env vars incomplete")
-
-    client = boto3.client(
-        "s3",
-        endpoint_url=endpoint,
-        aws_access_key_id=key_id,
-        aws_secret_access_key=secret,
-        region_name="auto",
-    )
-    urls: list[str] = []
-    for path in paths:
-        key = f"{prefix}/{path.name}"
-        client.upload_file(
-            str(path),
-            bucket,
-            key,
-            ExtraArgs={"ContentType": "image/png"},
-        )
-        urls.append(f"{public_base}/{key}")
-    return urls
-
-
-def instagram_carousel(image_urls: list[str], caption: str) -> str:
-    ig_user = env("IG_USER_ID")
-    token = env("META_ACCESS_TOKEN")
-    version = env("META_GRAPH_VERSION", "v21.0")
-    if not ig_user or not token:
-        raise RuntimeError("IG_USER_ID / META_ACCESS_TOKEN required")
-    base = f"https://graph.facebook.com/{version}"
-    children: list[str] = []
-    for url in image_urls:
-        r = requests.post(
-            f"{base}/{ig_user}/media",
-            data={
-                "image_url": url,
-                "is_carousel_item": "true",
-                "access_token": token,
-            },
-            timeout=60,
-        )
-        r.raise_for_status()
-        children.append(r.json()["id"])
-
-    parent = requests.post(
-        f"{base}/{ig_user}/media",
-        data={
-            "media_type": "CAROUSEL",
-            "children": ",".join(children),
-            "caption": caption[:2100],
-            "access_token": token,
-        },
-        timeout=60,
-    )
-    parent.raise_for_status()
-    creation_id = parent.json()["id"]
-
-    for _ in range(20):
-        st = requests.get(
-            f"{base}/{creation_id}",
-            params={"fields": "status_code", "access_token": token},
-            timeout=30,
-        )
-        st.raise_for_status()
-        code = st.json().get("status_code")
-        if code == "FINISHED":
-            break
-        if code == "ERROR":
-            raise RuntimeError(f"IG container error: {st.json()}")
-        time.sleep(3)
-
-    pub = requests.post(
-        f"{base}/{ig_user}/media_publish",
-        data={"creation_id": creation_id, "access_token": token},
-        timeout=60,
-    )
-    pub.raise_for_status()
-    return pub.json().get("id", creation_id)
-
-
 def preview_text(
     briefing: dict[str, Any],
     picked: list[dict[str, Any]],
     generation_mode: str = "llm",
+    *,
+    has_card_images: bool | None = None,
 ) -> str:
+    from notify.approve_copy import APPROVE_CONTROLS_HINT, APPROVE_IMAGE_HINT
+
     mode_label = _generation_mode_label(generation_mode)
     lines = [
         f"[초안] {briefing.get('title', '')}",
@@ -1167,9 +1122,41 @@ def preview_text(
         preview = ig_post if len(ig_post) <= 280 else ig_post[:279] + "…"
         lines.append(preview)
     lines.append("")
-    lines.append("Approve 시 briefing.md 저장 (수동 붙여넣기용)")
-    lines.append("Discord: ✅ / ⏭  ·  Telegram: 버튼 또는 /approve /skip")
+    if has_card_images is False:
+        lines.append(
+            "카드 이미지 생성 실패 또는 없음 — 텍스트만으로 Approve 할 수 있습니다."
+        )
+    else:
+        lines.append(APPROVE_IMAGE_HINT)
+    lines.append("Approve 시 briefing.md 저장 (수동 붙여넣기) + 선택적 R2/인스타")
+    lines.append(APPROVE_CONTROLS_HINT)
     return "\n".join(lines)
+
+
+def render_cards_for_approve(
+    briefing: dict[str, Any],
+    run_dir: Path,
+    now: datetime,
+) -> list[Path]:
+    """Render card PNG/HTML before Approve so operators can review slides."""
+    cards_dir = run_dir / "cards"
+    cards_dir.mkdir(exist_ok=True)
+    print("==> Render cards for Approve preview (HTML/PNG + caption)")
+    try:
+        paths = render_cards(briefing, cards_dir, now)
+    except Exception as exc:  # noqa: BLE001
+        print(f"   !! card render failed: {exc}")
+        return []
+    print(f"   card pngs: {len(paths)} → {cards_dir}")
+    return paths
+
+
+def _notify_stage(notifier: Any, message: str) -> None:
+    print(message)
+    try:
+        notifier.send_text(message)
+    except Exception as exc:  # noqa: BLE001
+        print(f"   !! stage notify failed: {exc}")
 
 
 def run_publish(
@@ -1180,61 +1167,66 @@ def run_publish(
     store: SeenUrlsStore,
     notifier: Any,
     generation_mode: str = "llm",
+    card_png_paths: list[Path] | None = None,
 ) -> None:
-    """Approve 후: 마크다운 저장(+선택 카드/인스타) → seen_urls 기록."""
+    """Approve 후: 마크다운 저장(+선택 R2/인스타) → seen_urls 기록.
+
+    ``card_png_paths`` — draft 게이트에서 이미 렌더한 PNG. 있으면 재렌더하지 않음.
+    """
     print("==> Write briefing markdown (manual paste)")
     md = assemble_blog_markdown(briefing)
     md_path = run_dir / "briefing.md"
     md_path.write_text(md, encoding="utf-8")
-    (run_dir / "briefing.html").write_text(briefing.get("blog_html") or assemble_blog_html(briefing), encoding="utf-8")
+    (run_dir / "briefing.html").write_text(
+        briefing.get("blog_html") or assemble_blog_html(briefing), encoding="utf-8"
+    )
     export_ref = str(md_path.resolve())
     print(f"   wrote {md_path}")
 
     ig_media_id: str | None = None
-    if env("PUBLISH_CARDS", "0").lower() in {"1", "true", "yes"}:
-        print("==> Render cards (HTML/PNG + Instagram caption)")
-        cards_dir = run_dir / "cards"
-        cards_dir.mkdir(exist_ok=True)
+    publish_cfg = PublishConfig.from_env()
+    paths = list(card_png_paths or [])
+    if publish_cfg.publish_cards:
+        if not paths:
+            print("==> Render cards (HTML/PNG + Instagram caption)")
+            cards_dir = run_dir / "cards"
+            cards_dir.mkdir(exist_ok=True)
+            try:
+                paths = render_cards(briefing, cards_dir, now)
+            except Exception as exc:  # noqa: BLE001
+                _notify_stage(notifier, f"[카드렌더 실패] {exc}")
+                paths = []
+        else:
+            print(f"==> Reuse Approve-preview cards ({len(paths)} png)")
+
         try:
-            paths = render_cards(briefing, cards_dir, now)
-        except Exception as exc:  # noqa: BLE001
-            print(f"   !! card render skipped: {exc}")
-            paths = []
-
-        image_urls: list[str] = []
-        if paths and env("R2_ACCESS_KEY_ID"):
-            print("==> Upload R2")
-            prefix = f"briefs/{now.strftime('%Y-%m-%d')}"
-            image_urls = upload_r2(paths, prefix)
-            (run_dir / "image_urls.json").write_text(
-                json.dumps(image_urls, ensure_ascii=False, indent=2), encoding="utf-8"
+            result = PublishCardsPipeline(
+                publish_cfg,
+                log=lambda msg: print(f"==> {msg}"),
+            ).run(
+                png_paths=paths,
+                briefing=briefing,
+                r2_prefix=f"briefs/{now.strftime('%Y-%m-%d')}",
+                run_dir=run_dir,
             )
-        elif not env("R2_ACCESS_KEY_ID"):
-            print("R2 not configured — skip Instagram (local cards kept)")
-
-        if image_urls and env("IG_USER_ID") and env("META_ACCESS_TOKEN"):
-            ig_caption = (
-                briefing.get("instagram_post")
-                or "\n\n".join(
-                    p
-                    for p in (
-                        briefing.get("caption") or "",
-                        " ".join(
-                            f"#{t.lstrip('#')}" for t in (briefing.get("hashtags") or [])
-                        ),
-                    )
-                    if p
+            ig_media_id = result.ig_media_id
+            if result.skipped_reason:
+                _notify_stage(
+                    notifier,
+                    f"[카드발행 부분스킵] {result.skipped_reason}",
                 )
-            ).strip()
-            print("==> Instagram carousel")
-            ig_media_id = instagram_carousel(image_urls, ig_caption)
-            print(f"   ig media id: {ig_media_id}")
+            elif ig_media_id:
+                _notify_stage(notifier, f"[인스타 게시됨] media_id={ig_media_id}")
+        except Exception as exc:  # noqa: BLE001
+            _notify_stage(notifier, f"[R2/인스타 실패] {exc}")
 
     mode_label = _generation_mode_label(generation_mode)
     caption = (
         f"[마크다운 준비됨]\n생성: {mode_label}\n{briefing.get('title')}\n"
         f"경로: {md_path}\n에디터에 붙여넣기 하세요."
     )
+    if ig_media_id:
+        caption += f"\nInstagram media_id: {ig_media_id}"
     send_file = getattr(notifier, "send_file", None)
     if callable(send_file):
         try:
@@ -1256,6 +1248,8 @@ def main() -> int:
     OUTPUT.mkdir(parents=True, exist_ok=True)
     run_dir = OUTPUT / now.strftime("%Y%m%d_%H%M%S")
     run_dir.mkdir(parents=True, exist_ok=True)
+
+    ensure_runtime_before_llm(mode)
 
     notifier = get_notifier()
     channel = resolve_channel()
@@ -1330,24 +1324,48 @@ def main() -> int:
             return 0
 
         if mode == "draft":
-            preview = preview_text(briefing, picked, generation_mode=generation_mode)
+            # Card PNGs before Approve — need browserless/postgres if managed.
+            ensure_aux_before_publish()
+            card_pngs = render_cards_for_approve(briefing, run_dir, now)
+            preview = preview_text(
+                briefing,
+                picked,
+                generation_mode=generation_mode,
+                has_card_images=bool(card_pngs),
+            )
+            release_aux_after_approve_render()
             wait_until_notify_send_at()
-            print(f"==> Approve gate channel={channel}")
-            if not notifier.wait_for_approve(preview):
+            print(f"==> Approve gate channel={channel} images={len(card_pngs)}")
+            if not notifier.wait_for_approve(preview, image_paths=card_pngs):
                 print("Done (draft skipped). seen_urls not updated.")
                 return 0
             ensure_aux_before_publish()
             store.reopen()
             run_publish(
-                briefing, picked, now, run_dir, store, notifier, generation_mode=generation_mode
+                briefing,
+                picked,
+                now,
+                run_dir,
+                store,
+                notifier,
+                generation_mode=generation_mode,
+                card_png_paths=card_pngs,
             )
             return 0
 
         if mode == "publish":
             ensure_aux_before_publish()
             store.reopen()
+            card_pngs = render_cards_for_approve(briefing, run_dir, now)
             run_publish(
-                briefing, picked, now, run_dir, store, notifier, generation_mode=generation_mode
+                briefing,
+                picked,
+                now,
+                run_dir,
+                store,
+                notifier,
+                generation_mode=generation_mode,
+                card_png_paths=card_pngs,
             )
             return 0
 

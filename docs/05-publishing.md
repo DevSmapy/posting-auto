@@ -4,56 +4,68 @@
 
 ## Approve 채널 (`NOTIFY_CHANNEL`)
 
-`MVP_MODE=draft` 일 때 [`scripts/mvp_pipeline.py`](../scripts/mvp_pipeline.py)가 브리핑을 준비한 뒤, `NOTIFY_SEND_AT`(예: `07:50`, Asia/Seoul)까지 기다렸다가 초안을 보내고 **Approve/Skip**을 기다립니다. 비어 있으면 준비 즉시 발송하고, 이미 지난 시각이면 대기 없이 보냅니다.  
+`MVP_MODE=draft` 일 때 흐름:
+
+1. 브리핑 준비  
+2. **로컬 카드 PNG 렌더** (`run_dir/cards/`)  
+3. `NOTIFY_SEND_AT`(예: `07:50`, Asia/Seoul)까지 대기 후 초안 + **슬라이드 이미지** 발송  
+4. **이미지를 확인한 뒤** Approve / Skip  
+
+`NOTIFY_SEND_AT`이 비어 있으면 준비 즉시 발송하고, 이미 지난 시각이면 대기 없이 보냅니다.  
 구현: [`scripts/notify/`](../scripts/notify/).
 
 | `NOTIFY_CHANNEL` | 동작 |
 |------------------|------|
-| (미설정) | Discord 토큰 있으면 `discord` → 없으면 `telegram` → 없으면 `cli` |
-| `discord` | 채널 메시지 + ✅ / ⏭ 리액션 폴링 |
-| `telegram` | 인라인 버튼 + `getUpdates` 폴링 |
-| `cli` | 터미널 `approve` / `skip` |
+| (미설정) | Discord(주력) → telegram → slack → cli |
+| `discord` | 슬라이드 PNG 첨부 + ✅ / ⏭ 리액션 |
+| `telegram` | 슬라이드 사진(media group) + 인라인 Approve/Skip |
+| `slack` | 슬라이드 파일 업로드 + ✅ / ⏭ 리액션 |
+| `cli` | 터미널 `approve` / `skip` (+ 로컬 이미지 경로 출력) |
 | `auto` | 대기 없이 승인 (로컬 스모크) |
 
-공통 타임아웃: `APPROVE_TIMEOUT_SEC` (없으면 Telegram/Discord 개별 변수, 기본 900초).
+공통 타임아웃: `APPROVE_TIMEOUT_SEC` (기본 900초).
 
 ### 미리보기에 포함
 
-- 제목, 시장 한줄
-- 선정 뉴스 헤드라인 + 중요도 점수
-- 카드 슬라이드 headline 목록
-- Approve / Skip 안내
+- 제목, 시장 한줄, 선정 뉴스, 슬라이드 headline
+- **카드 PNG 첨부** (생성 실패 시 텍스트만 + 경고)
+- 「슬라이드 이미지를 확인한 뒤 Approve」 안내
+- Approve / Skip 조작법
 
 | 선택 | 동작 |
 |------|------|
-| Approve | `output/<시각>/briefing.md` 저장 (+ 채널 알림; Discord는 파일 첨부) |
+| Approve | `briefing.md` 저장 (+ 채널에 md 첨부) → `PUBLISH_CARDS=1`이면 R2/인스타 (Approve 때 쓴 PNG 재사용) → `seen_urls` |
 | Skip | 종료. `seen_urls` 미기록 |
 | 타임아웃 | Skip과 동일 |
 
-Approve 후 **마크다운 저장 성공 시**에만 `seen_urls`에 insert.
+마크다운 저장 성공 시 `seen_urls`에 insert합니다. 인스타만 실패해도 마크다운·`seen_urls`는 유지하고 단계 알림을 보냅니다.
 
-### Discord 설정
+### Discord 설정 (주력)
 
 1. [Discord Developer Portal](https://discord.com/developers/applications)에서 앱·Bot 생성 → `DISCORD_BOT_TOKEN`
-2. Bot 권한: `Send Messages`, `Attach Files`, `Add Reactions`, `Read Message History` (해당 채널)
-3. 서버에 봇 초대 후, **텍스트 채널** ID → `DISCORD_CHANNEL_ID`
+2. Bot 권한: `Send Messages`, `Attach Files`, `Add Reactions`, `Read Message History`
+3. 서버에 봇 초대 후 **텍스트 채널** ID → `DISCORD_CHANNEL_ID`
 4. `.env`에 `NOTIFY_CHANNEL=discord` (또는 토큰만 넣고 자동 선택)
 
-> **주의:** `DISCORD_CHANNEL_ID`는 `#일반`처럼 **#으로 시작하는 텍스트 채널**이어야 합니다.  
-> 카테고리(예: “채팅 채널” 폴더) ID를 넣으면 `Cannot send messages in a non-text channel`(400)이 납니다.  
-> 개발자 모드 ON → 텍스트 채널 우클릭 → **채널 ID 복사**.
+> **주의:** `DISCORD_CHANNEL_ID`에는 **텍스트 채널의 숫자 ID**를 넣어야 합니다. Discord에서 Developer Mode를 켠 뒤 채널 우클릭 → **Copy Channel ID**로 복사하세요.  
+> 카테고리 ID를 넣으면 `Cannot send messages in a non-text channel`(400)이 납니다.
 
-스모크: `python scripts/smoke_discord.py`  
-Approve 후 채널에 `briefing.md` 파일이 첨부됩니다 (붙여넣기용).
+스모크: `uv run python scripts/smoke_discord.py`
 
 ### Telegram 설정
 
-스모크: `python scripts/smoke_telegram.py`  
+스모크: `uv run python scripts/smoke_telegram.py`  
 (호환) `TELEGRAM_APPROVE_MODE` 도 인식하나 **`NOTIFY_CHANNEL`이 우선**입니다.
 
-### Slack
+### Slack 설정
 
-다음 단계. 인터페이스(`Notifier`)만 맞춰 두었고 어댑터는 아직 없습니다.
+1. Slack 앱 생성 → Bot Token (`SLACK_BOT_TOKEN`, `xoxb-…`)
+2. 스코프 예: `chat:write`, `channels:history`, `reactions:read`, `reactions:write`, `files:write`
+3. 채널에 봇 `/invite` 후 `SLACK_CHANNEL_ID`
+4. `NOTIFY_CHANNEL=slack`
+
+스모크: `uv run python scripts/smoke_slack.py`  
+Approve는 Discord와 같이 **리액션**으로 받습니다 (공개 Request URL 없이 동작).
 
 ---
 
@@ -91,33 +103,27 @@ Approve 후 채널에 `briefing.md` 파일이 첨부됩니다 (붙여넣기용).
 | `five_min_class` | 5분 경제 교실 | 6 | |
 | `numbers` | 숫자로 보는 경제 | 6 | |
 | `storytelling` | 스토리텔링 경제 | 6 | |
-| `daily_briefing` | 오늘의 이슈 브리핑 | 5~7 | 기존 MVP 호환 |
+| `daily_briefing` | 오늘의 이슈 브리핑 | 2~10 (권장 5~7) | 기존 MVP 호환 |
 
-에디토리얼 UI (`templates/cards/editorial/`): Info/Number/Quote/Impact Card, Timeline, Flow, Highlight Box 등. 실제 뉴스 문구 없이 플레이스홀더만 포함.
+에디토리얼 UI (`templates/cards/editorial/`): Info/Number/Quote/Impact Card, Timeline, Flow, Highlight Box 등. 실제 뉴스 문구 없이 플레이스홀더만 포함. **파이프라인 발행 경로는 MVP 1080×1080**을 씁니다.
 
 ```bash
-python scripts/preview_cardnews.py --list-bundles
+uv run python scripts/preview_cardnews.py --list-bundles
 ```
 
 ### 로컬 미리보기 (R2 / IG 불필요)
 
 ```bash
 docker compose up -d browserless   # PNG가 필요할 때 (또는 로컬 Chrome)
-python scripts/preview_cardnews.py --bundle editorial_carousel
+uv run python scripts/preview_cardnews.py --bundle editorial_carousel
 # → output/cardnews-preview/
-#    slide-01..08.html/.png (1080×1350), placeholders.json, template_meta.json,
-#    caption.txt, hashtags.txt, instagram_post.txt
 ```
 
 과거 파이프라인 런의 `briefing.json`으로 카드를 다시 뽑을 때:
 
 ```bash
-python scripts/preview_cardnews.py --from-run output/<YYYYMMDD_HHMMSS>
-# → output/<YYYYMMDD_HHMMSS>/cards-preview/
-# HTML만: --no-png
+uv run python scripts/preview_cardnews.py --from-run output/<YYYYMMDD_HHMMSS>
 ```
-
-PNG 백엔드: Browserless(`BROWSERLESS_URL` + `BROWSERLESS_TOKEN`, 기본 경로 `/chromium/screenshot`) → 실패 시 로컬 Chrome. 둘 다 없으면 HTML·캡션만 저장합니다. Compose의 `browserless`는 `ghcr.io/browserless/chromium`이므로 `/chrome/screenshot`이 아니라 `/chromium/screenshot`을 씁니다.
 
 ### 인스타 게시글 본문
 
@@ -140,7 +146,23 @@ PNG 백엔드: Browserless(`BROWSERLESS_URL` + `BROWSERLESS_TOKEN`, 기본 경�
 
 ### 파이프라인 (`PUBLISH_CARDS`)
 
-`PUBLISH_CARDS=1`일 때만 Approve 후 카드 렌더·R2·인스타를 시도합니다. 기본은 `0`(마크다운만).  
-R2/IG가 없어도 로컬 `run_dir/cards/`에 HTML·PNG·캡션은 남습니다.
+- **draft:** Approve **전**에 항상 로컬 카드 PNG를 만들어 채널에 첨부합니다.
+- **`PUBLISH_CARDS=1`:** Approve **후** 같은 PNG로 R2 업로드 → Instagram 캐러셀(2–10장). 기본 `0`이면 마크다운만.
+- R2/IG가 없어도 Approve 미리보기용 로컬 `run_dir/cards/`는 남습니다.
+
+발행(호스팅·Graph) 로직은 [`scripts/publish/`](../scripts/publish/)에 있습니다.
+
+| 모듈 | 역할 |
+|------|------|
+| `PublishConfig` | `PUBLISH_CARDS`, R2_*, IG_*, Meta Graph 버전 |
+| `R2Uploader` | PNG → Cloudflare R2 공개 HTTPS URL |
+| `InstagramCarouselPublisher` | children → CAROUSEL → status poll → `media_publish` |
+| `PublishCardsPipeline` | Approve 후 R2 + 인스타 오케스트레이션 |
+
+논리 테스트(실제 Meta/R2/채널 호출 없음):
+
+```bash
+uv run python -m unittest tests.test_instagram_publish tests.test_notify_approve tests.test_run_publish -v
+```
 
 다음: [06. 설치·설정](06-setup.md)

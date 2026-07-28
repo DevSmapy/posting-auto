@@ -13,9 +13,15 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-if [[ -f .venv/bin/activate ]]; then
+# Prefer uv (docs assume uv). Fall back to an existing .venv if uv is absent.
+if command -v uv >/dev/null 2>&1; then
+  run_py() { uv run python "$@"; }
+elif [[ -f .venv/bin/activate ]]; then
   # shellcheck disable=SC1091
   source .venv/bin/activate
+  run_py() { python "$@"; }
+else
+  run_py() { python3 "$@"; }
 fi
 
 # Capture caller/cron overrides BEFORE sourcing .env. Otherwise .env's
@@ -62,4 +68,4 @@ trap cleanup EXIT
 
 draft_start_all
 
-python scripts/mvp_pipeline.py
+run_py scripts/mvp_pipeline.py

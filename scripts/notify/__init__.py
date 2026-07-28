@@ -1,4 +1,4 @@
-"""Approve / alert notifiers (Telegram, Discord, CLI)."""
+"""Approve / alert notifiers (Discord, Telegram, Slack, CLI)."""
 
 from .factory import get_notifier, resolve_channel
 

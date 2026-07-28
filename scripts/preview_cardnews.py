@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Local MVP: assemble sample card news → HTML / PNG / Instagram caption files.
 
-Usage (from repo root):
-  python scripts/preview_cardnews.py
-  python scripts/preview_cardnews.py --bundle why_cause_impact
-  python scripts/preview_cardnews.py --from-run output/20260725_083000
-  python scripts/preview_cardnews.py --briefing-json path/to/briefing.json --no-png
-  python scripts/preview_cardnews.py --list-bundles
+Usage (from repo root, uv):
+  uv run python scripts/preview_cardnews.py
+  uv run python scripts/preview_cardnews.py --bundle why_cause_impact
+  uv run python scripts/preview_cardnews.py --from-run output/20260725_083000
+  uv run python scripts/preview_cardnews.py --briefing-json path/to/briefing.json --no-png
+  uv run python scripts/preview_cardnews.py --list-bundles
 
 Does not require Ollama, R2, or Instagram credentials.
 PNG needs Browserless (`docker compose up -d browserless`) or local Chrome.

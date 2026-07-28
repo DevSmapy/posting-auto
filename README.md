@@ -2,7 +2,7 @@
 
 로컬 Docker **n8n + Ollama**로 한국 뉴스를 모아 요약한 뒤, **마크다운 브리핑**(수동 붙여넣기)과 선택적으로 **인스타그램** 카드뉴스를 준비하는 자동화 프로젝트입니다.
 
-> 현재 상태: **반자동** — Discord/Telegram Approve → `briefing.md` 저장. 티스토리 Open API는 종료되어 사용하지 않습니다.
+> 현재 상태: **반자동** — Discord/Telegram/Slack Approve → `briefing.md` 저장. 티스토리 Open API는 종료되어 사용하지 않습니다.
 
 ---
 
@@ -10,17 +10,17 @@
 
 | 항목 | 내용 |
 |------|------|
-| 스케줄 | 평일 07:00 실행 → `NOTIFY_SEND_AT`(기본 07:50) Discord (cron `1-5`) |
+| 스케줄 | 평일 07:00 실행 → `NOTIFY_SEND_AT`(기본 07:50) Discord/Telegram/Slack (cron `1-5`) |
 | 뉴스 소스 (MVP) | Google News KR 토픽 RSS — `BUSINESS` + `NATION` |
 | 날짜 | `pubDate` ∈ **전일 15:00 ~ 실행시각** (Asia/Seoul, 설정 가능) |
 | 중요도 | 피드 순서 + 클러스터 크기 + **Ollama 스니펫 점수** |
 | LLM | Docker Ollama (`qwen2.5:14b` 권장) |
 | 발행 | 마크다운 파일 반자동 (수동 붙여넣기) + 선택적 Instagram |
-| 안전장치 | `MVP_MODE=draft` → `NOTIFY_CHANNEL`(Discord/Telegram) Approve → `briefing.md` |
+| 안전장치 | `MVP_MODE=draft` → 카드 PNG 미리보기 → Discord/Telegram/Slack Approve → `briefing.md` |
 
 ```text
 Google News RSS → 전일15:00~now / seen_urls → Ollama 중요도 → Ollama 브리핑
-        → (draft) NOTIFY_SEND_AT 대기 → Discord|Telegram Approve/Skip
+        → (draft) NOTIFY_SEND_AT 대기 → Discord|Telegram|Slack Approve/Skip
         → briefing.md → seen_urls 기록
 ```
 
@@ -30,10 +30,9 @@ Google News RSS → 전일15:00~now / seen_urls → Ollama 중요도 → Ollama 
 
 ```bash
 cp .env.example .env
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+uv sync
 ./scripts/smoke_ollama.sh
-MVP_MODE=dry_run python scripts/mvp_pipeline.py
+MVP_MODE=dry_run uv run python scripts/mvp_pipeline.py
 ```
 
 자세한 단계: [docs/00-mvp-quickstart.md](docs/00-mvp-quickstart.md)
@@ -66,12 +65,15 @@ MVP_MODE=dry_run python scripts/mvp_pipeline.py
 ├── docs/
 ├── docker-compose.yml
 ├── .env.example
-├── requirements.txt
+├── pyproject.toml           # uv 의존성 (권장: uv sync)
+├── requirements.txt         # pyproject 미러 (호환용)
 ├── prompts/
 ├── templates/cards/
 ├── scripts/
 │   ├── smoke_ollama.sh
-│   └── mvp_pipeline.py      # MVP 실행 진입점
+│   ├── mvp_pipeline.py      # MVP 실행 진입점
+│   ├── cards/               # 카드·인스타 본문 조립
+│   └── publish/             # R2 업로드 · Instagram Graph 캐러셀
 ├── workflows/
 └── init/01_seen_urls.sql
 ```
@@ -84,7 +86,7 @@ MVP_MODE=dry_run python scripts/mvp_pipeline.py
 2. **조회수 정렬 불가** → 구글 노출 순서 + 클러스터 + Ollama 중요도.
 3. **본문 HTML 파싱 안 함** (MVP) → RSS 제목·스니펫만으로 요약.
 4. **LLM = Ollama (Docker Compose)**.
-5. **발행 전** `draft`로 Telegram 확인 권장.
+5. **발행 전** `draft`로 Discord/Telegram/Slack 승인 확인 권장.
 
 ---
 

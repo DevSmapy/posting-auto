@@ -126,9 +126,12 @@ class CardAssemblerTest(unittest.TestCase):
     def test_preview_includes_caption(self) -> None:
         now = datetime(2026, 7, 25, tzinfo=timezone.utc)
         briefing = assemble_briefing_from_stories(sample_stories(), now)
-        text = preview_text(briefing, [], generation_mode="heuristic")
+        text = preview_text(
+            briefing, [], generation_mode="heuristic", has_card_images=True
+        )
         self.assertIn("인스타 본문", text)
         self.assertIn("슬라이드:", text)
+        self.assertIn("슬라이드 이미지를 확인한 뒤 Approve", text)
 
 
 class CardTemplateRendererTest(unittest.TestCase):
