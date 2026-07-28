@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -17,6 +18,7 @@ from mvp_pipeline import (  # noqa: E402
     _generation_mode_label,
     briefing_timeout_ms,
     ensure_runtime_before_llm,
+    main,
     ollama_is_ready,
     ollama_options,
     release_ollama_after_llm,
@@ -146,6 +148,88 @@ class RuntimeBootstrapTest(unittest.TestCase):
                     self.assertEqual(os.environ["OLLAMA_AUTO_CONTAINER"], "1")
                     self.assertEqual(os.environ["DRAFT_AUTO_AUX"], "1")
                     self.assertIn("draft_start_all", " ".join(run.call_args[0][0]))
+
+
+class DraftApproveFlowTest(unittest.TestCase):
+    def test_releases_aux_during_approve_wait_then_reacquires(self) -> None:
+        calls: list[str] = []
+
+        class _Store:
+            backend = "memory"
+
+            def filter_new(self, candidates):  # noqa: ANN001
+                return candidates
+
+            def reopen(self) -> None:
+                calls.append("store.reopen")
+
+            def close(self) -> None:
+                calls.append("store.close")
+
+        class _Notifier:
+            def wait_for_approve(self, preview, image_paths=None):  # noqa: ANN001
+                calls.append("notifier.wait_for_approve")
+                return True
+
+            def send_text(self, text):  # noqa: ANN001
+                calls.append("notifier.send_text")
+
+        briefing = {"title": "draft", "slides": [], "core_summary": []}
+        picked = [{"title": "A", "score": 1}]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "MVP_MODE": "draft",
+                        "OUTPUT_DIR": tmp,
+                    },
+                    clear=False,
+                ),
+                patch("mvp_pipeline.ensure_runtime_before_llm"),
+                patch("mvp_pipeline.get_notifier", return_value=_Notifier()),
+                patch("mvp_pipeline.resolve_channel", return_value="slack"),
+                patch("mvp_pipeline.SeenUrlsStore", return_value=_Store()),
+                patch("mvp_pipeline.fetch_candidates", return_value=[{"id": "1", "title": "A"}]),
+                patch("mvp_pipeline.rank_articles", return_value=picked),
+                patch("mvp_pipeline.build_briefing", return_value=(briefing, "llm")),
+                patch("mvp_pipeline.assemble_blog_html", return_value="<p>x</p>"),
+                patch("mvp_pipeline.render_cards_for_approve", return_value=[]),
+                patch("mvp_pipeline.preview_text", return_value="preview"),
+                patch("mvp_pipeline.release_ollama_after_llm"),
+                patch(
+                    "mvp_pipeline.ensure_aux_before_publish",
+                    side_effect=lambda: calls.append("ensure_aux_before_publish"),
+                ),
+                patch(
+                    "mvp_pipeline.release_aux_after_approve_render",
+                    side_effect=lambda: calls.append("release_aux_after_approve_render"),
+                ),
+                patch(
+                    "mvp_pipeline.wait_until_notify_send_at",
+                    side_effect=lambda: calls.append("wait_until_notify_send_at"),
+                ),
+                patch(
+                    "mvp_pipeline.run_publish",
+                    side_effect=lambda *args, **kwargs: calls.append("run_publish"),
+                ),
+            ):
+                self.assertEqual(main(), 0)
+
+        self.assertEqual(
+            calls,
+            [
+                "ensure_aux_before_publish",
+                "release_aux_after_approve_render",
+                "wait_until_notify_send_at",
+                "notifier.wait_for_approve",
+                "ensure_aux_before_publish",
+                "store.reopen",
+                "run_publish",
+                "store.close",
+            ],
+        )
 
 
 if __name__ == "__main__":
