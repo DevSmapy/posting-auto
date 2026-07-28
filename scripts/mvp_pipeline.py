@@ -272,6 +272,37 @@ def release_ollama_after_llm() -> None:
     _run_draft_lifecycle("draft_release_after_llm")
 
 
+def ollama_is_ready() -> bool:
+    """Best-effort health check for the host-side Ollama HTTP endpoint."""
+    try:
+        r = requests.get(f"{ollama_base()}/api/tags", timeout=2)
+        return r.ok
+    except requests.RequestException:
+        return False
+
+
+def ensure_runtime_before_llm(mode: str) -> None:
+    """Align bare draft/publish runs with run_draft.sh startup behavior.
+
+    If Ollama is already reachable, leave the current runtime alone.
+    Otherwise, draft/publish should best-effort start the same managed
+    containers that run_draft.sh uses so direct `uv run ... mvp_pipeline.py`
+    behaves the same as the wrapper script.
+    """
+    if mode not in {"draft", "publish"}:
+        return
+    if ollama_is_ready():
+        return
+
+    if not as_bool_drop(env("OLLAMA_AUTO_CONTAINER", "0")):
+        os.environ["OLLAMA_AUTO_CONTAINER"] = "1"
+    if not as_bool_drop(env("DRAFT_AUTO_AUX", "0")):
+        os.environ["DRAFT_AUTO_AUX"] = "1"
+
+    print("==> Ollama not reachable — bootstrap draft runtime (same as run_draft.sh)")
+    _run_draft_lifecycle("draft_start_all")
+
+
 def ensure_aux_before_publish() -> None:
     """Bring postgres/browserless back up after Approve wait (if managed)."""
     if not as_bool_drop(env("DRAFT_AUTO_AUX", "0")):
@@ -1226,6 +1257,8 @@ def main() -> int:
     OUTPUT.mkdir(parents=True, exist_ok=True)
     run_dir = OUTPUT / now.strftime("%Y%m%d_%H%M%S")
     run_dir.mkdir(parents=True, exist_ok=True)
+
+    ensure_runtime_before_llm(mode)
 
     notifier = get_notifier()
     channel = resolve_channel()

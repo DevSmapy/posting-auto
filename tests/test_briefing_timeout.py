@@ -14,6 +14,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from mvp_pipeline import (  # noqa: E402
     _generation_mode_label,
     briefing_timeout_ms,
+    ensure_runtime_before_llm,
+    ollama_is_ready,
     ollama_options,
     release_ollama_after_llm,
     story_timeout_ms,
@@ -100,6 +102,38 @@ class ReleaseLifecycleDefaultTest(unittest.TestCase):
                 release_ollama_after_llm()
                 run.assert_called_once()
                 self.assertIn("draft_release_after_llm", " ".join(run.call_args[0][0]))
+
+
+class RuntimeBootstrapTest(unittest.TestCase):
+    def test_ollama_ready_short_circuits(self) -> None:
+        with patch("mvp_pipeline.requests.get") as get:
+            get.return_value.ok = True
+            self.assertTrue(ollama_is_ready())
+
+        with patch("mvp_pipeline.ollama_is_ready", return_value=True):
+            with patch("mvp_pipeline.subprocess.run") as run:
+                ensure_runtime_before_llm("draft")
+                run.assert_not_called()
+
+    def test_dry_run_does_not_bootstrap(self) -> None:
+        with patch("mvp_pipeline.ollama_is_ready", return_value=False):
+            with patch("mvp_pipeline.subprocess.run") as run:
+                ensure_runtime_before_llm("dry_run")
+                run.assert_not_called()
+
+    def test_draft_bootstraps_when_ollama_is_down(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"OLLAMA_AUTO_CONTAINER": "0", "DRAFT_AUTO_AUX": "0"},
+            clear=False,
+        ):
+            with patch("mvp_pipeline.ollama_is_ready", return_value=False):
+                with patch("mvp_pipeline.subprocess.run") as run:
+                    ensure_runtime_before_llm("draft")
+                    run.assert_called_once()
+                    self.assertEqual(os.environ["OLLAMA_AUTO_CONTAINER"], "1")
+                    self.assertEqual(os.environ["DRAFT_AUTO_AUX"], "1")
+                    self.assertIn("draft_start_all", " ".join(run.call_args[0][0]))
 
 
 if __name__ == "__main__":
