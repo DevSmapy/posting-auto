@@ -25,7 +25,7 @@
 - [ ] 평일 초안에 Discord/Telegram/Slack으로 슬라이드 이미지가 오고 Approve 가능하다
 - [x] 초안 뉴스가 **전일 15:00~실행시각** Google News 토픽 기반이다
 - [x] Approve 시 `briefing.md`가 생긴다 (수동 붙여넣기)
-- [ ] Approve 시 인스타 5~7장 캐러셀이 올라간다 (`PUBLISH_CARDS=1` + R2/Meta)
+- [ ] Approve 시 인스타 2~10장 캐러셀이 올라간다 (`PUBLISH_CARDS=1` + R2/Meta, 권장 구성 5~7장)
 - [x] 성공 확정한 URL은 다음날 재사용되지 않는다 (`seen_urls` Postgres)
 - [x] R2/인스타 단계 실패 시 채널에 단계 알림이 간다 (부분 성공 시에도 마크다운·seen_urls 유지)
 

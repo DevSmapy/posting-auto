@@ -73,6 +73,16 @@ class SlackNotifier:
             raise RuntimeError(f"Slack API {method} failed: {data.get('error') or data}")
         return data
 
+    def _reaction_data(self, ts: str) -> dict[str, Any]:
+        return self._api_get(
+            "reactions.get",
+            params={
+                "channel": self.channel_id,
+                "timestamp": ts,
+                "full": "true",
+            },
+        )
+
     def send_text(self, text: str) -> None:
         if not self.token or not self.channel_id:
             print("Slack skipped: missing SLACK_BOT_TOKEN or SLACK_CHANNEL_ID")
@@ -135,18 +145,7 @@ class SlackNotifier:
             if "already_reacted" not in str(exc):
                 raise
 
-    def _reaction_users(self, ts: str, name: str) -> list[str]:
-        try:
-            data = self._api_get(
-                "reactions.get",
-                params={
-                    "channel": self.channel_id,
-                    "timestamp": ts,
-                    "full": "true",
-                },
-            )
-        except Exception:  # noqa: BLE001
-            return []
+    def _reaction_users(self, data: dict[str, Any], name: str) -> list[str]:
         msg = data.get("message") or {}
         users: list[str] = []
         for rx in msg.get("reactions") or []:
@@ -164,13 +163,15 @@ class SlackNotifier:
             raise RuntimeError("Slack Approve requires SLACK_BOT_TOKEN and SLACK_CHANNEL_ID")
 
         images = existing_image_paths(image_paths)
+        uploaded_images: list[Path] = []
         for path in images:
             try:
                 self._upload_file(path, f"카드 슬라이드: {path.name}")
+                uploaded_images.append(path)
             except Exception as exc:  # noqa: BLE001
                 print(f"   !! Slack image upload failed ({path.name}): {exc}")
 
-        footer = approve_footer(has_images=bool(images))
+        footer = approve_footer(has_images=bool(uploaded_images))
         body = (
             preview[:3000]
             + footer
@@ -181,8 +182,12 @@ class SlackNotifier:
         if not ts:
             raise RuntimeError("Slack chat.postMessage returned empty ts")
 
-        auth = self._api("auth.test", payload={})
-        bot_user = str(auth.get("user_id") or "")
+        bot_user = ""
+        try:
+            auth = self._api("auth.test", payload={})
+            bot_user = str(auth.get("user_id") or "")
+        except Exception as exc:  # noqa: BLE001
+            print(f"   !! Slack auth.test failed: {exc}")
 
         try:
             self._add_reaction(ts, APPROVE_EMOJI)
@@ -194,13 +199,26 @@ class SlackNotifier:
         deadline = time.time() + timeout
         while time.time() < deadline:
             try:
+                data = self._reaction_data(ts)
                 approve_users = [
-                    u for u in self._reaction_users(ts, APPROVE_EMOJI) if u != bot_user
+                    u for u in self._reaction_users(data, APPROVE_EMOJI) if u != bot_user
                 ]
                 skip_users = [
-                    u for u in self._reaction_users(ts, SKIP_EMOJI) if u != bot_user
+                    u for u in self._reaction_users(data, SKIP_EMOJI) if u != bot_user
                 ]
             except Exception as exc:  # noqa: BLE001
+                response = getattr(exc, "response", None)
+                if (
+                    isinstance(response, requests.Response)
+                    and response.status_code == 429
+                ):
+                    retry_after = response.headers.get("Retry-After")
+                    try:
+                        delay = float(retry_after) if retry_after else 2.0
+                    except ValueError:
+                        delay = 2.0
+                    time.sleep(delay)
+                    continue
                 print(f"   !! Slack reaction poll error: {exc}")
                 time.sleep(2)
                 continue

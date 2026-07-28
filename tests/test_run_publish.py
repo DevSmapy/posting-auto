@@ -71,32 +71,32 @@ class RunPublishTest(unittest.TestCase):
                 r2_bucket="",
                 r2_public_base_url="",
             )
-            with patch("mvp_pipeline.assemble_blog_markdown", return_value="# md"):
-                with patch("mvp_pipeline.assemble_blog_html", return_value="<p>x</p>"):
-                    with patch("mvp_pipeline.PublishConfig.from_env", return_value=cfg):
-                        with patch(
-                            "mvp_pipeline.PublishCardsPipeline"
-                        ) as pipe_cls:
-                            pipe = MagicMock()
-                            pipe.run.return_value = PublishCardsResult(
-                                attempted=True,
-                                image_urls=[],
-                                ig_media_id=None,
-                                skipped_reason="R2 not configured",
-                            )
-                            pipe_cls.return_value = pipe
-                            run_publish(
-                                briefing,
-                                [{"url": "http://a", "title": "A"}],
-                                now,
-                                run_dir,
-                                store,  # type: ignore[arg-type]
-                                notifier,
-                                card_png_paths=[png],
-                            )
-                            pipe.run.assert_called_once()
-                            kwargs = pipe.run.call_args.kwargs
-                            self.assertEqual(kwargs["png_paths"], [png])
+            with (
+                patch("mvp_pipeline.assemble_blog_markdown", return_value="# md"),
+                patch("mvp_pipeline.assemble_blog_html", return_value="<p>x</p>"),
+                patch("mvp_pipeline.PublishConfig.from_env", return_value=cfg),
+                patch("mvp_pipeline.PublishCardsPipeline") as pipe_cls,
+            ):
+                pipe = MagicMock()
+                pipe.run.return_value = PublishCardsResult(
+                    attempted=True,
+                    image_urls=[],
+                    ig_media_id=None,
+                    skipped_reason="R2 not configured",
+                )
+                pipe_cls.return_value = pipe
+                run_publish(
+                    briefing,
+                    [{"url": "http://a", "title": "A"}],
+                    now,
+                    run_dir,
+                    store,  # type: ignore[arg-type]
+                    notifier,
+                    card_png_paths=[png],
+                )
+                pipe.run.assert_called_once()
+                kwargs = pipe.run.call_args.kwargs
+                self.assertEqual(kwargs["png_paths"], [png])
         self.assertEqual(len(store.calls), 1)
         self.assertIsNone(store.calls[0]["ig_media_id"])
         self.assertTrue(
@@ -122,24 +122,24 @@ class RunPublishTest(unittest.TestCase):
             run_dir = Path(tmp)
             png = run_dir / "a.png"
             png.write_bytes(b"x")
-            with patch("mvp_pipeline.assemble_blog_markdown", return_value="# md"):
-                with patch("mvp_pipeline.assemble_blog_html", return_value="<p>x</p>"):
-                    with patch("mvp_pipeline.PublishConfig.from_env", return_value=cfg):
-                        with patch(
-                            "mvp_pipeline.PublishCardsPipeline"
-                        ) as pipe_cls:
-                            pipe = MagicMock()
-                            pipe.run.side_effect = RuntimeError("graph down")
-                            pipe_cls.return_value = pipe
-                            run_publish(
-                                briefing,
-                                [{"url": "http://a", "title": "A"}],
-                                now,
-                                run_dir,
-                                store,  # type: ignore[arg-type]
-                                notifier,
-                                card_png_paths=[png],
-                            )
+            with (
+                patch("mvp_pipeline.assemble_blog_markdown", return_value="# md"),
+                patch("mvp_pipeline.assemble_blog_html", return_value="<p>x</p>"),
+                patch("mvp_pipeline.PublishConfig.from_env", return_value=cfg),
+                patch("mvp_pipeline.PublishCardsPipeline") as pipe_cls,
+            ):
+                pipe = MagicMock()
+                pipe.run.side_effect = RuntimeError("graph down")
+                pipe_cls.return_value = pipe
+                run_publish(
+                    briefing,
+                    [{"url": "http://a", "title": "A"}],
+                    now,
+                    run_dir,
+                    store,  # type: ignore[arg-type]
+                    notifier,
+                    card_png_paths=[png],
+                )
             self.assertTrue((run_dir / "briefing.md").is_file())
         self.assertEqual(len(store.calls), 1)
         self.assertTrue(any("R2/인스타 실패" in t for t in notifier.texts))

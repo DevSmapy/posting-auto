@@ -33,12 +33,12 @@ class R2Uploader:
     def _build_client(self) -> S3Client:
         if self._client is not None:
             return self._client
+        if not self.config.r2_configured:
+            raise RuntimeError("R2_* env vars incomplete")
         try:
             import boto3
         except ImportError as exc:
             raise RuntimeError("boto3 required for R2 upload") from exc
-        if not self.config.r2_configured:
-            raise RuntimeError("R2_* env vars incomplete")
         return boto3.client(
             "s3",
             endpoint_url=self.config.r2_endpoint,

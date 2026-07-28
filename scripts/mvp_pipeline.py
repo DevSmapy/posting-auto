@@ -40,10 +40,8 @@ from cards import (  # noqa: E402
 )
 from notify import get_notifier, resolve_channel  # noqa: E402
 from publish import (  # noqa: E402
-    InstagramCarouselPublisher,
     PublishCardsPipeline,
     PublishConfig,
-    R2Uploader,
 )
 from seen_urls import SeenUrlsStore  # noqa: E402
 from story_quality import (  # noqa: E402
@@ -316,6 +314,13 @@ def ensure_aux_before_publish() -> None:
     if not as_bool_drop(env("DRAFT_AUTO_AUX", "0")):
         return
     _run_draft_lifecycle("draft_start_aux_containers")
+
+
+def release_aux_after_approve_render() -> None:
+    """Stop managed aux containers while waiting for Approve."""
+    if not as_bool_drop(env("DRAFT_AUTO_AUX", "0")):
+        return
+    _run_draft_lifecycle("draft_release_after_llm")
 
 
 def _run_draft_lifecycle(fn_name: str) -> None:
@@ -1171,18 +1176,6 @@ def render_cards(
     return list(result.get("png") or [])  # type: ignore[arg-type]
 
 
-def upload_r2(paths: list[Path], prefix: str) -> list[str]:
-    """Upload PNGs to R2; thin wrapper over ``publish.R2Uploader``."""
-    return R2Uploader(PublishConfig.from_env()).upload(paths, prefix)
-
-
-def instagram_carousel(image_urls: list[str], caption: str) -> str:
-    """Publish Instagram carousel; thin wrapper over ``publish`` package."""
-    return InstagramCarouselPublisher(PublishConfig.from_env()).publish(
-        image_urls, caption
-    )
-
-
 def preview_text(
     briefing: dict[str, Any],
     picked: list[dict[str, Any]],
@@ -1221,9 +1214,7 @@ def preview_text(
         preview = ig_post if len(ig_post) <= 280 else ig_post[:279] + "…"
         lines.append(preview)
     lines.append("")
-    if has_card_images is True:
-        lines.append(APPROVE_IMAGE_HINT)
-    elif has_card_images is False:
+    if has_card_images is False:
         lines.append(
             "카드 이미지 생성 실패 또는 없음 — 텍스트만으로 Approve 할 수 있습니다."
         )
@@ -1434,6 +1425,7 @@ def main() -> int:
                 generation_mode=generation_mode,
                 has_card_images=bool(card_pngs),
             )
+            release_aux_after_approve_render()
             wait_until_notify_send_at()
             print(f"==> Approve gate channel={channel} images={len(card_pngs)}")
             if not notifier.wait_for_approve(preview, image_paths=card_pngs):

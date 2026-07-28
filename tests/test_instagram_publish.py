@@ -195,7 +195,7 @@ class InstagramCarouselPublisherTest(unittest.TestCase):
         pub = InstagramCarouselPublisher(_cfg())
         with self.assertRaises(ValueError) as ctx:
             pub.publish(["https://cdn.example/a.png"], "x")
-        self.assertIn("2–10", str(ctx.exception))
+        self.assertIn("2-10", str(ctx.exception))
 
     def test_too_many_images_raises(self) -> None:
         pub = InstagramCarouselPublisher(_cfg())
@@ -225,6 +225,29 @@ class InstagramCarouselPublisherTest(unittest.TestCase):
             "0123456789abcdef",
         )
         self.assertEqual(captured["caption"], "0123456789")
+
+    def test_final_poll_does_not_sleep_before_timeout(self) -> None:
+        def post(url: str, data: dict[str, Any] | None = None, **_: Any) -> _FakeResp:
+            if url.endswith("/media_publish"):
+                return _FakeResp({"id": "ok"})
+            if data and data.get("media_type") == "CAROUSEL":
+                return _FakeResp({"id": "parent"})
+            return _FakeResp({"id": "c1"})
+
+        sleeps: list[float] = []
+        pub = InstagramCarouselPublisher(
+            _cfg(status_poll_attempts=2, status_poll_interval_sec=1.5),
+            post=post,
+            get=lambda *a, **k: _FakeResp({"status_code": "IN_PROGRESS"}),
+            sleep=sleeps.append,
+        )
+        with self.assertRaises(RuntimeError) as ctx:
+            pub.publish(
+                ["https://cdn.example/a.png", "https://cdn.example/b.png"],
+                "x",
+            )
+        self.assertIn("not ready after 2 polls", str(ctx.exception))
+        self.assertEqual(sleeps, [1.5])
 
 
 class PublishCardsPipelineTest(unittest.TestCase):

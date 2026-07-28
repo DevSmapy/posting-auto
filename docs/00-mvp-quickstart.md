@@ -97,10 +97,10 @@ RANK_MODE=heuristic BRIEFING_MODE=llm MVP_MODE=dry_run \
 
 ### draft (Approve → 마크다운)
 
-`.env`에 Discord 또는 Telegram 토큰을 넣고 `NOTIFY_CHANNEL`을 고른 뒤:
+`.env`에 Discord, Telegram, 또는 Slack 토큰을 넣고 `NOTIFY_CHANNEL`을 고른 뒤:
 
 ```bash
-uv run python scripts/smoke_discord.py    # 또는 smoke_telegram.py
+uv run python scripts/smoke_discord.py    # 또는 smoke_telegram.py / smoke_slack.py
 uv run python scripts/smoke_seen_urls.py
 
 # 권장: postgres(+browserless) · ollama start → LLM → ollama stop → Discord Approve → aux stop
