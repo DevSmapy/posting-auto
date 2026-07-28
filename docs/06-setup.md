@@ -26,7 +26,7 @@
 
 > 인스타 연동이 준비 중 가장 오래 걸리는 구간입니다.
 
-### Discord (권장 Approve 채널)
+### Discord (권장 Approve 채널 · 주력)
 
 - [ ] Developer Portal Bot → `DISCORD_BOT_TOKEN`
 - [ ] **텍스트 채널** ID → `DISCORD_CHANNEL_ID` (카테고리 ID 금지) + 봇 초대 (Send / Attach Files / React / History)
@@ -38,6 +38,13 @@
 - [ ] BotFather 봇 → `TELEGRAM_BOT_TOKEN`
 - [ ] `TELEGRAM_CHAT_ID` + 봇에게 `/start`
 - [ ] `uv run python scripts/smoke_telegram.py`
+
+### Slack
+
+- [ ] Slack 앱 Bot Token → `SLACK_BOT_TOKEN`
+- [ ] 채널에 봇 invite → `SLACK_CHANNEL_ID`
+- [ ] `NOTIFY_CHANNEL=slack`
+- [ ] `uv run python scripts/smoke_slack.py`
 
 ### Postgres / seen_urls
 

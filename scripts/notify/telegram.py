@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import requests
 
+from .approve_copy import approve_footer, existing_image_paths
 from .envutil import approve_timeout_sec, env
 
 
@@ -55,15 +57,73 @@ class TelegramNotifier:
         resp.raise_for_status()
         print(f"   Telegram document sent: {path.name}")
 
-    def wait_for_approve(self, preview: str) -> bool:
+    def _send_images(self, images: list[Path]) -> None:
+        """Send PNG slides as a media group (max 10) then leftovers as photos."""
+        if not images:
+            return
+        url = f"https://api.telegram.org/bot{self.token}/sendMediaGroup"
+        for start in range(0, len(images), 10):
+            batch = images[start : start + 10]
+            media = []
+            files: dict[str, Any] = {}
+            handles = []
+            try:
+                for i, path in enumerate(batch):
+                    key = f"photo{i}"
+                    media.append(
+                        {
+                            "type": "photo",
+                            "media": f"attach://{key}",
+                            **(
+                                {"caption": f"슬라이드 {start + i + 1}/{len(images)}"}
+                                if i == 0
+                                else {}
+                            ),
+                        }
+                    )
+                    fh = path.open("rb")
+                    handles.append(fh)
+                    files[key] = (path.name, fh, "image/png")
+                resp = requests.post(
+                    url,
+                    data={
+                        "chat_id": self.chat_id,
+                        "media": json.dumps(media, ensure_ascii=False),
+                    },
+                    files=files,
+                    timeout=120,
+                )
+                if not resp.ok:
+                    print(
+                        f"   !! Telegram sendMediaGroup failed: "
+                        f"{resp.status_code} {resp.text[:300]}"
+                    )
+                    continue
+                print(f"   Telegram photos sent: {[p.name for p in batch]}")
+            finally:
+                for h in handles:
+                    h.close()
+
+    def wait_for_approve(
+        self,
+        preview: str,
+        image_paths: Sequence[Path] | None = None,
+    ) -> bool:
         timeout = approve_timeout_sec()
         if not self.token or not self.chat_id:
-            raise RuntimeError("Telegram Approve requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID")
+            raise RuntimeError(
+                "Telegram Approve requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID"
+            )
+
+        images = existing_image_paths(image_paths)
+        if images:
+            self._send_images(images)
 
         request_id = uuid.uuid4().hex[:12]
         approve_data = f"approve:{request_id}"
         skip_data = f"skip:{request_id}"
-        chunk = preview[:3500]
+        footer = approve_footer(has_images=bool(images))
+        chunk = (preview + footer)[:3500]
         markup = {
             "inline_keyboard": [
                 [
@@ -109,9 +169,12 @@ class TelegramNotifier:
                         if cq_id:
                             self._api(
                                 "answerCallbackQuery",
-                                {"callback_query_id": cq_id, "text": "Approve — 마크다운 저장"},
+                                {
+                                    "callback_query_id": cq_id,
+                                    "text": "Approve — 마크다운 저장",
+                                },
                             )
-                        self.send_text("승인됨. 마크다운 파일로 저장합니다.")
+                        self.send_text("승인됨. 마크다운 저장(+선택 인스타)합니다.")
                         return True
                     if raw == skip_data:
                         if cq_id:
@@ -125,7 +188,7 @@ class TelegramNotifier:
                 text = (msg.get("text") or "").strip().lower()
                 if str(msg.get("chat", {}).get("id")) == str(self.chat_id):
                     if text in {"/approve", "approve"}:
-                        self.send_text("승인됨. 마크다운 파일로 저장합니다.")
+                        self.send_text("승인됨. 마크다운 저장(+선택 인스타)합니다.")
                         return True
                     if text in {"/skip", "skip"}:
                         self.send_text("스킵됨. 저장하지 않습니다.")

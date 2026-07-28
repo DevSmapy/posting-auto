@@ -40,6 +40,11 @@ class InstagramCarouselPublisher:
     def publish(self, image_urls: list[str], caption: str) -> str:
         if not image_urls:
             raise ValueError("instagram carousel requires at least one image_url")
+        n = len(image_urls)
+        if n < 2 or n > 10:
+            raise ValueError(
+                f"instagram carousel requires 2–10 images, got {n}"
+            )
         if not self.config.instagram_configured:
             raise RuntimeError("IG_USER_ID / META_ACCESS_TOKEN required")
 

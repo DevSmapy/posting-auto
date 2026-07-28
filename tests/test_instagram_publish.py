@@ -153,7 +153,9 @@ class InstagramCarouselPublisherTest(unittest.TestCase):
             get=get,
             sleep=sleeps.append,
         )
-        pub.publish(["https://cdn.example/a.png"], "x")
+        pub.publish(
+            ["https://cdn.example/a.png", "https://cdn.example/b.png"], "x"
+        )
         self.assertEqual(len(sleeps), 1)
 
     def test_error_status_raises(self) -> None:
@@ -172,18 +174,34 @@ class InstagramCarouselPublisherTest(unittest.TestCase):
             sleep=lambda _: None,
         )
         with self.assertRaises(RuntimeError) as ctx:
-            pub.publish(["https://cdn.example/a.png"], "x")
+            pub.publish(
+                ["https://cdn.example/a.png", "https://cdn.example/b.png"], "x"
+            )
         self.assertIn("IG container error", str(ctx.exception))
 
     def test_missing_credentials_raises(self) -> None:
         pub = InstagramCarouselPublisher(_cfg(ig_user_id="", meta_access_token=""))
         with self.assertRaises(RuntimeError):
-            pub.publish(["https://cdn.example/a.png"], "x")
+            pub.publish(
+                ["https://cdn.example/a.png", "https://cdn.example/b.png"], "x"
+            )
 
     def test_empty_urls_raises(self) -> None:
         pub = InstagramCarouselPublisher(_cfg())
         with self.assertRaises(ValueError):
             pub.publish([], "x")
+
+    def test_single_image_raises(self) -> None:
+        pub = InstagramCarouselPublisher(_cfg())
+        with self.assertRaises(ValueError) as ctx:
+            pub.publish(["https://cdn.example/a.png"], "x")
+        self.assertIn("2–10", str(ctx.exception))
+
+    def test_too_many_images_raises(self) -> None:
+        pub = InstagramCarouselPublisher(_cfg())
+        urls = [f"https://cdn.example/{i}.png" for i in range(11)]
+        with self.assertRaises(ValueError):
+            pub.publish(urls, "x")
 
     def test_truncates_caption(self) -> None:
         captured: dict[str, Any] = {}
@@ -202,7 +220,10 @@ class InstagramCarouselPublisherTest(unittest.TestCase):
             get=lambda *a, **k: _FakeResp({"status_code": "FINISHED"}),
             sleep=lambda _: None,
         )
-        pub.publish(["https://cdn.example/a.png"], "0123456789abcdef")
+        pub.publish(
+            ["https://cdn.example/a.png", "https://cdn.example/b.png"],
+            "0123456789abcdef",
+        )
         self.assertEqual(captured["caption"], "0123456789")
 
 

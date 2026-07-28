@@ -8,7 +8,9 @@
 uv run python scripts/mvp_pipeline.py
 ```
 
-n8n은 Docker로 함께 띄워 두고, 스케줄·승인 UI·Credentials를 붙이는 오케스트레이터로 확장합니다.
+흐름 요약: RSS → 브리핑 → **카드 PNG** → Discord/Telegram/Slack에서 **이미지 확인 후 Approve** → `briefing.md` (+ 선택 R2/Instagram).
+
+n8n은 Docker로 함께 띄워 두고, 스케줄·Credentials를 붙이는 오케스트레이터로 **후속** 확장합니다.
 
 ## 권장 연결 (1차)
 
@@ -16,24 +18,26 @@ n8n **Schedule Trigger** → **Execute Command**(또는 SSH)로 호스트 파이
 
 ```bash
 cd "/Users/leeyongkyun/포스팅 자동화"
+./scripts/run_draft.sh
+# 또는
 MVP_MODE=draft uv run python scripts/mvp_pipeline.py
 ```
 
 > Execute Command는 n8n 컨테이너 안에서 실행됩니다. 호스트 Python을 쓰려면  
 > (a) 파이프라인을 컨테이너에 넣고 의존성 설치, 또는  
-> (b) 호스트 cron/`launchd`로 `mvp_pipeline.py`를 돌리고 n8n은 발행·알림만 담당.
+> (b) 호스트 cron/`launchd`로 `run_draft.sh`를 돌리고 n8n은 알림만 담당.
 
-## 권장 연결 (2차, 네이티브 노드)
+## 권장 연결 (2차, 네이티브 노드 · 후속)
 
-[docs/07-workflow.md](../docs/07-workflow.md)의 노드 표를 n8n UI에서 수동 구성:
+[docs/07-workflow.md](../docs/07-workflow.md) 참고. 대략:
 
 1. Schedule  
 2. RSS Read ×2 (`GNEWS_*`)  
-3. Code (merge / 당일 / cluster)  
-4. HTTP Request → Ollama 중요도  
-5. HTTP Request → Ollama 브리핑  
-6. Telegram Approve  
-7. Tistory / Browserless / R2 / Instagram  
+3. Code (merge / 창 필터 / cluster) — 샘플 Code의 “당일” 필터는 Python `since_prev_day_hour`와 다를 수 있음  
+4. HTTP Request → Ollama  
+5. Notify Approve (또는 Execute Command로 draft 전체)  
+6. Browserless / R2 / Instagram (`PUBLISH_CARDS`)  
+7. `briefing.md` 경로 알림 (티스토리 Open API 없음)
 
 `prompts/` 와 `templates/` 는 컨테이너에 `/home/node/prompts`, `/home/node/templates` 로 마운트됩니다.
 

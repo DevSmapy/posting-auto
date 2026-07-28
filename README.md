@@ -16,7 +16,7 @@
 | 중요도 | 피드 순서 + 클러스터 크기 + **Ollama 스니펫 점수** |
 | LLM | Docker Ollama (`qwen2.5:14b` 권장) |
 | 발행 | 마크다운 파일 반자동 (수동 붙여넣기) + 선택적 Instagram |
-| 안전장치 | `MVP_MODE=draft` → `NOTIFY_CHANNEL`(Discord/Telegram) Approve → `briefing.md` |
+| 안전장치 | `MVP_MODE=draft` → 카드 PNG 미리보기 → Discord/Telegram/Slack Approve → `briefing.md` |
 
 ```text
 Google News RSS → 전일15:00~now / seen_urls → Ollama 중요도 → Ollama 브리핑

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Sequence
+
+from .approve_copy import approve_footer, existing_image_paths
 
 
 class CliNotifier:
@@ -11,9 +14,19 @@ class CliNotifier:
     def send_text(self, text: str) -> None:
         print(f"[notify:cli]\n{text[:4000]}")
 
-    def wait_for_approve(self, preview: str) -> bool:
+    def wait_for_approve(
+        self,
+        preview: str,
+        image_paths: Sequence[Path] | None = None,
+    ) -> bool:
+        images = existing_image_paths(image_paths)
         print(preview)
-        print("\n--- Approve? type approve / skip ---")
+        print(approve_footer(has_images=bool(images)))
+        if images:
+            print("이미지 경로:")
+            for path in images:
+                print(f"  - {path}")
+        print("\n--- 슬라이드 이미지를 확인한 뒤 Approve? type approve / skip ---")
         try:
             line = input("> ").strip().lower()
         except EOFError:
