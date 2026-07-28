@@ -22,6 +22,7 @@ from mvp_pipeline import (  # noqa: E402
     ollama_is_ready,
     ollama_options,
     release_ollama_after_llm,
+    release_ollama_only,
     story_timeout_ms,
 )
 
@@ -107,6 +108,15 @@ class ReleaseLifecycleDefaultTest(unittest.TestCase):
                 run.assert_called_once()
                 self.assertIn("draft_release_after_llm", " ".join(run.call_args[0][0]))
 
+    def test_release_ollama_only_skips_aux(self) -> None:
+        with patch.dict(os.environ, {"OLLAMA_AUTO_CONTAINER": "1", "DRAFT_AUTO_AUX": "1"}):
+            with patch("mvp_pipeline.subprocess.run") as run:
+                release_ollama_only()
+                run.assert_called_once()
+                cmd = " ".join(run.call_args[0][0])
+                self.assertIn("draft_release_ollama", cmd)
+                self.assertNotIn("draft_stop_aux_containers", cmd)
+
 
 class RuntimeBootstrapTest(unittest.TestCase):
     def test_ollama_ready_short_circuits(self) -> None:
@@ -147,7 +157,7 @@ class RuntimeBootstrapTest(unittest.TestCase):
                     run.assert_called_once()
                     self.assertEqual(os.environ["OLLAMA_AUTO_CONTAINER"], "1")
                     self.assertEqual(os.environ["DRAFT_AUTO_AUX"], "1")
-                    self.assertIn("draft_start_all", " ".join(run.call_args[0][0]))
+                    self.assertIn("draft_start_llm_runtime", " ".join(run.call_args[0][0]))
 
 
 class DraftApproveFlowTest(unittest.TestCase):
@@ -207,14 +217,17 @@ class DraftApproveFlowTest(unittest.TestCase):
                 patch("mvp_pipeline.assemble_blog_html", return_value="<p>x</p>"),
                 patch("mvp_pipeline.render_cards_for_approve", return_value=[]),
                 patch("mvp_pipeline.preview_text", return_value="preview"),
-                patch("mvp_pipeline.release_ollama_after_llm"),
+                patch(
+                    "mvp_pipeline.release_ollama_only",
+                    side_effect=lambda: calls.append("release_ollama_only"),
+                ),
+                patch(
+                    "mvp_pipeline.release_aux_only",
+                    side_effect=lambda: calls.append("release_aux_only"),
+                ),
                 patch(
                     "mvp_pipeline.ensure_aux_before_publish",
                     side_effect=lambda: calls.append("ensure_aux_before_publish"),
-                ),
-                patch(
-                    "mvp_pipeline.release_aux_after_approve_render",
-                    side_effect=lambda: calls.append("release_aux_after_approve_render"),
                 ),
                 patch(
                     "mvp_pipeline.wait_until_notify_send_at",
@@ -232,9 +245,10 @@ class DraftApproveFlowTest(unittest.TestCase):
             [
                 "wait_until_notify_send_at",
                 "gate:content",
+                "release_ollama_only",
                 "ensure_aux_before_publish",
-                "release_aux_after_approve_render",
                 "gate:render",
+                "release_aux_only",
                 "ensure_aux_before_publish",
                 "store.reopen",
                 "run_publish",
@@ -243,6 +257,91 @@ class DraftApproveFlowTest(unittest.TestCase):
                 "store.close",
             ],
         )
+
+    def test_rewrite_keeps_ollama_until_content_stage_ends(self) -> None:
+        calls: list[str] = []
+        build_calls = 0
+
+        class _Store:
+            backend = "memory"
+
+            def filter_new(self, candidates):  # noqa: ANN001
+                return candidates
+
+            def reopen(self) -> None:
+                pass
+
+            def close(self) -> None:
+                pass
+
+        class _Notifier:
+            def __init__(self) -> None:
+                self._content_gates = 0
+
+            def wait_for_gate(self, stage, preview, **kwargs):  # noqa: ANN001
+                from notify.base import GateAction, GateStage
+
+                stage_s = GateStage(stage) if not isinstance(stage, GateStage) else stage
+                if stage_s == GateStage.CONTENT:
+                    self._content_gates += 1
+                    return (
+                        GateAction.REWRITE
+                        if self._content_gates == 1
+                        else GateAction.APPROVE
+                    )
+                if stage_s == GateStage.CLEANUP:
+                    return GateAction.KEEP_FINAL
+                return GateAction.APPROVE
+
+            def send_text(self, text):  # noqa: ANN001
+                calls.append("notifier.send_text")
+
+        briefing = {"title": "draft", "slides": [], "core_summary": []}
+        picked = [{"title": "A", "score": 1, "link": "https://example.com/a"}]
+
+        def _build_briefing(*args, **kwargs):  # noqa: ANN001
+            nonlocal build_calls
+            build_calls += 1
+            return briefing, "llm"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "MVP_MODE": "draft",
+                        "OUTPUT_DIR": tmp,
+                        "CONTENT_RETRY_MAX": "3",
+                        "RENDER_RETRY_MAX": "3",
+                    },
+                    clear=False,
+                ),
+                patch("mvp_pipeline.ensure_runtime_before_llm"),
+                patch("mvp_pipeline.get_notifier", return_value=_Notifier()),
+                patch("mvp_pipeline.resolve_channel", return_value="slack"),
+                patch("mvp_pipeline.SeenUrlsStore", return_value=_Store()),
+                patch(
+                    "mvp_pipeline.fetch_candidates",
+                    return_value=[{"id": "1", "title": "A", "link": "https://example.com/a"}],
+                ),
+                patch("mvp_pipeline.rank_articles", return_value=picked),
+                patch("mvp_pipeline.build_briefing", side_effect=_build_briefing),
+                patch("mvp_pipeline.assemble_blog_html", return_value="<p>x</p>"),
+                patch("mvp_pipeline.render_cards_for_approve", return_value=[]),
+                patch("mvp_pipeline.preview_text", return_value="preview"),
+                patch(
+                    "mvp_pipeline.release_ollama_only",
+                    side_effect=lambda: calls.append("release_ollama_only"),
+                ),
+                patch("mvp_pipeline.release_aux_only"),
+                patch("mvp_pipeline.ensure_aux_before_publish"),
+                patch("mvp_pipeline.wait_until_notify_send_at"),
+                patch("mvp_pipeline.run_publish"),
+            ):
+                self.assertEqual(main(), 0)
+
+        self.assertEqual(build_calls, 2)
+        self.assertEqual(calls.count("release_ollama_only"), 1)
 
 
 if __name__ == "__main__":

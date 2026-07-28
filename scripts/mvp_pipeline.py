@@ -271,12 +271,26 @@ def as_bool_drop(value: Any) -> bool:
     return bool(value)
 
 
+def release_ollama_only() -> None:
+    """Stop managed ollama after content stage (keeps aux untouched)."""
+    if not as_bool_drop(env("OLLAMA_AUTO_CONTAINER", "0")):
+        return
+    _run_draft_lifecycle("draft_release_ollama")
+
+
+def release_aux_only() -> None:
+    """Stop postgres/browserless after render stage."""
+    if not as_bool_drop(env("DRAFT_AUTO_AUX", "0")):
+        return
+    _run_draft_lifecycle("draft_stop_aux_containers")
+
+
 def release_ollama_after_llm() -> None:
-    """Unload model and stop ollama before Discord wait — frees RAM early.
+    """Unload model and stop ollama (+ aux when managed) after LLM work.
 
     Default off so bare `python scripts/mvp_pipeline.py` does not stop a
     manually started container. `run_draft.sh` exports OLLAMA_AUTO_CONTAINER=1.
-    Also stops postgres/browserless when DRAFT_AUTO_AUX=1 (restart before publish).
+    Used by publish/dry_run single-pass flows — not between draft content retries.
     """
     auto_ollama = as_bool_drop(env("OLLAMA_AUTO_CONTAINER", "0"))
     auto_aux = as_bool_drop(env("DRAFT_AUTO_AUX", "0"))
@@ -312,8 +326,8 @@ def ensure_runtime_before_llm(mode: str) -> None:
     if not as_bool_drop(env("DRAFT_AUTO_AUX", "0")):
         os.environ["DRAFT_AUTO_AUX"] = "1"
 
-    print("==> Ollama not reachable — bootstrap draft runtime (same as run_draft.sh)")
-    _run_draft_lifecycle("draft_start_all")
+    print("==> Ollama not reachable — bootstrap LLM runtime (same as run_draft.sh)")
+    _run_draft_lifecycle("draft_start_llm_runtime")
 
 
 def ensure_aux_before_publish() -> None:
@@ -324,10 +338,8 @@ def ensure_aux_before_publish() -> None:
 
 
 def release_aux_after_approve_render() -> None:
-    """Stop managed aux containers while waiting for Approve."""
-    if not as_bool_drop(env("DRAFT_AUTO_AUX", "0")):
-        return
-    _run_draft_lifecycle("draft_release_after_llm")
+    """Deprecated alias — stops aux only (ollama released after content stage)."""
+    release_aux_only()
 
 
 def _run_draft_lifecycle(fn_name: str) -> None:
@@ -1399,37 +1411,34 @@ def produce_content_attempt(
     """Rank (or reuse picks) + build briefing into a new content attempt dir."""
     attempt_dir = draft_store.new_content_attempt()
     ensure_runtime_before_llm("draft")
-    try:
-        if rewrite_picked is not None:
-            picked = list(rewrite_picked)
-            print(f"==> Rewrite briefing for {len(picked)} picked articles")
-        else:
-            pool = (
-                draft_store.exclude_prior_picks(candidates)
-                if exclude_prior
-                else list(candidates)
-            )
-            print(f"==> Ollama importance ranking (pool={len(pool)})")
-            if not pool:
-                raise RuntimeError("no candidates left after excluding prior picks")
-            picked = rank_articles(pool, now, run_dir=attempt_dir)
-        if not picked:
-            raise RuntimeError("no articles after ranking")
-        (attempt_dir / "ranked.json").write_text(
-            json.dumps(_serialize_articles(picked), ensure_ascii=False, indent=2),
-            encoding="utf-8",
+    if rewrite_picked is not None:
+        picked = list(rewrite_picked)
+        print(f"==> Rewrite briefing for {len(picked)} picked articles")
+    else:
+        pool = (
+            draft_store.exclude_prior_picks(candidates)
+            if exclude_prior
+            else list(candidates)
         )
-        print("==> Ollama briefing")
-        briefing, generation_mode = build_briefing(picked, now, run_dir=attempt_dir)
-        briefing["blog_html"] = assemble_blog_html(briefing)
-        (attempt_dir / "briefing.json").write_text(
-            json.dumps(briefing, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        print(f"   title: {briefing.get('title')} generation={generation_mode}")
-        return picked, briefing, generation_mode, attempt_dir
-    finally:
-        release_ollama_after_llm()
+        print(f"==> Ollama importance ranking (pool={len(pool)})")
+        if not pool:
+            raise RuntimeError("no candidates left after excluding prior picks")
+        picked = rank_articles(pool, now, run_dir=attempt_dir)
+    if not picked:
+        raise RuntimeError("no articles after ranking")
+    (attempt_dir / "ranked.json").write_text(
+        json.dumps(_serialize_articles(picked), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    print("==> Ollama briefing")
+    briefing, generation_mode = build_briefing(picked, now, run_dir=attempt_dir)
+    briefing["blog_html"] = assemble_blog_html(briefing)
+    (attempt_dir / "briefing.json").write_text(
+        json.dumps(briefing, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    print(f"   title: {briefing.get('title')} generation={generation_mode}")
+    return picked, briefing, generation_mode, attempt_dir
 
 
 def run_draft_two_stage(
@@ -1456,128 +1465,133 @@ def run_draft_two_stage(
     waited_notify = False
     attempt_dir: Path | None = None
 
-    while True:
-        if next_content in {GateAction.RERANK, GateAction.REWRITE}:
-            if draft_store.manifest.content_remaining <= 0:
-                notifier.send_text(exhausted_message(GateStage.CONTENT))
-                print("Done (content retries exhausted).")
-                return 0
-            left = draft_store.consume_content_retry()
-            notifier.send_text(
-                regenerating_ack(
-                    next_content.value,
-                    left,
-                    draft_store.manifest.content_max,
+    try:
+        while True:
+            if next_content in {GateAction.RERANK, GateAction.REWRITE}:
+                if draft_store.manifest.content_remaining <= 0:
+                    notifier.send_text(exhausted_message(GateStage.CONTENT))
+                    print("Done (content retries exhausted).")
+                    return 0
+                left = draft_store.consume_content_retry()
+                notifier.send_text(
+                    regenerating_ack(
+                        next_content.value,
+                        left,
+                        draft_store.manifest.content_max,
+                    )
                 )
+
+            try:
+                picked, briefing, generation_mode, attempt_dir = produce_content_attempt(
+                    draft_store,
+                    candidates,
+                    now,
+                    rewrite_picked=picked if next_content == GateAction.REWRITE else None,
+                    exclude_prior=next_content == GateAction.RERANK,
+                )
+            except Exception as exc:  # noqa: BLE001
+                notifier.send_text(f"[내용 생성 실패] {exc}")
+                print(f"Done (content produce failed): {exc}")
+                return 1
+
+            preview = preview_text(
+                briefing,
+                picked,
+                generation_mode=generation_mode,
+                include_approve_hints=False,
             )
+            (attempt_dir / "preview.txt").write_text(preview, encoding="utf-8")
 
-        try:
-            picked, briefing, generation_mode, attempt_dir = produce_content_attempt(
-                draft_store,
-                candidates,
-                now,
-                rewrite_picked=picked if next_content == GateAction.REWRITE else None,
-                exclude_prior=next_content == GateAction.RERANK,
+            if not waited_notify:
+                wait_until_notify_send_at()
+                waited_notify = True
+
+            print(
+                f"==> Content gate channel={channel} "
+                f"remaining={draft_store.manifest.content_remaining}/"
+                f"{draft_store.manifest.content_max}"
             )
-        except Exception as exc:  # noqa: BLE001
-            notifier.send_text(f"[내용 생성 실패] {exc}")
-            print(f"Done (content produce failed): {exc}")
-            return 1
-
-        preview = preview_text(
-            briefing,
-            picked,
-            generation_mode=generation_mode,
-            include_approve_hints=False,
-        )
-        (attempt_dir / "preview.txt").write_text(preview, encoding="utf-8")
-
-        if not waited_notify:
-            wait_until_notify_send_at()
-            waited_notify = True
-
-        print(
-            f"==> Content gate channel={channel} "
-            f"remaining={draft_store.manifest.content_remaining}/"
-            f"{draft_store.manifest.content_max}"
-        )
-        action = notifier.wait_for_gate(
-            GateStage.CONTENT,
-            preview,
-            remaining=draft_store.manifest.content_remaining,
-            max_retries=draft_store.manifest.content_max,
-            run_id=run_dir.name,
-            attempt=draft_store.manifest.current_content or "",
-        )
-        draft_store.record_action("content", action.value)
-        if action == GateAction.APPROVE:
-            draft_store.set_selected_content()
-            break
-        if action == GateAction.TIMEOUT:
-            print("Done (content timeout). seen_urls not updated.")
+            action = notifier.wait_for_gate(
+                GateStage.CONTENT,
+                preview,
+                remaining=draft_store.manifest.content_remaining,
+                max_retries=draft_store.manifest.content_max,
+                run_id=run_dir.name,
+                attempt=draft_store.manifest.current_content or "",
+            )
+            draft_store.record_action("content", action.value)
+            if action == GateAction.APPROVE:
+                draft_store.set_selected_content()
+                break
+            if action == GateAction.TIMEOUT:
+                print("Done (content timeout). seen_urls not updated.")
+                return 0
+            if action in {GateAction.RERANK, GateAction.REWRITE}:
+                next_content = action
+                continue
+            print(f"Done (unexpected content action={action}).")
             return 0
-        if action in {GateAction.RERANK, GateAction.REWRITE}:
-            next_content = action
-            continue
-        print(f"Done (unexpected content action={action}).")
-        return 0
+    finally:
+        release_ollama_only()
 
     assert briefing is not None
 
     next_render: GateAction | None = None
     card_pngs: list[Path] = []
-    while True:
-        if next_render == GateAction.RERENDER:
-            if draft_store.manifest.render_remaining <= 0:
-                notifier.send_text(exhausted_message(GateStage.RENDER))
-                print("Done (render retries exhausted).")
-                return 0
-            left = draft_store.consume_render_retry()
-            notifier.send_text(
-                regenerating_ack(
-                    "rerender",
-                    left,
-                    draft_store.manifest.render_max,
+    ensure_aux_before_publish()
+    try:
+        while True:
+            if next_render == GateAction.RERENDER:
+                if draft_store.manifest.render_remaining <= 0:
+                    notifier.send_text(exhausted_message(GateStage.RENDER))
+                    print("Done (render retries exhausted).")
+                    return 0
+                left = draft_store.consume_render_retry()
+                notifier.send_text(
+                    regenerating_ack(
+                        "rerender",
+                        left,
+                        draft_store.manifest.render_max,
+                    )
                 )
+
+            render_dir = draft_store.new_render_attempt()
+            card_pngs = render_cards_for_approve(briefing, render_dir, now)
+
+            preview = preview_text(
+                briefing,
+                picked,
+                generation_mode=generation_mode,
+                has_card_images=bool(card_pngs),
+                include_approve_hints=False,
             )
-
-        ensure_aux_before_publish()
-        render_dir = draft_store.new_render_attempt()
-        card_pngs = render_cards_for_approve(briefing, render_dir, now)
-        release_aux_after_approve_render()
-
-        preview = preview_text(
-            briefing,
-            picked,
-            generation_mode=generation_mode,
-            has_card_images=bool(card_pngs),
-            include_approve_hints=False,
-        )
-        print(
-            f"==> Render gate channel={channel} images={len(card_pngs)} "
-            f"remaining={draft_store.manifest.render_remaining}/"
-            f"{draft_store.manifest.render_max}"
-        )
-        action = notifier.wait_for_gate(
-            GateStage.RENDER,
-            preview,
-            image_paths=card_pngs,
-            remaining=draft_store.manifest.render_remaining,
-            max_retries=draft_store.manifest.render_max,
-            run_id=run_dir.name,
-            attempt=draft_store.manifest.current_render or "",
-        )
-        draft_store.record_action("render", action.value)
-        if action == GateAction.APPROVE:
-            break
-        if action == GateAction.TIMEOUT:
-            print("Done (render timeout). seen_urls not updated.")
+            print(
+                f"==> Render gate channel={channel} images={len(card_pngs)} "
+                f"remaining={draft_store.manifest.render_remaining}/"
+                f"{draft_store.manifest.render_max}"
+            )
+            action = notifier.wait_for_gate(
+                GateStage.RENDER,
+                preview,
+                image_paths=card_pngs,
+                remaining=draft_store.manifest.render_remaining,
+                max_retries=draft_store.manifest.render_max,
+                run_id=run_dir.name,
+                attempt=draft_store.manifest.current_render or "",
+            )
+            draft_store.record_action("render", action.value)
+            if action == GateAction.APPROVE:
+                break
+            if action == GateAction.TIMEOUT:
+                print("Done (render timeout). seen_urls not updated.")
+                return 0
+            if action == GateAction.RERENDER:
+                next_render = GateAction.RERENDER
+                continue
+            print(f"Done (unexpected render action={action}).")
             return 0
-        if action == GateAction.RERENDER:
-            next_render = GateAction.RERENDER
-            continue
-        print(f"Done (unexpected render action={action}).")
-        return 0
+    finally:
+        release_aux_only()
 
     ensure_aux_before_publish()
     store.reopen()

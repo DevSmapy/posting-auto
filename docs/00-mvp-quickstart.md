@@ -159,11 +159,11 @@ cron은 `.zshrc`를 읽지 않으므로 `scripts/cron_run_draft.sh`가 PATH에 d
 
 `./scripts/run_draft.sh` 수명주기:
 
-1. `postgres` (+ `browserless` if `PUBLISH_CARDS`) · `ollama` **start** (필요 시 `OLLAMA_LOAD_TIMEOUT` 반영 재생성) → 모델 warm (**스토리와 동일 `num_ctx`/`num_thread`**, 기본 600초; 실패해도 draft 계속)
-2. 랭킹·스토리 건당 LLM
-3. **ollama + aux stop** (Discord 발송/Approve 대기 전 — 메모리 반환)
-4. Discord Approve 대기 → Approve 시 aux 재기동 → `briefing.md`
-5. 종료 시 남은 컨테이너 **stop** (`OLLAMA_AUTO_CONTAINER`/`DRAFT_AUTO_AUX`는 run_draft가 1로 켬)
+1. `ollama` **start** → 모델 warm (**스토리와 동일 `num_ctx`/`num_thread`**, 기본 600초; 실패해도 draft 계속)
+2. 랭킹·스토리 건당 LLM (① 내용 게이트 동안 Rerank/Rewrite 시 **ollama 유지** — 재 warm 없음)
+3. 내용 **Approve** 후 **ollama stop** (Discord ② 렌더 게이트 대기 전 — 메모리 반환)
+4. `postgres` (+ `browserless` if `PUBLISH_CARDS`) **start** → 카드 렌더 (Re-render 시 aux 유지)
+5. 렌더 단계 종료 후 aux **stop** → publish → 종료 시 남은 컨테이너 **stop** (`OLLAMA_AUTO_CONTAINER`/`DRAFT_AUTO_AUX`는 run_draft가 1로 켬)
 
 Docker Desktop은 켜 두세요. 포스팅 목표 시각(예: 08:00)은 수동 붙여넣기 기준이며 코드로 강제하지 않습니다.
 
