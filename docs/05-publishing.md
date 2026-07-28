@@ -143,4 +143,19 @@ PNG 백엔드: Browserless(`BROWSERLESS_URL` + `BROWSERLESS_TOKEN`, 기본 경�
 `PUBLISH_CARDS=1`일 때만 Approve 후 카드 렌더·R2·인스타를 시도합니다. 기본은 `0`(마크다운만).  
 R2/IG가 없어도 로컬 `run_dir/cards/`에 HTML·PNG·캡션은 남습니다.
 
+발행(호스팅·Graph) 로직은 [`scripts/publish/`](../scripts/publish/)에 있습니다.
+
+| 모듈 | 역할 |
+|------|------|
+| `PublishConfig` | `PUBLISH_CARDS`, R2_*, IG_*, Meta Graph 버전 |
+| `R2Uploader` | PNG → Cloudflare R2 공개 HTTPS URL |
+| `InstagramCarouselPublisher` | children → CAROUSEL → status poll → `media_publish` |
+| `PublishCardsPipeline` | Approve 후 R2 + 인스타 오케스트레이션 |
+
+논리 테스트(실제 Meta/R2 호출 없음):
+
+```bash
+python -m unittest tests.test_instagram_publish -v
+```
+
 다음: [06. 설치·설정](06-setup.md)

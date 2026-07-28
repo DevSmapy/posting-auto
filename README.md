@@ -71,7 +71,9 @@ MVP_MODE=dry_run python scripts/mvp_pipeline.py
 ├── templates/cards/
 ├── scripts/
 │   ├── smoke_ollama.sh
-│   └── mvp_pipeline.py      # MVP 실행 진입점
+│   ├── mvp_pipeline.py      # MVP 실행 진입점
+│   ├── cards/               # 카드·인스타 본문 조립
+│   └── publish/             # R2 업로드 · Instagram Graph 캐러셀
 ├── workflows/
 └── init/01_seen_urls.sql
 ```

@@ -39,6 +39,12 @@ from cards import (  # noqa: E402
     Slide,
 )
 from notify import get_notifier, resolve_channel  # noqa: E402
+from publish import (  # noqa: E402
+    InstagramCarouselPublisher,
+    PublishCardsPipeline,
+    PublishConfig,
+    R2Uploader,
+)
 from seen_urls import SeenUrlsStore  # noqa: E402
 
 TZ = ZoneInfo(os.getenv("NEWS_TIMEZONE", "Asia/Seoul"))
@@ -1043,94 +1049,15 @@ def render_cards(
 
 
 def upload_r2(paths: list[Path], prefix: str) -> list[str]:
-    try:
-        import boto3
-    except ImportError as exc:
-        raise RuntimeError("boto3 required for R2 upload") from exc
-
-    endpoint = env("R2_ENDPOINT")
-    key_id = env("R2_ACCESS_KEY_ID")
-    secret = env("R2_SECRET_ACCESS_KEY")
-    bucket = env("R2_BUCKET")
-    public_base = env("R2_PUBLIC_BASE_URL").rstrip("/")
-    if not all([endpoint, key_id, secret, bucket, public_base]):
-        raise RuntimeError("R2_* env vars incomplete")
-
-    client = boto3.client(
-        "s3",
-        endpoint_url=endpoint,
-        aws_access_key_id=key_id,
-        aws_secret_access_key=secret,
-        region_name="auto",
-    )
-    urls: list[str] = []
-    for path in paths:
-        key = f"{prefix}/{path.name}"
-        client.upload_file(
-            str(path),
-            bucket,
-            key,
-            ExtraArgs={"ContentType": "image/png"},
-        )
-        urls.append(f"{public_base}/{key}")
-    return urls
+    """Upload PNGs to R2; thin wrapper over ``publish.R2Uploader``."""
+    return R2Uploader(PublishConfig.from_env()).upload(paths, prefix)
 
 
 def instagram_carousel(image_urls: list[str], caption: str) -> str:
-    ig_user = env("IG_USER_ID")
-    token = env("META_ACCESS_TOKEN")
-    version = env("META_GRAPH_VERSION", "v21.0")
-    if not ig_user or not token:
-        raise RuntimeError("IG_USER_ID / META_ACCESS_TOKEN required")
-    base = f"https://graph.facebook.com/{version}"
-    children: list[str] = []
-    for url in image_urls:
-        r = requests.post(
-            f"{base}/{ig_user}/media",
-            data={
-                "image_url": url,
-                "is_carousel_item": "true",
-                "access_token": token,
-            },
-            timeout=60,
-        )
-        r.raise_for_status()
-        children.append(r.json()["id"])
-
-    parent = requests.post(
-        f"{base}/{ig_user}/media",
-        data={
-            "media_type": "CAROUSEL",
-            "children": ",".join(children),
-            "caption": caption[:2100],
-            "access_token": token,
-        },
-        timeout=60,
+    """Publish Instagram carousel; thin wrapper over ``publish`` package."""
+    return InstagramCarouselPublisher(PublishConfig.from_env()).publish(
+        image_urls, caption
     )
-    parent.raise_for_status()
-    creation_id = parent.json()["id"]
-
-    for _ in range(20):
-        st = requests.get(
-            f"{base}/{creation_id}",
-            params={"fields": "status_code", "access_token": token},
-            timeout=30,
-        )
-        st.raise_for_status()
-        code = st.json().get("status_code")
-        if code == "FINISHED":
-            break
-        if code == "ERROR":
-            raise RuntimeError(f"IG container error: {st.json()}")
-        time.sleep(3)
-
-    pub = requests.post(
-        f"{base}/{ig_user}/media_publish",
-        data={"creation_id": creation_id, "access_token": token},
-        timeout=60,
-    )
-    pub.raise_for_status()
-    return pub.json().get("id", creation_id)
 
 
 def preview_text(
@@ -1191,7 +1118,8 @@ def run_publish(
     print(f"   wrote {md_path}")
 
     ig_media_id: str | None = None
-    if env("PUBLISH_CARDS", "0").lower() in {"1", "true", "yes"}:
+    publish_cfg = PublishConfig.from_env()
+    if publish_cfg.publish_cards:
         print("==> Render cards (HTML/PNG + Instagram caption)")
         cards_dir = run_dir / "cards"
         cards_dir.mkdir(exist_ok=True)
@@ -1201,34 +1129,16 @@ def run_publish(
             print(f"   !! card render skipped: {exc}")
             paths = []
 
-        image_urls: list[str] = []
-        if paths and env("R2_ACCESS_KEY_ID"):
-            print("==> Upload R2")
-            prefix = f"briefs/{now.strftime('%Y-%m-%d')}"
-            image_urls = upload_r2(paths, prefix)
-            (run_dir / "image_urls.json").write_text(
-                json.dumps(image_urls, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-        elif not env("R2_ACCESS_KEY_ID"):
-            print("R2 not configured — skip Instagram (local cards kept)")
-
-        if image_urls and env("IG_USER_ID") and env("META_ACCESS_TOKEN"):
-            ig_caption = (
-                briefing.get("instagram_post")
-                or "\n\n".join(
-                    p
-                    for p in (
-                        briefing.get("caption") or "",
-                        " ".join(
-                            f"#{t.lstrip('#')}" for t in (briefing.get("hashtags") or [])
-                        ),
-                    )
-                    if p
-                )
-            ).strip()
-            print("==> Instagram carousel")
-            ig_media_id = instagram_carousel(image_urls, ig_caption)
-            print(f"   ig media id: {ig_media_id}")
+        result = PublishCardsPipeline(
+            publish_cfg,
+            log=lambda msg: print(f"==> {msg}"),
+        ).run(
+            png_paths=paths,
+            briefing=briefing,
+            r2_prefix=f"briefs/{now.strftime('%Y-%m-%d')}",
+            run_dir=run_dir,
+        )
+        ig_media_id = result.ig_media_id
 
     mode_label = _generation_mode_label(generation_mode)
     caption = (

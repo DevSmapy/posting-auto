@@ -11,13 +11,13 @@
 | 4 | MVP 파이프라인 (RSS→중요도→브리핑) | `MVP_MODE=dry_run python scripts/mvp_pipeline.py` |
 | 5 | Notify draft → 마크다운 export | Discord/Telegram Approve 후 `briefing.md` |
 | 5b | (다음) Slack Approve 어댑터 | `NOTIFY_CHANNEL=slack` |
-| 6 | Browserless + R2 카드 렌더 | `PUBLISH_CARDS=1` 시 PNG·URL |
-| 7 | 인스타 캐러셀 | Meta 토큰 후 게시 |
+| 6 | Browserless + R2 카드 렌더 | `PUBLISH_CARDS=1` 시 PNG·URL (`scripts/publish.R2Uploader`) |
+| 7 | 인스타 캐러셀 | Meta 토큰 후 게시 (`scripts/publish.InstagramCarouselPublisher`) |
 | 8 | `seen_urls` + n8n 네이티브 노드화 | **Postgres `seen_urls` 파이프라인 연동됨** / n8n UI는 후속 |
 | 9 | (선택) 장후 16:30 마감 브리핑 | 워크플로 복제 |
 | 10 | (Phase 2) 네이버 섹션·조회수 랭킹 | 포털면 정렬이 필요할 때 |
 
-**코드로 준비된 단계:** 0–5, 8의 `seen_urls` (카드/인스타는 옵션).
+**코드로 준비된 단계:** 0–5, 6–7의 publish 모듈·논리 테스트, 8의 `seen_urls` (실 Meta/R2 연동은 자격 증명 후).
 
 ## MVP 성공 기준
 

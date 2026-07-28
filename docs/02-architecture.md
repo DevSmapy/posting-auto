@@ -38,7 +38,8 @@
 | Postgres | Docker | n8n 메타 + `seen_urls` |
 | Browserless | Docker | 카드 HTML → 1080×1080 PNG |
 | Ollama | **Docker Compose** (`ollama` 서비스) | 중요도·브리핑 |
-| Cloudflare R2 | 클라우드 | 인스타용 공개 이미지 URL |
+| Cloudflare R2 | 클라우드 | 인스타용 공개 이미지 URL (`scripts/publish`) |
+| Instagram Graph | 클라우드 | 캐러셀 게시 (`scripts/publish`) |
 
 같은 Compose 네트워크에서 n8n → `http://ollama:11434` 로 호출합니다.  
 호스트에서 `scripts/mvp_pipeline.py`를 돌릴 때는 포트 포워드된 `http://127.0.0.1:11434` (`OLLAMA_HOST_URL`)를 씁니다.
