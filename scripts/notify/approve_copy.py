@@ -174,6 +174,14 @@ def regenerating_ack(action: str, remaining: int, max_retries: int) -> str:
     )
 
 
+def empty_rerank_pool_message() -> str:
+    return (
+        "🔀 Rerank 불가: 이번 창에서 아직 쓰지 않은 후보 기사가 없습니다.\n"
+        "재시도 횟수는 차감되지 않았습니다.\n"
+        "✍️ Rewrite(같은 기사 다시쓰기) 또는 ✅ Approve를 선택해 주세요."
+    )
+
+
 def render_stage_start_ack(*, run_id: str = "", content_attempt: str = "") -> str:
     """Sent right after content Approve, before card render + render gate."""
     parts = ["✅ **① 내용 확정** 완료."]

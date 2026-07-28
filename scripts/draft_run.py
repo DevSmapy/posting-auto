@@ -165,10 +165,26 @@ class DraftRunStore:
         self.save()
         return self.manifest.content_remaining
 
+    def restore_content_retry(self) -> int:
+        """Undo a content retry consume (e.g. regenerate failed before a new attempt)."""
+        if self.manifest.content_remaining >= self.manifest.content_max:
+            return self.manifest.content_remaining
+        self.manifest.content_remaining += 1
+        self.save()
+        return self.manifest.content_remaining
+
     def consume_render_retry(self) -> int:
         if self.manifest.render_remaining <= 0:
             return 0
         self.manifest.render_remaining -= 1
+        self.save()
+        return self.manifest.render_remaining
+
+    def restore_render_retry(self) -> int:
+        """Undo a render retry consume (e.g. re-render failed before a new attempt)."""
+        if self.manifest.render_remaining >= self.manifest.render_max:
+            return self.manifest.render_remaining
+        self.manifest.render_remaining += 1
         self.save()
         return self.manifest.render_remaining
 

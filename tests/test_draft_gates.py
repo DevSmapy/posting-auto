@@ -15,6 +15,7 @@ from draft_run import DraftRunStore  # noqa: E402
 from notify.approve_copy import (  # noqa: E402
     KEEP_FINAL_WARNING,
     cleanup_prompt,
+    empty_rerank_pool_message,
     exhausted_message,
     remaining_line,
     render_stage_start_ack,
@@ -49,6 +50,16 @@ class DraftRunStoreTest(unittest.TestCase):
             self.assertEqual([c["link"] for c in filtered], ["https://c.example"])
             self.assertEqual(store.manifest.selected_content, "content-02")
             self.assertTrue(store.manifest_path.is_file())
+
+    def test_restore_content_retry_undoes_consume(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = DraftRunStore(Path(tmp) / "run-retry", content_max=3, render_max=2)
+            store.init_layout()
+            self.assertEqual(store.consume_content_retry(), 2)
+            self.assertEqual(store.restore_content_retry(), 3)
+            self.assertEqual(store.manifest.content_remaining, 3)
+            self.assertEqual(store.consume_render_retry(), 1)
+            self.assertEqual(store.restore_render_retry(), 2)
 
     def test_cleanup_keep_final_deletes_siblings_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -86,6 +97,11 @@ class GateCopyTest(unittest.TestCase):
         self.assertIn("① 내용 확정", text)
         self.assertIn("② 이미지 생성", text)
         self.assertIn("content-01", text)
+
+    def test_empty_rerank_pool_message(self) -> None:
+        text = empty_rerank_pool_message()
+        self.assertIn("Rerank 불가", text)
+        self.assertIn("차감되지 않았습니다", text)
 
     def test_cleanup_warning(self) -> None:
         text = cleanup_prompt(

@@ -37,7 +37,7 @@
 | 선택 | 동작 |
 |------|------|
 | Approve (렌더) | `briefing.md` 저장 (+ 채널에 md 첨부) → `PUBLISH_CARDS=1`이면 R2/인스타 (렌더 게이트 PNG 재사용) → `seen_urls` → cleanup ask |
-| Rerank / Rewrite / Re-render | 해당 단계 재생성 (남은 기회 차감). attempt는 cleanup 전까지 유지 |
+| Rerank / Rewrite / Re-render | 해당 단계 재생성 (성공한 재생성만 남은 기회 차감). 후보 소진·생성 실패 시 차감 없음. attempt는 cleanup 전까지 유지 |
 | 타임아웃 / 횟수 소진 | 중단. `seen_urls` 미기록. 스크립트 재실행 안내 |
 
 마크다운 저장 성공 시 `seen_urls`에 insert합니다. 인스타만 실패해도 마크다운·`seen_urls`는 유지하고 단계 알림을 보냅니다.

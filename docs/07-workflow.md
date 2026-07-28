@@ -40,6 +40,7 @@ n8n UI 네이티브 워크플로(`workflows/econ-briefing-daily.json`)는 **후�
 | 12 | Notify | 결과 / 단계 실패·부분스킵 알림 |
 
 Rerank는 이번 run의 이전 content attempt URL을 제외한 뒤 재랭킹한다. Rewrite는 같은 `picked`로 스토리만 재생성한다.  
+남은 후보가 없으면 Rerank는 차감 없이 내용 게이트를 다시 띄운다. 재생성 도중 실패하면 차감분도 복구한다.  
 재시도 소진·게이트 타임아웃 시 `seen_urls` 없이 중단하고 스크립트 재실행을 안내한다 (run-dir resume은 후속).
 
 ## `seen_urls`

@@ -344,6 +344,167 @@ class DraftApproveFlowTest(unittest.TestCase):
         self.assertEqual(build_calls, 2)
         self.assertEqual(calls.count("release_ollama_only"), 1)
 
+    def test_empty_rerank_pool_does_not_consume_retry(self) -> None:
+        texts: list[str] = []
+        remaining_seen: list[int] = []
+
+        class _Store:
+            backend = "memory"
+
+            def filter_new(self, candidates):  # noqa: ANN001
+                return candidates
+
+            def reopen(self) -> None:
+                pass
+
+            def close(self) -> None:
+                pass
+
+        class _Notifier:
+            def __init__(self) -> None:
+                self._content_gates = 0
+
+            def wait_for_gate(self, stage, preview, **kwargs):  # noqa: ANN001
+                from notify.base import GateAction, GateStage
+
+                stage_s = GateStage(stage) if not isinstance(stage, GateStage) else stage
+                if stage_s == GateStage.CONTENT:
+                    remaining_seen.append(int(kwargs.get("remaining", -1)))
+                    self._content_gates += 1
+                    # First: Rerank (pool empty). Second re-prompt: Approve.
+                    return (
+                        GateAction.RERANK
+                        if self._content_gates == 1
+                        else GateAction.APPROVE
+                    )
+                if stage_s == GateStage.CLEANUP:
+                    return GateAction.KEEP_FINAL
+                return GateAction.APPROVE
+
+            def send_text(self, text):  # noqa: ANN001
+                texts.append(str(text))
+
+        briefing = {"title": "draft", "slides": [], "core_summary": []}
+        picked = [{"title": "A", "score": 1, "link": "https://example.com/a"}]
+        candidates = [{"id": "1", "title": "A", "link": "https://example.com/a"}]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "MVP_MODE": "draft",
+                        "OUTPUT_DIR": tmp,
+                        "CONTENT_RETRY_MAX": "3",
+                        "RENDER_RETRY_MAX": "3",
+                    },
+                    clear=False,
+                ),
+                patch("mvp_pipeline.ensure_runtime_before_llm"),
+                patch("mvp_pipeline.get_notifier", return_value=_Notifier()),
+                patch("mvp_pipeline.resolve_channel", return_value="slack"),
+                patch("mvp_pipeline.SeenUrlsStore", return_value=_Store()),
+                patch("mvp_pipeline.fetch_candidates", return_value=candidates),
+                patch("mvp_pipeline.rank_articles", return_value=picked),
+                patch("mvp_pipeline.build_briefing", return_value=(briefing, "llm")),
+                patch("mvp_pipeline.assemble_blog_html", return_value="<p>x</p>"),
+                patch("mvp_pipeline.render_cards_for_approve", return_value=[]),
+                patch("mvp_pipeline.preview_text", return_value="preview"),
+                patch("mvp_pipeline.release_ollama_only"),
+                patch("mvp_pipeline.release_aux_only"),
+                patch("mvp_pipeline.ensure_aux_before_publish"),
+                patch("mvp_pipeline.wait_until_notify_send_at"),
+                patch("mvp_pipeline.run_publish"),
+            ):
+                self.assertEqual(main(), 0)
+
+        self.assertTrue(any("Rerank 불가" in t for t in texts))
+        # Both content gates should still show remaining=3 (never consumed).
+        self.assertEqual(remaining_seen, [3, 3])
+
+    def test_rerank_produce_failure_restores_retry(self) -> None:
+        texts: list[str] = []
+        restores: list[int] = []
+
+        class _Store:
+            backend = "memory"
+
+            def filter_new(self, candidates):  # noqa: ANN001
+                return candidates
+
+            def reopen(self) -> None:
+                pass
+
+            def close(self) -> None:
+                pass
+
+        class _Notifier:
+            def wait_for_gate(self, stage, preview, **kwargs):  # noqa: ANN001
+                from notify.base import GateAction, GateStage
+
+                stage_s = GateStage(stage) if not isinstance(stage, GateStage) else stage
+                if stage_s == GateStage.CONTENT:
+                    return GateAction.RERANK
+                return GateAction.APPROVE
+
+            def send_text(self, text):  # noqa: ANN001
+                texts.append(str(text))
+
+        briefing = {"title": "draft", "slides": [], "core_summary": []}
+        picked = [{"title": "A", "score": 1, "link": "https://example.com/a"}]
+        candidates = [
+            {"id": "1", "title": "A", "link": "https://example.com/a"},
+            {"id": "2", "title": "B", "link": "https://example.com/b"},
+        ]
+        build_calls = 0
+
+        def _build(*args, **kwargs):  # noqa: ANN001
+            nonlocal build_calls
+            build_calls += 1
+            if build_calls == 1:
+                return briefing, "llm"
+            raise RuntimeError("ollama down")
+
+        from draft_run import DraftRunStore
+
+        real_restore = DraftRunStore.restore_content_retry
+
+        def _restore(self):  # noqa: ANN001
+            out = real_restore(self)
+            restores.append(out)
+            return out
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "MVP_MODE": "draft",
+                        "OUTPUT_DIR": tmp,
+                        "CONTENT_RETRY_MAX": "3",
+                        "RENDER_RETRY_MAX": "3",
+                    },
+                    clear=False,
+                ),
+                patch("mvp_pipeline.ensure_runtime_before_llm"),
+                patch("mvp_pipeline.get_notifier", return_value=_Notifier()),
+                patch("mvp_pipeline.resolve_channel", return_value="slack"),
+                patch("mvp_pipeline.SeenUrlsStore", return_value=_Store()),
+                patch("mvp_pipeline.fetch_candidates", return_value=candidates),
+                patch("mvp_pipeline.rank_articles", return_value=picked),
+                patch("mvp_pipeline.build_briefing", side_effect=_build),
+                patch("mvp_pipeline.assemble_blog_html", return_value="<p>x</p>"),
+                patch("mvp_pipeline.preview_text", return_value="preview"),
+                patch("mvp_pipeline.release_ollama_only"),
+                patch("mvp_pipeline.wait_until_notify_send_at"),
+                patch.object(DraftRunStore, "restore_content_retry", _restore),
+            ):
+                self.assertEqual(main(), 1)
+
+        self.assertTrue(any("복구되었습니다" in t for t in texts))
+        self.assertEqual(restores, [3])
+        self.assertEqual(build_calls, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

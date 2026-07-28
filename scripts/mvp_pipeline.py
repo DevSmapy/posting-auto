@@ -42,6 +42,7 @@ from notify import GateAction, GateStage, get_notifier, resolve_channel  # noqa:
 from notify.approve_copy import (  # noqa: E402
     cleanup_prompt,
     cleanup_timeout_notice,
+    empty_rerank_pool_message,
     exhausted_message,
     regenerating_ack,
     render_stage_start_ack,
@@ -1473,6 +1474,51 @@ def run_draft_two_stage(
                     notifier.send_text(exhausted_message(GateStage.CONTENT))
                     print("Done (content retries exhausted).")
                     return 0
+                if next_content == GateAction.RERANK:
+                    pool = draft_store.exclude_prior_picks(candidates)
+                    if not pool:
+                        notifier.send_text(empty_rerank_pool_message())
+                        print("Rerank skipped — no unused candidates left.")
+                        next_content = None
+                        if attempt_dir is None or briefing is None:
+                            return 1
+                        # Re-show content gate with the previous attempt (no retry consume).
+                        preview = preview_text(
+                            briefing,
+                            picked,
+                            generation_mode=generation_mode,
+                            include_approve_hints=False,
+                        )
+                        print(
+                            f"==> Content gate channel={channel} "
+                            f"remaining={draft_store.manifest.content_remaining}/"
+                            f"{draft_store.manifest.content_max}"
+                        )
+                        action = notifier.wait_for_gate(
+                            GateStage.CONTENT,
+                            preview,
+                            remaining=draft_store.manifest.content_remaining,
+                            max_retries=draft_store.manifest.content_max,
+                            run_id=run_dir.name,
+                            attempt=draft_store.manifest.current_content or "",
+                        )
+                        draft_store.record_action(
+                            "content",
+                            action.value,
+                            skip_reason="empty_rerank_pool",
+                        )
+                        if action == GateAction.APPROVE:
+                            draft_store.set_selected_content()
+                            break
+                        if action == GateAction.TIMEOUT:
+                            print("Done (content timeout). seen_urls not updated.")
+                            return 0
+                        if action in {GateAction.RERANK, GateAction.REWRITE}:
+                            next_content = action
+                            continue
+                        print(f"Done (unexpected content action={action}).")
+                        return 0
+
                 left = draft_store.consume_content_retry()
                 notifier.send_text(
                     regenerating_ack(
@@ -1481,19 +1527,38 @@ def run_draft_two_stage(
                         draft_store.manifest.content_max,
                     )
                 )
-
-            try:
-                picked, briefing, generation_mode, attempt_dir = produce_content_attempt(
-                    draft_store,
-                    candidates,
-                    now,
-                    rewrite_picked=picked if next_content == GateAction.REWRITE else None,
-                    exclude_prior=next_content == GateAction.RERANK,
-                )
-            except Exception as exc:  # noqa: BLE001
-                notifier.send_text(f"[내용 생성 실패] {exc}")
-                print(f"Done (content produce failed): {exc}")
-                return 1
+                try:
+                    picked, briefing, generation_mode, attempt_dir = (
+                        produce_content_attempt(
+                            draft_store,
+                            candidates,
+                            now,
+                            rewrite_picked=(
+                                picked if next_content == GateAction.REWRITE else None
+                            ),
+                            exclude_prior=next_content == GateAction.RERANK,
+                        )
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    draft_store.restore_content_retry()
+                    notifier.send_text(
+                        f"[내용 생성 실패] {exc}\n재시도 횟수는 복구되었습니다."
+                    )
+                    print(f"Done (content produce failed): {exc}")
+                    return 1
+            else:
+                try:
+                    picked, briefing, generation_mode, attempt_dir = (
+                        produce_content_attempt(
+                            draft_store,
+                            candidates,
+                            now,
+                        )
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    notifier.send_text(f"[내용 생성 실패] {exc}")
+                    print(f"Done (content produce failed): {exc}")
+                    return 1
 
             preview = preview_text(
                 briefing,
@@ -1562,9 +1627,19 @@ def run_draft_two_stage(
                         draft_store.manifest.render_max,
                     )
                 )
-
-            render_dir = draft_store.new_render_attempt()
-            card_pngs = render_cards_for_approve(briefing, render_dir, now)
+                try:
+                    render_dir = draft_store.new_render_attempt()
+                    card_pngs = render_cards_for_approve(briefing, render_dir, now)
+                except Exception as exc:  # noqa: BLE001
+                    draft_store.restore_render_retry()
+                    notifier.send_text(
+                        f"[이미지 생성 실패] {exc}\n재시도 횟수는 복구되었습니다."
+                    )
+                    print(f"Done (render produce failed): {exc}")
+                    return 1
+            else:
+                render_dir = draft_store.new_render_attempt()
+                card_pngs = render_cards_for_approve(briefing, render_dir, now)
 
             preview = preview_text(
                 briefing,
