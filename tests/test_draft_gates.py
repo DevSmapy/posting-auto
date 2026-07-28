@@ -17,6 +17,7 @@ from notify.approve_copy import (  # noqa: E402
     cleanup_prompt,
     exhausted_message,
     remaining_line,
+    render_stage_start_ack,
 )
 from notify.auto import AutoNotifier  # noqa: E402
 from notify.base import GateAction, GateStage  # noqa: E402
@@ -76,6 +77,15 @@ class GateCopyTest(unittest.TestCase):
         self.assertIn("2️⃣", remaining_line(GateStage.CONTENT, 2, 3))
         self.assertIn("내용 재생성", exhausted_message(GateStage.CONTENT))
         self.assertIn("run_draft.sh", exhausted_message(GateStage.RENDER))
+
+    def test_render_stage_start_ack(self) -> None:
+        text = render_stage_start_ack(
+            run_id="20260728_070000",
+            content_attempt="content-01",
+        )
+        self.assertIn("① 내용 확정", text)
+        self.assertIn("② 이미지 생성", text)
+        self.assertIn("content-01", text)
 
     def test_cleanup_warning(self) -> None:
         text = cleanup_prompt(

@@ -246,6 +246,7 @@ class DraftApproveFlowTest(unittest.TestCase):
                 "wait_until_notify_send_at",
                 "gate:content",
                 "release_ollama_only",
+                "notifier.send_text",
                 "ensure_aux_before_publish",
                 "gate:render",
                 "release_aux_only",

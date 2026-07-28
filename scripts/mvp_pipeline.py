@@ -44,6 +44,7 @@ from notify.approve_copy import (  # noqa: E402
     cleanup_timeout_notice,
     exhausted_message,
     regenerating_ack,
+    render_stage_start_ack,
 )
 from draft_run import DraftRunStore  # noqa: E402
 from publish import (  # noqa: E402
@@ -1535,6 +1536,13 @@ def run_draft_two_stage(
         release_ollama_only()
 
     assert briefing is not None
+
+    notifier.send_text(
+        render_stage_start_ack(
+            run_id=run_dir.name,
+            content_attempt=draft_store.manifest.selected_content or "",
+        )
+    )
 
     next_render: GateAction | None = None
     card_pngs: list[Path] = []

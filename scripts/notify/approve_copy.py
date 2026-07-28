@@ -174,6 +174,20 @@ def regenerating_ack(action: str, remaining: int, max_retries: int) -> str:
     )
 
 
+def render_stage_start_ack(*, run_id: str = "", content_attempt: str = "") -> str:
+    """Sent right after content Approve, before card render + render gate."""
+    parts = ["✅ **① 내용 확정** 완료."]
+    meta: list[str] = []
+    if run_id:
+        meta.append(f"`{run_id}`")
+    if content_attempt:
+        meta.append(content_attempt)
+    if meta:
+        parts.append(" · ".join(meta))
+    parts.append("**② 이미지 생성**을 시작합니다. 잠시만 기다려 주세요.")
+    return "\n".join(parts)
+
+
 KEEP_FINAL_WARNING = (
     "⚠️ 확정본만 유지하면, 선택되지 않은 앞선 리서치 결과물·렌더는 모두 삭제됩니다. "
     "(복구 불가)"
