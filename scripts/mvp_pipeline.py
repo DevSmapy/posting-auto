@@ -974,6 +974,25 @@ def summarize_story_fact_llm(article: dict[str, Any], now: datetime) -> tuple[di
     return parsed, raw
 
 
+def _story_llm_call(
+    *,
+    system_prompt: str,
+    user_prompt: str,
+    article: dict[str, Any],
+    error_label: str,
+) -> tuple[dict[str, Any], str]:
+    """Shared Ollama JSON call + story field normalization for translate/polish."""
+    parsed, raw = ollama_chat(
+        system_prompt,
+        user_prompt,
+        timeout_ms=story_timeout_ms(),
+    )
+    try:
+        return normalize_story_fields(parsed, article), raw
+    except RuntimeError:
+        raise RuntimeError(f"bad {error_label} JSON: {raw[:500]}") from None
+
+
 def translate_story_fact_llm(
     fact: dict[str, Any],
     article: dict[str, Any],
@@ -987,15 +1006,12 @@ def translate_story_fact_llm(
         .replace("{{target_locale}}", target_locale())
         .replace("{{fact_json}}", json.dumps(fact, ensure_ascii=False, indent=2))
     )
-    parsed, raw = ollama_chat(
-        read_prompt("story_translate_system.md"),
-        user,
-        timeout_ms=story_timeout_ms(),
+    return _story_llm_call(
+        system_prompt=read_prompt("story_translate_system.md"),
+        user_prompt=user,
+        article=article,
+        error_label="translated story",
     )
-    try:
-        return normalize_story_fields(parsed, article), raw
-    except RuntimeError:
-        raise RuntimeError(f"bad translated story JSON: {raw[:500]}") from None
 
 
 def polish_story_llm(
@@ -1004,7 +1020,7 @@ def polish_story_llm(
     article: dict[str, Any],
     now: datetime,
 ) -> tuple[dict[str, Any], str]:
-    """Repair only language/style issues while preserving facts."""
+    """Repair language/style/length issues while preserving facts."""
     user = (
         read_prompt("story_polish_user.md")
         .replace("{{date}}", now.strftime("%Y-%m-%d"))
@@ -1013,15 +1029,12 @@ def polish_story_llm(
         .replace("{{issues}}", issues_summary(issues))
         .replace("{{story_json}}", json.dumps(story, ensure_ascii=False, indent=2))
     )
-    parsed, raw = ollama_chat(
-        read_prompt("story_polish_system.md"),
-        user,
-        timeout_ms=story_timeout_ms(),
+    return _story_llm_call(
+        system_prompt=read_prompt("story_polish_system.md"),
+        user_prompt=user,
+        article=article,
+        error_label="polished story",
     )
-    try:
-        return normalize_story_fields(parsed, article), raw
-    except RuntimeError:
-        raise RuntimeError(f"bad polished story JSON: {raw[:500]}") from None
 
 
 def _with_story_source(story: dict[str, Any], article: dict[str, Any]) -> dict[str, Any]:
@@ -1031,36 +1044,47 @@ def _with_story_source(story: dict[str, Any], article: dict[str, Any]) -> dict[s
     return out
 
 
+def _attach_story_debug(exc: BaseException, debug: dict[str, Any]) -> None:
+    try:
+        setattr(exc, "story_debug", debug)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def summarize_story_layers(
     article: dict[str, Any],
     now: datetime,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """One article -> fact -> translate -> validate/repair -> final story."""
     debug: dict[str, Any] = {"id": article.get("id"), "target_language": target_language()}
-    fact, fact_raw = summarize_story_fact_llm(article, now)
-    debug["fact"] = {"parsed": fact, "raw": fact_raw}
+    try:
+        fact, fact_raw = summarize_story_fact_llm(article, now)
+        debug["fact"] = {"parsed": fact, "raw": fact_raw}
 
-    translated, translated_raw = translate_story_fact_llm(fact, article, now)
-    debug["translated"] = {"parsed": translated, "raw": translated_raw}
+        translated, translated_raw = translate_story_fact_llm(fact, article, now)
+        debug["translated"] = {"parsed": translated, "raw": translated_raw}
 
-    repaired = _with_story_source(deterministic_story_repair(translated), article)
-    issues = validate_story_fields(repaired)
-    debug["initial_issues"] = list(issues)
-    if not issues:
-        debug["final"] = dict(repaired)
-        return repaired, debug
+        repaired = _with_story_source(deterministic_story_repair(translated), article)
+        issues = validate_story_fields(repaired)
+        debug["initial_issues"] = list(issues)
+        if not issues:
+            debug["final"] = dict(repaired)
+            return repaired, debug
 
-    polished, polish_raw = polish_story_llm(repaired, issues, article, now)
-    debug["polished"] = {"parsed": polished, "raw": polish_raw}
-    polished = _with_story_source(deterministic_story_repair(polished), article)
-    final_issues = validate_story_fields(polished)
-    debug["final_issues"] = list(final_issues)
-    if final_issues:
-        raise RuntimeError(
-            "story quality failed after polish: " + ", ".join(final_issues[:6])
-        )
-    debug["final"] = dict(polished)
-    return polished, debug
+        polished, polish_raw = polish_story_llm(repaired, issues, article, now)
+        debug["polished"] = {"parsed": polished, "raw": polish_raw}
+        polished = _with_story_source(deterministic_story_repair(polished), article)
+        final_issues = validate_story_fields(polished)
+        debug["final_issues"] = list(final_issues)
+        if final_issues:
+            raise RuntimeError(
+                "story quality failed after polish: " + ", ".join(final_issues[:6])
+            )
+        debug["final"] = dict(polished)
+        return polished, debug
+    except Exception as exc:  # noqa: BLE001
+        _attach_story_debug(exc, debug)
+        raise
 
 
 def build_briefing(
@@ -1089,13 +1113,14 @@ def build_briefing(
                 raise
             print(f"   !! story LLM failed: {exc} — heuristic story fallback")
             stories.append(heuristic_story_fields(article, index=idx))
-            story_raw.append(
-                {
-                    "id": article.get("id"),
-                    "fallback": "heuristic",
-                    "error": str(exc),
-                }
-            )
+            failure: dict[str, Any] = {}
+            layer_debug = getattr(exc, "story_debug", None)
+            if isinstance(layer_debug, dict):
+                failure.update(layer_debug)
+            failure["id"] = article.get("id") or failure.get("id")
+            failure["fallback"] = "heuristic"
+            failure["error"] = str(exc)
+            story_raw.append(failure)
 
     if run_dir is not None and story_raw:
         (run_dir / "story_raw.json").write_text(

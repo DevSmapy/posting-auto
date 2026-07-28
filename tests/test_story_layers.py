@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -126,9 +127,61 @@ class StoryLayersTest(unittest.TestCase):
                 run_dir = Path(tmp)
                 with patch("mvp_pipeline.summarize_story_layers", side_effect=fake_layers):
                     briefing, mode = build_briefing([ARTICLE, article2], now, run_dir=run_dir)
-                self.assertTrue((run_dir / "story_raw.json").is_file())
+                raw = json.loads((run_dir / "story_raw.json").read_text(encoding="utf-8"))
         self.assertEqual(mode, "mixed")
         self.assertEqual(briefing["stories"][1]["source_url"], "https://example.com/b")
+        self.assertEqual(raw[1]["fallback"], "heuristic")
+        self.assertEqual(raw[1]["error"], "layer failed")
+
+    def test_summarize_story_layers_preserves_debug_on_failure(self) -> None:
+        now = datetime(2026, 7, 28, tzinfo=timezone.utc)
+        fact = {
+            "headline_hint": "Rate pause",
+            "event": "Inflation eased.",
+            "cause": "Expectations shifted.",
+            "impact": "Markets repriced policy.",
+            "watch_next": "Watch the Fed.",
+            "one_liner_hint": "Inflation eased and rate expectations moved.",
+            "entities": ["Fed"],
+            "tone_flags": ["macro"],
+        }
+        bad = {
+            "headline": "中国市场新闻",
+            "what_happened": "中国市场今天上涨。",
+            "why_important": "这会影响投资者情绪。",
+            "watch_next": "关注后续数据。",
+            "one_liner": "中国市场今天上涨。",
+            "source_name": "Reuters",
+            "source_url": "https://example.com/a",
+        }
+        with patch.dict(
+            os.environ,
+            {"TARGET_LANGUAGE": "ko", "BRIEFING_MODE": "llm", "ALLOW_BRIEFING_FALLBACK": "1"},
+            clear=False,
+        ):
+            with patch("mvp_pipeline.summarize_story_fact_llm", return_value=(fact, "fact-raw")):
+                with patch(
+                    "mvp_pipeline.translate_story_fact_llm",
+                    return_value=(bad, "translated-raw"),
+                ):
+                    with patch(
+                        "mvp_pipeline.polish_story_llm",
+                        return_value=(bad, "polish-raw"),
+                    ):
+                        with tempfile.TemporaryDirectory() as tmp:
+                            run_dir = Path(tmp)
+                            briefing, mode = build_briefing([ARTICLE], now, run_dir=run_dir)
+                            raw = json.loads(
+                                (run_dir / "story_raw.json").read_text(encoding="utf-8")
+                            )
+        self.assertEqual(mode, "heuristic")
+        self.assertEqual(len(briefing["stories"]), 1)
+        self.assertEqual(raw[0]["fallback"], "heuristic")
+        self.assertIn("fact", raw[0])
+        self.assertIn("translated", raw[0])
+        self.assertIn("polished", raw[0])
+        self.assertIn("final_issues", raw[0])
+        self.assertIn("error", raw[0])
 
 
 if __name__ == "__main__":

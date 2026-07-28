@@ -40,18 +40,27 @@ class StoryQualityTest(unittest.TestCase):
             self.assertEqual(target_language(), "zh")
             self.assertEqual(target_locale(), "zh-CN")
 
-    def test_locale_tag_still_runs_language_validation(self) -> None:
+    def test_locale_tag_flags_single_wrong_language_field(self) -> None:
+        # One Han-dominant field must fail even when other fields are valid Korean,
+        # and TARGET_LANGUAGE=ko-KR must still normalize to ko for validation.
         with patch.dict(os.environ, {"TARGET_LANGUAGE": "ko-KR"}, clear=False):
             issues = validate_story_fields(
                 {
                     "headline": "中国经济新闻",
-                    "what_happened": "中国市场今天上涨。",
-                    "why_important": "这会影响投资者情绪。",
-                    "watch_next": "关注后续数据。",
-                    "one_liner": "中国市场今天上涨。",
+                    "what_happened": "미국 물가 지표가 둔화했습니다.",
+                    "why_important": "금리 경로 기대에 영향을 줄 수 있습니다.",
+                    "watch_next": "연준 발언과 국채 금리를 확인하세요.",
+                    "one_liner": "물가 둔화가 금리 기대를 흔들고 있습니다.",
                 }
             )
-        self.assertTrue(any("language:" in issue for issue in issues))
+        self.assertTrue(
+            any(issue.startswith("headline:language:") for issue in issues),
+            issues,
+        )
+        self.assertFalse(
+            any(issue.startswith("what_happened:language:") for issue in issues),
+            issues,
+        )
 
     def test_story_length_limits_ignores_invalid_env(self) -> None:
         with patch.dict(

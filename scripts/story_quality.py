@@ -140,32 +140,32 @@ def issues_summary(issues: list[str]) -> str:
 
 def _language_issues(fields: dict[str, str]) -> list[str]:
     lang = target_language()
-    joined = " ".join(v for v in fields.values() if v)
-    if not joined:
-        return []
-    stats = _char_stats(joined)
     issues: list[str] = []
 
-    if lang == "ko":
-        if stats["hangul_ratio"] < 0.45:
-            issues.append("language:not_enough_target_ko")
-        if stats["han_ratio"] > 0.20:
-            issues.append("language:disallowed_han_dominant")
-    elif lang == "en":
-        if stats["latin_ratio"] < 0.55:
-            issues.append("language:not_enough_target_en")
-        if stats["han_ratio"] > 0.10 or stats["hangul_ratio"] > 0.10:
-            issues.append("language:disallowed_non_en_dominant")
-    elif lang == "ja":
-        if stats["jp_ratio"] < 0.35:
-            issues.append("language:not_enough_target_ja")
-        if stats["hangul_ratio"] > 0.10:
-            issues.append("language:disallowed_hangul_dominant")
-    elif lang == "zh":
-        if stats["han_ratio"] < 0.45:
-            issues.append("language:not_enough_target_zh")
-        if stats["hangul_ratio"] > 0.10:
-            issues.append("language:disallowed_hangul_dominant")
+    for key, value in fields.items():
+        if not value:
+            continue
+        stats = _char_stats(value)
+        if lang == "ko":
+            if stats["hangul_ratio"] < 0.45:
+                issues.append(f"{key}:language:not_enough_target_ko")
+            if stats["han_ratio"] > 0.20:
+                issues.append(f"{key}:language:disallowed_han_dominant")
+        elif lang == "en":
+            if stats["latin_ratio"] < 0.55:
+                issues.append(f"{key}:language:not_enough_target_en")
+            if stats["han_ratio"] > 0.10 or stats["hangul_ratio"] > 0.10:
+                issues.append(f"{key}:language:disallowed_non_en_dominant")
+        elif lang == "ja":
+            if stats["jp_ratio"] < 0.35:
+                issues.append(f"{key}:language:not_enough_target_ja")
+            if stats["hangul_ratio"] > 0.10:
+                issues.append(f"{key}:language:disallowed_hangul_dominant")
+        elif lang == "zh":
+            if stats["han_ratio"] < 0.45:
+                issues.append(f"{key}:language:not_enough_target_zh")
+            if stats["hangul_ratio"] > 0.10:
+                issues.append(f"{key}:language:disallowed_hangul_dominant")
     return issues
 
 
