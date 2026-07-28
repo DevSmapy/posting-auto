@@ -46,6 +46,14 @@ from publish import (  # noqa: E402
     R2Uploader,
 )
 from seen_urls import SeenUrlsStore  # noqa: E402
+from story_quality import (  # noqa: E402
+    deterministic_story_repair,
+    issues_summary,
+    normalize_story_fields,
+    target_language,
+    target_locale,
+    validate_story_fields,
+)
 
 TZ = ZoneInfo(os.getenv("NEWS_TIMEZONE", "Asia/Seoul"))
 PROMPTS = ROOT / "prompts"
@@ -932,32 +940,8 @@ def assemble_blog_markdown(briefing: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def _normalize_story_llm(
-    parsed: Any,
-    article: dict[str, Any],
-) -> dict[str, Any]:
-    if not isinstance(parsed, dict):
-        raise RuntimeError(f"story JSON must be object, got {type(parsed)}")
-    headline = str(parsed.get("headline") or article.get("title") or "").strip()
-    what = str(parsed.get("what_happened") or "").strip()
-    why = str(parsed.get("why_important") or "").strip()
-    watch = str(parsed.get("watch_next") or "").strip()
-    one = str(parsed.get("one_liner") or "").strip()
-    if not what or not why or not watch or not one:
-        raise RuntimeError("story JSON missing required fields")
-    return {
-        "headline": headline or (article.get("title") or ""),
-        "what_happened": what,
-        "why_important": why,
-        "watch_next": watch,
-        "one_liner": one,
-        "source_name": article.get("source") or "",
-        "source_url": article.get("link") or "",
-    }
-
-
-def summarize_story_llm(article: dict[str, Any], now: datetime) -> dict[str, Any]:
-    """One article → story fields via persona prompt."""
+def summarize_story_fact_llm(article: dict[str, Any], now: datetime) -> tuple[dict[str, Any], str]:
+    """One article -> fact-layer JSON."""
     snippet = _clean_rss_snippet(article.get("snippet") or "")
     if len(snippet) > 400:
         snippet = snippet[:400].rstrip() + "…"
@@ -971,40 +955,148 @@ def summarize_story_llm(article: dict[str, Any], now: datetime) -> dict[str, Any
         "reason": article.get("reason"),
     }
     user = (
-        read_prompt("story_user.md")
+        read_prompt("story_fact_user.md")
         .replace("{{date}}", now.strftime("%Y-%m-%d"))
         .replace("{{article_json}}", json.dumps(payload, ensure_ascii=False, indent=2))
     )
     parsed, raw = ollama_chat(
-        read_prompt("story_system.md"),
+        read_prompt("story_fact_system.md"),
+        user,
+        timeout_ms=story_timeout_ms(),
+    )
+    if not isinstance(parsed, dict):
+        raise RuntimeError(f"bad fact JSON: {raw[:500]}")
+    return parsed, raw
+
+
+def translate_story_fact_llm(
+    fact: dict[str, Any],
+    article: dict[str, Any],
+    now: datetime,
+) -> tuple[dict[str, Any], str]:
+    """Fact-layer JSON -> target-language story draft."""
+    user = (
+        read_prompt("story_translate_user.md")
+        .replace("{{date}}", now.strftime("%Y-%m-%d"))
+        .replace("{{target_language}}", target_language())
+        .replace("{{target_locale}}", target_locale())
+        .replace("{{fact_json}}", json.dumps(fact, ensure_ascii=False, indent=2))
+    )
+    parsed, raw = ollama_chat(
+        read_prompt("story_translate_system.md"),
         user,
         timeout_ms=story_timeout_ms(),
     )
     try:
-        return _normalize_story_llm(parsed, article)
+        return normalize_story_fields(parsed, article), raw
     except RuntimeError:
-        raise RuntimeError(f"bad story JSON: {raw[:500]}") from None
+        raise RuntimeError(f"bad translated story JSON: {raw[:500]}") from None
 
 
-def build_briefing(articles: list[dict[str, Any]], now: datetime) -> tuple[dict[str, Any], str]:
+def polish_story_llm(
+    story: dict[str, Any],
+    issues: list[str],
+    article: dict[str, Any],
+    now: datetime,
+) -> tuple[dict[str, Any], str]:
+    """Repair only language/style issues while preserving facts."""
+    user = (
+        read_prompt("story_polish_user.md")
+        .replace("{{date}}", now.strftime("%Y-%m-%d"))
+        .replace("{{target_language}}", target_language())
+        .replace("{{target_locale}}", target_locale())
+        .replace("{{issues}}", issues_summary(issues))
+        .replace("{{story_json}}", json.dumps(story, ensure_ascii=False, indent=2))
+    )
+    parsed, raw = ollama_chat(
+        read_prompt("story_polish_system.md"),
+        user,
+        timeout_ms=story_timeout_ms(),
+    )
+    try:
+        return normalize_story_fields(parsed, article), raw
+    except RuntimeError:
+        raise RuntimeError(f"bad polished story JSON: {raw[:500]}") from None
+
+
+def _with_story_source(story: dict[str, Any], article: dict[str, Any]) -> dict[str, Any]:
+    out = dict(story)
+    out["source_name"] = article.get("source") or out.get("source_name") or ""
+    out["source_url"] = article.get("link") or out.get("source_url") or ""
+    return out
+
+
+def summarize_story_layers(
+    article: dict[str, Any],
+    now: datetime,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """One article -> fact -> translate -> validate/repair -> final story."""
+    debug: dict[str, Any] = {"id": article.get("id"), "target_language": target_language()}
+    fact, fact_raw = summarize_story_fact_llm(article, now)
+    debug["fact"] = {"parsed": fact, "raw": fact_raw}
+
+    translated, translated_raw = translate_story_fact_llm(fact, article, now)
+    debug["translated"] = {"parsed": translated, "raw": translated_raw}
+
+    repaired = _with_story_source(deterministic_story_repair(translated), article)
+    issues = validate_story_fields(repaired)
+    debug["initial_issues"] = list(issues)
+    if not issues:
+        debug["final"] = dict(repaired)
+        return repaired, debug
+
+    polished, polish_raw = polish_story_llm(repaired, issues, article, now)
+    debug["polished"] = {"parsed": polished, "raw": polish_raw}
+    polished = _with_story_source(deterministic_story_repair(polished), article)
+    final_issues = validate_story_fields(polished)
+    debug["final_issues"] = list(final_issues)
+    if final_issues:
+        raise RuntimeError(
+            "story quality failed after polish: " + ", ".join(final_issues[:6])
+        )
+    debug["final"] = dict(polished)
+    return polished, debug
+
+
+def build_briefing(
+    articles: list[dict[str, Any]],
+    now: datetime,
+    run_dir: Path | None = None,
+) -> tuple[dict[str, Any], str]:
     if env("BRIEFING_MODE", "llm").lower() == "heuristic":
         print("   briefing mode=heuristic")
         return build_briefing_heuristic(articles, now), "heuristic"
 
     stories: list[dict[str, Any]] = []
+    story_raw: list[dict[str, Any]] = []
     llm_ok = 0
     allow_fb = env("ALLOW_BRIEFING_FALLBACK", "1").lower() in {"1", "true", "yes"}
     n = len(articles)
     for idx, article in enumerate(articles, start=1):
         print(f"   LLM story {idx}/{n} id={(article.get('id') or '')[:8]}…")
         try:
-            stories.append(summarize_story_llm(article, now))
+            story, debug = summarize_story_layers(article, now)
+            stories.append(story)
+            story_raw.append(debug)
             llm_ok += 1
         except Exception as exc:  # noqa: BLE001
             if not allow_fb:
                 raise
             print(f"   !! story LLM failed: {exc} — heuristic story fallback")
             stories.append(heuristic_story_fields(article, index=idx))
+            story_raw.append(
+                {
+                    "id": article.get("id"),
+                    "fallback": "heuristic",
+                    "error": str(exc),
+                }
+            )
+
+    if run_dir is not None and story_raw:
+        (run_dir / "story_raw.json").write_text(
+            json.dumps(story_raw, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
     briefing = assemble_briefing_from_stories(stories, now)
     if llm_ok == 0:
@@ -1313,7 +1405,7 @@ def main() -> int:
                 return 1
 
             print("==> Ollama briefing")
-            briefing, generation_mode = build_briefing(picked, now)
+            briefing, generation_mode = build_briefing(picked, now, run_dir=run_dir)
             briefing["blog_html"] = assemble_blog_html(briefing)
             (run_dir / "briefing.json").write_text(
                 json.dumps(briefing, ensure_ascii=False, indent=2),

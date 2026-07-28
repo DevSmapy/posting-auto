@@ -266,11 +266,11 @@ class AssembleBlogMarkdownTest(unittest.TestCase):
 
         def fake_summarize(article, now):  # noqa: ARG001
             if article["id"] == "aaaaaaaa":
-                return llm_story
+                return llm_story, {"id": article["id"], "final": llm_story}
             raise RuntimeError("timeout")
 
         with patch.dict(os.environ, {"BRIEFING_MODE": "llm", "ALLOW_BRIEFING_FALLBACK": "1"}):
-            with patch("mvp_pipeline.summarize_story_llm", side_effect=fake_summarize):
+            with patch("mvp_pipeline.summarize_story_layers", side_effect=fake_summarize):
                 briefing, mode = build_briefing(
                     articles, datetime(2026, 7, 23, tzinfo=timezone.utc)
                 )

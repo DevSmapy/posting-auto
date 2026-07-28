@@ -1,7 +1,6 @@
 오늘 날짜(Asia/Seoul): {{date}}
 
-당신은 위의 경제 브리핑 에디터다. 아래 기사 **1건만** 분석해 스토리 JSON을 작성하라.
-다른 이슈와 섞지 말고, 이 기사에만 집중하라.
+하위 호환용 단일 story 프롬프트. 가능하면 story_fact/story_translate/story_polish 경로를 사용하라.
 
 ```json
 {{article_json}}
