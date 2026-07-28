@@ -15,6 +15,7 @@ from story_quality import (  # noqa: E402
     deterministic_story_repair,
     issues_summary,
     normalize_story_fields,
+    story_length_limits,
     target_language,
     target_locale,
     validate_story_fields,
@@ -23,8 +24,49 @@ from story_quality import (  # noqa: E402
 
 class StoryQualityTest(unittest.TestCase):
     def test_target_language_defaults_to_korean(self) -> None:
-        self.assertEqual(target_language(), "ko")
-        self.assertEqual(target_locale(), "ko-KR")
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("TARGET_LANGUAGE", None)
+            os.environ.pop("TARGET_LOCALE", None)
+            self.assertEqual(target_language(), "ko")
+            self.assertEqual(target_locale(), "ko-KR")
+
+    def test_target_language_strips_region_subtag(self) -> None:
+        with patch.dict(os.environ, {"TARGET_LANGUAGE": "ko-KR"}, clear=False):
+            os.environ.pop("TARGET_LOCALE", None)
+            self.assertEqual(target_language(), "ko")
+            self.assertEqual(target_locale(), "ko-KR")
+        with patch.dict(os.environ, {"TARGET_LANGUAGE": "zh_CN"}, clear=False):
+            os.environ.pop("TARGET_LOCALE", None)
+            self.assertEqual(target_language(), "zh")
+            self.assertEqual(target_locale(), "zh-CN")
+
+    def test_locale_tag_still_runs_language_validation(self) -> None:
+        with patch.dict(os.environ, {"TARGET_LANGUAGE": "ko-KR"}, clear=False):
+            issues = validate_story_fields(
+                {
+                    "headline": "中国经济新闻",
+                    "what_happened": "中国市场今天上涨。",
+                    "why_important": "这会影响投资者情绪。",
+                    "watch_next": "关注后续数据。",
+                    "one_liner": "中国市场今天上涨。",
+                }
+            )
+        self.assertTrue(any("language:" in issue for issue in issues))
+
+    def test_story_length_limits_ignores_invalid_env(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "STORY_HEADLINE_MAX_CHARS": "not-a-number",
+                "STORY_ONE_LINER_MAX_CHARS": "-5",
+                "STORY_WHAT_MAX_CHARS": "50",
+            },
+            clear=False,
+        ):
+            limits = story_length_limits()
+        self.assertEqual(limits["headline"], 60)
+        self.assertEqual(limits["one_liner"], 110)
+        self.assertEqual(limits["what_happened"], 50)
 
     def test_normalize_story_fields_injects_source(self) -> None:
         article = {"title": "기사", "source": "소스", "link": "https://x"}

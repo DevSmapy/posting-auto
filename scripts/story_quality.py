@@ -26,22 +26,48 @@ def _env(name: str, default: str = "") -> str:
     return os.getenv(name, default).strip()
 
 
+def _normalize_language_tag(value: str) -> str:
+    """Return BCP-47 primary language subtag (e.g. ko-KR / ko_KR -> ko)."""
+    raw = (value or "").strip().lower().replace("_", "-")
+    if not raw:
+        return "ko"
+    primary = raw.split("-", 1)[0].strip()
+    return primary or "ko"
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = _env(name)
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value >= 0 else default
+
+
 def target_language() -> str:
-    return (_env("TARGET_LANGUAGE", "ko") or "ko").lower()
+    return _normalize_language_tag(_env("TARGET_LANGUAGE", "ko") or "ko")
 
 
 def target_locale() -> str:
-    default = "ko-KR" if target_language() == "ko" else target_language()
-    return _env("TARGET_LOCALE", default) or default
+    explicit = _env("TARGET_LOCALE")
+    if explicit:
+        return explicit.replace("_", "-")
+    raw_lang = (_env("TARGET_LANGUAGE", "ko") or "ko").strip().replace("_", "-")
+    if "-" in raw_lang:
+        return raw_lang
+    lang = target_language()
+    return "ko-KR" if lang == "ko" else lang
 
 
 def story_length_limits() -> dict[str, int]:
     return {
-        "headline": int(_env("STORY_HEADLINE_MAX_CHARS", "60") or "60"),
-        "what_happened": int(_env("STORY_WHAT_MAX_CHARS", "320") or "320"),
-        "why_important": int(_env("STORY_WHY_MAX_CHARS", "260") or "260"),
-        "watch_next": int(_env("STORY_WATCH_MAX_CHARS", "200") or "200"),
-        "one_liner": int(_env("STORY_ONE_LINER_MAX_CHARS", "110") or "110"),
+        "headline": _env_int("STORY_HEADLINE_MAX_CHARS", 60),
+        "what_happened": _env_int("STORY_WHAT_MAX_CHARS", 320),
+        "why_important": _env_int("STORY_WHY_MAX_CHARS", 260),
+        "watch_next": _env_int("STORY_WATCH_MAX_CHARS", 200),
+        "one_liner": _env_int("STORY_ONE_LINER_MAX_CHARS", 110),
     }
 
 
