@@ -5,7 +5,7 @@
 현재 **실행 가능한 MVP 본체**는 호스트에서 돌리는 Python 파이프라인입니다.
 
 ```bash
-uv run python scripts/mvp_pipeline.py
+MVP_MODE=draft uv run python scripts/mvp_pipeline.py
 ```
 
 흐름 요약: RSS → 브리핑 → **카드 PNG** → Discord/Telegram/Slack에서 **이미지 확인 후 Approve** → `briefing.md` (+ 선택 R2/Instagram).
@@ -17,7 +17,7 @@ n8n은 Docker로 함께 띄워 두고, 스케줄·Credentials를 붙이는 오�
 n8n **Schedule Trigger** → **Execute Command**(또는 SSH)로 호스트 파이프라인 실행:
 
 ```bash
-cd "/Users/leeyongkyun/포스팅 자동화"
+cd "$PROJECT_DIR"
 ./scripts/run_draft.sh
 # 또는
 MVP_MODE=draft uv run python scripts/mvp_pipeline.py

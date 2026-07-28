@@ -58,12 +58,34 @@ class TelegramNotifier:
         print(f"   Telegram document sent: {path.name}")
 
     def _send_images(self, images: list[Path]) -> None:
-        """Send PNG slides as a media group (max 10) then leftovers as photos."""
+        """Send PNG slides as photos, using media groups only for 2-10 batches."""
         if not images:
             return
-        url = f"https://api.telegram.org/bot{self.token}/sendMediaGroup"
         for start in range(0, len(images), 10):
             batch = images[start : start + 10]
+            if len(batch) == 1:
+                path = batch[0]
+                url = f"https://api.telegram.org/bot{self.token}/sendPhoto"
+                with path.open("rb") as fh:
+                    resp = requests.post(
+                        url,
+                        data={
+                            "chat_id": self.chat_id,
+                            "caption": f"슬라이드 {start + 1}/{len(images)}",
+                        },
+                        files={"photo": (path.name, fh, "image/png")},
+                        timeout=120,
+                    )
+                if not resp.ok:
+                    print(
+                        f"   !! Telegram sendPhoto failed: "
+                        f"{resp.status_code} {resp.text[:300]}"
+                    )
+                    continue
+                print(f"   Telegram photo sent: {path.name}")
+                continue
+
+            url = f"https://api.telegram.org/bot{self.token}/sendMediaGroup"
             media = []
             files: dict[str, Any] = {}
             handles = []
@@ -123,7 +145,8 @@ class TelegramNotifier:
         approve_data = f"approve:{request_id}"
         skip_data = f"skip:{request_id}"
         footer = approve_footer(has_images=bool(images))
-        chunk = (preview + footer)[:3500]
+        preview_limit = max(0, 3500 - len(footer))
+        chunk = preview[:preview_limit] + footer
         markup = {
             "inline_keyboard": [
                 [

@@ -47,7 +47,7 @@
 3. 서버에 봇 초대 후 **텍스트 채널** ID → `DISCORD_CHANNEL_ID`
 4. `.env`에 `NOTIFY_CHANNEL=discord` (또는 토큰만 넣고 자동 선택)
 
-> **주의:** `DISCORD_CHANNEL_ID`는 `#일반`처럼 **#으로 시작하는 텍스트 채널**이어야 합니다.  
+> **주의:** `DISCORD_CHANNEL_ID`에는 **텍스트 채널의 숫자 ID**를 넣어야 합니다. Discord에서 Developer Mode를 켠 뒤 채널 우클릭 → **Copy Channel ID**로 복사하세요.  
 > 카테고리 ID를 넣으면 `Cannot send messages in a non-text channel`(400)이 납니다.
 
 스모크: `uv run python scripts/smoke_discord.py`
@@ -103,7 +103,7 @@ Approve는 Discord와 같이 **리액션**으로 받습니다 (공개 Request UR
 | `five_min_class` | 5분 경제 교실 | 6 | |
 | `numbers` | 숫자로 보는 경제 | 6 | |
 | `storytelling` | 스토리텔링 경제 | 6 | |
-| `daily_briefing` | 오늘의 이슈 브리핑 | 5~7 | 기존 MVP 호환 |
+| `daily_briefing` | 오늘의 이슈 브리핑 | 2~10 (권장 5~7) | 기존 MVP 호환 |
 
 에디토리얼 UI (`templates/cards/editorial/`): Info/Number/Quote/Impact Card, Timeline, Flow, Highlight Box 등. 실제 뉴스 문구 없이 플레이스홀더만 포함. **파이프라인 발행 경로는 MVP 1080×1080**을 씁니다.
 

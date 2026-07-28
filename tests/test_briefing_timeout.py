@@ -8,6 +8,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import requests
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
@@ -109,6 +111,16 @@ class RuntimeBootstrapTest(unittest.TestCase):
         with patch("mvp_pipeline.requests.get") as get:
             get.return_value.ok = True
             self.assertTrue(ollama_is_ready())
+
+        with patch("mvp_pipeline.requests.get") as get:
+            get.return_value.ok = False
+            self.assertFalse(ollama_is_ready())
+
+        with patch(
+            "mvp_pipeline.requests.get",
+            side_effect=requests.RequestException("boom"),
+        ):
+            self.assertFalse(ollama_is_ready())
 
         with patch("mvp_pipeline.ollama_is_ready", return_value=True):
             with patch("mvp_pipeline.subprocess.run") as run:

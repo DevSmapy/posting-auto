@@ -43,7 +43,7 @@ class InstagramCarouselPublisher:
         n = len(image_urls)
         if n < 2 or n > 10:
             raise ValueError(
-                f"instagram carousel requires 2–10 images, got {n}"
+                f"instagram carousel requires 2-10 images, got {n}"
             )
         if not self.config.instagram_configured:
             raise RuntimeError("IG_USER_ID / META_ACCESS_TOKEN required")
@@ -96,7 +96,7 @@ class InstagramCarouselPublisher:
         attempts = max(1, self.config.status_poll_attempts)
         interval = max(0.0, self.config.status_poll_interval_sec)
         last: dict[str, Any] = {}
-        for _ in range(attempts):
+        for attempt in range(attempts):
             st = self._get(
                 f"{base}/{creation_id}",
                 params={"fields": "status_code", "access_token": token},
@@ -109,7 +109,8 @@ class InstagramCarouselPublisher:
                 return
             if code == "ERROR":
                 raise RuntimeError(f"IG container error: {last}")
-            self._sleep(interval)
+            if attempt + 1 < attempts:
+                self._sleep(interval)
         raise RuntimeError(
             f"IG container not ready after {attempts} polls: {last}"
         )
