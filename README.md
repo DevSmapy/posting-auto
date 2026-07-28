@@ -30,10 +30,9 @@ Google News RSS → 전일15:00~now / seen_urls → Ollama 중요도 → Ollama 
 
 ```bash
 cp .env.example .env
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+uv sync
 ./scripts/smoke_ollama.sh
-MVP_MODE=dry_run python scripts/mvp_pipeline.py
+MVP_MODE=dry_run uv run python scripts/mvp_pipeline.py
 ```
 
 자세한 단계: [docs/00-mvp-quickstart.md](docs/00-mvp-quickstart.md)
@@ -66,7 +65,8 @@ MVP_MODE=dry_run python scripts/mvp_pipeline.py
 ├── docs/
 ├── docker-compose.yml
 ├── .env.example
-├── requirements.txt
+├── pyproject.toml           # uv 의존성 (권장: uv sync)
+├── requirements.txt         # pyproject 미러 (호환용)
 ├── prompts/
 ├── templates/cards/
 ├── scripts/

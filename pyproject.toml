@@ -1,0 +1,15 @@
+[project]
+name = "posting-auto"
+version = "0.1.0"
+description = "Korean economy news briefing + optional Instagram card carousel (n8n + Ollama)"
+requires-python = ">=3.12"
+dependencies = [
+  "feedparser>=6.0.11",
+  "requests>=2.32.0",
+  "python-dotenv>=1.0.1",
+  "boto3>=1.35.0",
+  "psycopg[binary]>=3.2.0",
+]
+
+[tool.uv]
+package = false

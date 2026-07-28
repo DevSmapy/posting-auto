@@ -5,7 +5,7 @@
 현재 **실행 가능한 MVP 본체**는 호스트에서 돌리는 Python 파이프라인입니다.
 
 ```bash
-python scripts/mvp_pipeline.py
+uv run python scripts/mvp_pipeline.py
 ```
 
 n8n은 Docker로 함께 띄워 두고, 스케줄·승인 UI·Credentials를 붙이는 오케스트레이터로 확장합니다.
@@ -16,8 +16,7 @@ n8n **Schedule Trigger** → **Execute Command**(또는 SSH)로 호스트 파이
 
 ```bash
 cd "/Users/leeyongkyun/포스팅 자동화"
-source .venv/bin/activate
-MVP_MODE=draft python scripts/mvp_pipeline.py
+MVP_MODE=draft uv run python scripts/mvp_pipeline.py
 ```
 
 > Execute Command는 n8n 컨테이너 안에서 실행됩니다. 호스트 Python을 쓰려면  

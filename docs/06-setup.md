@@ -31,18 +31,18 @@
 - [ ] Developer Portal Bot → `DISCORD_BOT_TOKEN`
 - [ ] **텍스트 채널** ID → `DISCORD_CHANNEL_ID` (카테고리 ID 금지) + 봇 초대 (Send / Attach Files / React / History)
 - [ ] `NOTIFY_CHANNEL=discord` (또는 자동 선택)
-- [ ] `python scripts/smoke_discord.py`
+- [ ] `uv run python scripts/smoke_discord.py`
 
 ### Telegram
 
 - [ ] BotFather 봇 → `TELEGRAM_BOT_TOKEN`
 - [ ] `TELEGRAM_CHAT_ID` + 봇에게 `/start`
-- [ ] `python scripts/smoke_telegram.py`
+- [ ] `uv run python scripts/smoke_telegram.py`
 
 ### Postgres / seen_urls
 
 - [x] `docker compose up -d postgres`
-- [x] `python scripts/smoke_seen_urls.py`
+- [x] `uv run python scripts/smoke_seen_urls.py`
 
 ### Cloudflare R2
 
@@ -81,13 +81,16 @@ Ollama API: 컨테이너용 `OLLAMA_BASE_URL=http://host.docker.internal:11434`,
 
 ```bash
 cp .env.example .env
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+uv sync
 
 ./scripts/smoke_ollama.sh
 docker compose up -d postgres browserless
-MVP_MODE=dry_run python scripts/mvp_pipeline.py
+MVP_MODE=dry_run uv run python scripts/mvp_pipeline.py
 ```
+
+의존성·가상환경은 **uv** 기준입니다 (`pyproject.toml`).  
+논리 테스트만 할 때: `uv sync` 후 `uv run python -m unittest discover -s tests -v`  
+(`requirements.txt`는 호환용 미러이며, 신규 설치는 `uv sync`를 쓰세요.)
 
 ### compose 서비스 (기본)
 

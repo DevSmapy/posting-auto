@@ -43,12 +43,12 @@ Approve 후 **마크다운 저장 성공 시**에만 `seen_urls`에 insert.
 > 카테고리(예: “채팅 채널” 폴더) ID를 넣으면 `Cannot send messages in a non-text channel`(400)이 납니다.  
 > 개발자 모드 ON → 텍스트 채널 우클릭 → **채널 ID 복사**.
 
-스모크: `python scripts/smoke_discord.py`  
+스모크: `uv run python scripts/smoke_discord.py`  
 Approve 후 채널에 `briefing.md` 파일이 첨부됩니다 (붙여넣기용).
 
 ### Telegram 설정
 
-스모크: `python scripts/smoke_telegram.py`  
+스모크: `uv run python scripts/smoke_telegram.py`  
 (호환) `TELEGRAM_APPROVE_MODE` 도 인식하나 **`NOTIFY_CHANNEL`이 우선**입니다.
 
 ### Slack
@@ -96,14 +96,14 @@ Approve 후 채널에 `briefing.md` 파일이 첨부됩니다 (붙여넣기용).
 에디토리얼 UI (`templates/cards/editorial/`): Info/Number/Quote/Impact Card, Timeline, Flow, Highlight Box 등. 실제 뉴스 문구 없이 플레이스홀더만 포함.
 
 ```bash
-python scripts/preview_cardnews.py --list-bundles
+uv run python scripts/preview_cardnews.py --list-bundles
 ```
 
 ### 로컬 미리보기 (R2 / IG 불필요)
 
 ```bash
 docker compose up -d browserless   # PNG가 필요할 때 (또는 로컬 Chrome)
-python scripts/preview_cardnews.py --bundle editorial_carousel
+uv run python scripts/preview_cardnews.py --bundle editorial_carousel
 # → output/cardnews-preview/
 #    slide-01..08.html/.png (1080×1350), placeholders.json, template_meta.json,
 #    caption.txt, hashtags.txt, instagram_post.txt
@@ -112,7 +112,7 @@ python scripts/preview_cardnews.py --bundle editorial_carousel
 과거 파이프라인 런의 `briefing.json`으로 카드를 다시 뽑을 때:
 
 ```bash
-python scripts/preview_cardnews.py --from-run output/<YYYYMMDD_HHMMSS>
+uv run python scripts/preview_cardnews.py --from-run output/<YYYYMMDD_HHMMSS>
 # → output/<YYYYMMDD_HHMMSS>/cards-preview/
 # HTML만: --no-png
 ```
@@ -155,7 +155,7 @@ R2/IG가 없어도 로컬 `run_dir/cards/`에 HTML·PNG·캡션은 남습니다.
 논리 테스트(실제 Meta/R2 호출 없음):
 
 ```bash
-python -m unittest tests.test_instagram_publish -v
+uv run python -m unittest tests.test_instagram_publish -v
 ```
 
 다음: [06. 설치·설정](06-setup.md)

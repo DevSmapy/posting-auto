@@ -8,7 +8,7 @@
 | 1 | `docker-compose` + `.env.example` + `.gitignore` | 파일 존재, `docker compose up` 가능 |
 | 2 | Ollama 스모크 스크립트 | `./scripts/smoke_ollama.sh` |
 | 3 | `prompts/` + `templates/cards/` | 샘플 템플릿·프롬프트 존재 |
-| 4 | MVP 파이프라인 (RSS→중요도→브리핑) | `MVP_MODE=dry_run python scripts/mvp_pipeline.py` |
+| 4 | MVP 파이프라인 (RSS→중요도→브리핑) | `MVP_MODE=dry_run uv run python scripts/mvp_pipeline.py` |
 | 5 | Notify draft → 마크다운 export | Discord/Telegram Approve 후 `briefing.md` |
 | 5b | (다음) Slack Approve 어댑터 | `NOTIFY_CHANNEL=slack` |
 | 6 | Browserless + R2 카드 렌더 | `PUBLISH_CARDS=1` 시 PNG·URL (`scripts/publish.R2Uploader`) |
