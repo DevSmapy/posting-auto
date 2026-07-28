@@ -17,6 +17,7 @@
 | LLM | Docker Ollama (`qwen2.5:14b` 권장) |
 | 발행 | 마크다운 파일 반자동 (수동 붙여넣기) + 선택적 Instagram |
 | 안전장치 | `MVP_MODE=draft` → 카드 PNG 미리보기 → Discord/Telegram/Slack Approve → `briefing.md` |
+| 언어 품질 | 기사별 fact → translation → polish layer + target-language validator |
 
 ```text
 Google News RSS → 전일15:00~now / seen_urls → Ollama 중요도 → Ollama 브리핑

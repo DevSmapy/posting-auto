@@ -26,10 +26,14 @@ curl http://127.0.0.1:11434/api/tags
 ./scripts/smoke_ollama.sh
 ```
 
-## 2단계 LLM 호출
+## LLM 호출 구조
 
 1. **중요도 (선택)** — 아침 기본은 `RANK_MODE=heuristic`. `RANK_MODE=llm`일 때만 heuristic 필터 후 기사별 중요도 LLM  
-2. **스토리 요약** — 선정 기사 **건당** LLM 1회 (`story_system` / `story_user`) → 코드가 envelope(title/intro/core_summary/slides 등) 취합
+2. **스토리 생성** — 선정 기사 **건당** layered story generation
+   - Fact layer (`story_fact_system` / `story_fact_user`)
+   - Translation layer (`story_translate_system` / `story_translate_user`)
+   - Polish/validator layer (`story_polish_*` + `scripts/story_quality.py`)
+3. **Envelope 조립** — 코드는 story fields에서 title/intro/core_summary/slides/caption 등을 rule-based 조립
 
 전체 브리핑 JSON을 한 번에 생성하는 경로(구 `briefing_*.md`)는 사용하지 않습니다. 타임아웃·품질 붕괴의 원인이었습니다.
 
@@ -81,9 +85,9 @@ warm은 스토리와 **같은 `options`(num_ctx/num_thread)** 로 호출해 runn
 
 ---
 
-## 스토리 JSON (건당) → envelope 취합
+## Story layer (건당) → envelope 취합
 
-LLM은 기사 1건당 아래 필드만 생성합니다. `source_name` / `source_url`은 코드가 원문에서 채웁니다.
+최종 downstream contract는 유지합니다. `source_name` / `source_url`은 코드를 통해 원문에서 채웁니다.
 
 ```json
 {
@@ -94,6 +98,49 @@ LLM은 기사 1건당 아래 필드만 생성합니다. `source_name` / `source_
   "one_liner": "완결 한 문장"
 }
 ```
+
+### 내부 3-layer 구조
+
+#### 1) Fact layer
+
+기사 1건에서 스타일 이전의 구조화 사실만 추출합니다. 기본 intermediate는 source-neutral/영어 중심 짧은 문장 JSON입니다.
+
+예:
+
+```json
+{
+  "headline_hint": "Rate pause",
+  "event": "Inflation eased.",
+  "cause": "Expectations shifted.",
+  "impact": "Markets repriced policy.",
+  "watch_next": "Watch the Fed.",
+  "one_liner_hint": "Inflation eased and rate expectations moved.",
+  "entities": ["Fed"],
+  "tone_flags": ["macro"]
+}
+```
+
+#### 2) Translation layer
+
+Fact layer 결과를 `TARGET_LANGUAGE` / `TARGET_LOCALE` 기준의 story JSON 초안으로 변환합니다.
+
+- **요청 받은 대상 언어만 출력**
+- 고유명사·티커·필수 약어 외 다른 언어 잔존 금지
+- 의미 변경 금지
+
+#### 3) Polish layer
+
+기본은 비-LLM validator + deterministic trim/repair 입니다.  
+`scripts/story_quality.py`가 다음을 점검합니다.
+
+- target-language ratio / disallowed-language ratio
+- duplicate fields (`headline == one_liner` 등)
+- 길이/fit 검사
+- `one_liner` 품질 검사
+
+validator 실패 시에만 좁은 범위 LLM rewrite를 1회 시도합니다. 이후에도 실패하면 **story 단위 heuristic fallback**으로 내려갑니다.
+
+### Envelope 조립
 
 코드 `assemble_briefing_from_stories`가 최종 브리핑 envelope를 만듭니다:
 
@@ -162,16 +209,24 @@ LLM은 기사 1건당 아래 필드만 생성합니다. `source_name` / `source_
 
 `intro` / `core_summary` / `stories` / `market_impact` 등을 코드가 조립합니다. (로컬 모델 HTML 깨짐 방지)
 
-프롬프트 파일: `prompts/story_system.md`, `prompts/story_user.md`  
-(레거시 미사용: `prompts/briefing_system.md`, `prompts/briefing_user.md`)
+프롬프트 파일:
+
+- `prompts/story_fact_system.md`, `prompts/story_fact_user.md`
+- `prompts/story_translate_system.md`, `prompts/story_translate_user.md`
+- `prompts/story_polish_system.md`, `prompts/story_polish_user.md`
+
+레거시 하위 호환:
+
+- `prompts/story_system.md`, `prompts/story_user.md`
+- `prompts/briefing_system.md`, `prompts/briefing_user.md` (미사용)
 
 ---
 
 ## 시스템 규칙 (공통)
 
-1. 역할: 한국 경제·시사 브리핑 에디터  
+1. 역할: 경제·시사 브리핑 생성기 (fact / translation / polish로 분리)  
 2. 출력: JSON만  
 3. 금지: 매수/매도/목표가/수익 보장, 원문 장문 복붙, 출처에 없는 수치 단정  
-4. 문체: 쉬운 한국어, 과장 금지  
+4. 문체: 대상 언어의 일반 독자가 이해할 수 있는 자연스러운 표현, 과장 금지  
 
 다음: [05. 발행](05-publishing.md)
