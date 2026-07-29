@@ -144,18 +144,26 @@ uv run python scripts/preview_cardnews.py
 슬라이드·인스타 본문 포맷: [05. 발행](05-publishing.md).  
 템플릿 구조·에디토리얼 UI: [09. 카드 템플릿](09-card-templates.md).
 
-### 평일 07:00 cron 예시 (macOS/Linux)
+### 평일 cron + Ops Console (macOS/Linux)
 
-월–금만 (`1-5`). 토·일은 돌리지 않습니다.  
-파이프라인은 07:00에 시작하고, Discord Approve 초안은 `.env`의 `NOTIFY_SEND_AT`(기본 07:50)에 보냅니다.
+스케줄·RSS·카드 번들은 Ops Console에서 바꿉니다.
 
-cron은 `.zshrc`를 읽지 않으므로 `scripts/cron_run_draft.sh`가 PATH에 docker를 넣고 `run_draft.sh`를 실행합니다.
-
-```cron
-0 7 * * 1-5 "/ABSOLUTE/PATH/TO/REPO/scripts/cron_run_draft.sh" >>"/ABSOLUTE/PATH/TO/REPO/output/cron.log" 2>&1
+```bash
+cp config/ops.example.json config/ops.json
+uv sync
+uv run streamlit run apps/ops_console/app.py
 ```
 
-`/ABSOLUTE/PATH/TO/REPO`를 이 저장소의 실제 절대 경로로 바꾸세요.
+`config/ops.json`의 `schedule.run_at` / `notify_at` / `feeds` / `cards.bundle_id`를 저장하면 파이프라인·cron이 읽습니다.  
+`NOTIFY_SEND_AT`·`CARD_BUNDLE_ID`·`GNEWS_*` env가 있으면 해당 항목만 env가 우선합니다.
+
+cron은 crontab에 고정 시각 대신 **5분마다** 돌리고, `cron_run_draft.sh`가 `run_at` 창·요일·오늘 실행 여부를 검사합니다.
+
+```cron
+*/5 * * * 1-5 "/ABSOLUTE/PATH/TO/REPO/scripts/cron_run_draft.sh" >>"/ABSOLUTE/PATH/TO/REPO/output/cron.log" 2>&1
+```
+
+`/ABSOLUTE/PATH/TO/REPO`를 이 저장소의 실제 절대 경로로 바꾸세요. cron은 `.zshrc`를 읽지 않으므로 wrapper가 PATH에 docker를 넣습니다.
 
 `./scripts/run_draft.sh` 수명주기:
 
