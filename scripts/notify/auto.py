@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Sequence
 
 from .approve_copy import existing_image_paths
-from .base import GateAction, GateStage
+from .base import GateAction, GateStage, normalize_stage
 
 
 class AutoNotifier:
@@ -35,7 +35,7 @@ class AutoNotifier:
         run_id: str = "",
         attempt: str = "",
     ) -> GateAction:
-        stage_s = GateStage(stage) if not isinstance(stage, GateStage) else stage
+        stage_s = normalize_stage(stage)
         images = existing_image_paths(image_paths)
         if stage_s == GateStage.CLEANUP:
             print(f"   auto keep_final (images={len(images)})")

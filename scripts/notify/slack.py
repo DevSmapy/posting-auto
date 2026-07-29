@@ -19,7 +19,7 @@ from .approve_copy import (
     gate_footer,
     timeout_message,
 )
-from .base import GateAction, GateStage
+from .base import GateAction, GateStage, normalize_stage
 from .envutil import approve_timeout_sec, env
 
 API = "https://slack.com/api"
@@ -275,7 +275,7 @@ class SlackNotifier:
         if not self.token or not self.channel_id:
             raise RuntimeError("Slack gate requires SLACK_BOT_TOKEN and SLACK_CHANNEL_ID")
 
-        stage_s = GateStage(stage) if not isinstance(stage, GateStage) else stage
+        stage_s = normalize_stage(stage)
         images = existing_image_paths(image_paths)
         uploaded_images: list[Path] = []
         for path in images:

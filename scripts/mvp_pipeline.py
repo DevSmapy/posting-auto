@@ -1443,6 +1443,48 @@ def produce_content_attempt(
     return picked, briefing, generation_mode, attempt_dir
 
 
+def _run_content_gate(
+    *,
+    notifier: Any,
+    channel: str,
+    draft_store: DraftRunStore,
+    run_dir: Path,
+    briefing: dict[str, Any],
+    picked: list[dict[str, Any]],
+    generation_mode: str,
+    attempt_dir: Path | None = None,
+    write_preview: bool = False,
+    skip_reason: str | None = None,
+) -> GateAction:
+    """Build content preview, wait on the gate, and record the action."""
+    preview = preview_text(
+        briefing,
+        picked,
+        generation_mode=generation_mode,
+        include_approve_hints=False,
+    )
+    if write_preview and attempt_dir is not None:
+        (attempt_dir / "preview.txt").write_text(preview, encoding="utf-8")
+    print(
+        f"==> Content gate channel={channel} "
+        f"remaining={draft_store.manifest.content_remaining}/"
+        f"{draft_store.manifest.content_max}"
+    )
+    action = notifier.wait_for_gate(
+        GateStage.CONTENT,
+        preview,
+        remaining=draft_store.manifest.content_remaining,
+        max_retries=draft_store.manifest.content_max,
+        run_id=run_dir.name,
+        attempt=draft_store.manifest.current_content or "",
+    )
+    if skip_reason is not None:
+        draft_store.record_action("content", action.value, skip_reason=skip_reason)
+    else:
+        draft_store.record_action("content", action.value)
+    return action
+
+
 def run_draft_two_stage(
     *,
     candidates: list[dict[str, Any]],
@@ -1483,28 +1525,14 @@ def run_draft_two_stage(
                         if attempt_dir is None or briefing is None:
                             return 1
                         # Re-show content gate with the previous attempt (no retry consume).
-                        preview = preview_text(
-                            briefing,
-                            picked,
+                        action = _run_content_gate(
+                            notifier=notifier,
+                            channel=channel,
+                            draft_store=draft_store,
+                            run_dir=run_dir,
+                            briefing=briefing,
+                            picked=picked,
                             generation_mode=generation_mode,
-                            include_approve_hints=False,
-                        )
-                        print(
-                            f"==> Content gate channel={channel} "
-                            f"remaining={draft_store.manifest.content_remaining}/"
-                            f"{draft_store.manifest.content_max}"
-                        )
-                        action = notifier.wait_for_gate(
-                            GateStage.CONTENT,
-                            preview,
-                            remaining=draft_store.manifest.content_remaining,
-                            max_retries=draft_store.manifest.content_max,
-                            run_id=run_dir.name,
-                            attempt=draft_store.manifest.current_content or "",
-                        )
-                        draft_store.record_action(
-                            "content",
-                            action.value,
                             skip_reason="empty_rerank_pool",
                         )
                         if action == GateAction.APPROVE:
@@ -1560,32 +1588,21 @@ def run_draft_two_stage(
                     print(f"Done (content produce failed): {exc}")
                     return 1
 
-            preview = preview_text(
-                briefing,
-                picked,
-                generation_mode=generation_mode,
-                include_approve_hints=False,
-            )
-            (attempt_dir / "preview.txt").write_text(preview, encoding="utf-8")
-
             if not waited_notify:
                 wait_until_notify_send_at()
                 waited_notify = True
 
-            print(
-                f"==> Content gate channel={channel} "
-                f"remaining={draft_store.manifest.content_remaining}/"
-                f"{draft_store.manifest.content_max}"
+            action = _run_content_gate(
+                notifier=notifier,
+                channel=channel,
+                draft_store=draft_store,
+                run_dir=run_dir,
+                briefing=briefing,
+                picked=picked,
+                generation_mode=generation_mode,
+                attempt_dir=attempt_dir,
+                write_preview=True,
             )
-            action = notifier.wait_for_gate(
-                GateStage.CONTENT,
-                preview,
-                remaining=draft_store.manifest.content_remaining,
-                max_retries=draft_store.manifest.content_max,
-                run_id=run_dir.name,
-                attempt=draft_store.manifest.current_content or "",
-            )
-            draft_store.record_action("content", action.value)
             if action == GateAction.APPROVE:
                 draft_store.set_selected_content()
                 break
@@ -1638,8 +1655,13 @@ def run_draft_two_stage(
                     print(f"Done (render produce failed): {exc}")
                     return 1
             else:
-                render_dir = draft_store.new_render_attempt()
-                card_pngs = render_cards_for_approve(briefing, render_dir, now)
+                try:
+                    render_dir = draft_store.new_render_attempt()
+                    card_pngs = render_cards_for_approve(briefing, render_dir, now)
+                except Exception as exc:  # noqa: BLE001
+                    notifier.send_text(f"[이미지 생성 실패] {exc}")
+                    print(f"Done (render produce failed): {exc}")
+                    return 1
 
             preview = preview_text(
                 briefing,

@@ -110,7 +110,7 @@ uv run python scripts/smoke_seen_urls.py
 #   uv run python scripts/mvp_pipeline.py
 ```
 
-로컬 트래킹 예: `git checkout -t origin/feat/draft-content-render-gates`  
+로컬 트래킹 예: `git fetch origin && git checkout -t origin/<feature-branch>`  
 ① 내용(✅/🔀/✍️) → ② 이미지(✅/🔁) → ③ cleanup. 재시도: `CONTENT_RETRY_MAX` / `RENDER_RETRY_MAX`.
 
 토큰 없이 게이트만 검증할 때:
@@ -163,7 +163,7 @@ cron은 `.zshrc`를 읽지 않으므로 `scripts/cron_run_draft.sh`가 PATH에 d
 2. 랭킹·스토리 건당 LLM (① 내용 게이트 동안 Rerank/Rewrite 시 **ollama 유지** — 재 warm 없음)
 3. 내용 **Approve** 후 **ollama stop** (Discord ② 렌더 게이트 대기 전 — 메모리 반환)
 4. `postgres` (+ `browserless` if `PUBLISH_CARDS`) **start** → 카드 렌더 (Re-render 시 aux 유지)
-5. 렌더 단계 종료 후 aux **stop** → publish → 종료 시 남은 컨테이너 **stop** (`OLLAMA_AUTO_CONTAINER`/`DRAFT_AUTO_AUX`는 run_draft가 1로 켬)
+5. 렌더 단계 종료 후 aux **stop** → publish 직전에 aux **재기동**(postgres/browserless) → publish → 종료 시 남은 컨테이너 **stop** (`OLLAMA_AUTO_CONTAINER`/`DRAFT_AUTO_AUX`는 run_draft가 1로 켬)
 
 Docker Desktop은 켜 두세요. 포스팅 목표 시각(예: 08:00)은 수동 붙여넣기 기준이며 코드로 강제하지 않습니다.
 

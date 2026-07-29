@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Sequence
 
 from .approve_copy import approve_footer, existing_image_paths, gate_footer
-from .base import GateAction, GateStage
+from .base import GateAction, GateStage, normalize_stage
 
 
 class CliNotifier:
@@ -47,7 +47,7 @@ class CliNotifier:
         run_id: str = "",
         attempt: str = "",
     ) -> GateAction:
-        stage_s = GateStage(stage) if not isinstance(stage, GateStage) else stage
+        stage_s = normalize_stage(stage)
         images = existing_image_paths(image_paths)
         print(preview)
         print(

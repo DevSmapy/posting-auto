@@ -15,7 +15,7 @@ MVP_MODE=draft uv run python scripts/mvp_pipeline.py
 
 ```bash
 git fetch origin
-git checkout -t origin/feat/draft-content-render-gates
+git checkout -t origin/<feature-branch>
 ```
 
 n8n UI 네이티브 워크플로(`workflows/econ-briefing-daily.json`)는 **후속**입니다.  
@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS seen_urls (
 ```
 
 - `url_hash`: URL 문자열의 SHA-256 (현재 정규화 없음)
-- Skip/타임아웃/소진 시 미기록; 마크다운 저장 성공 시 insert (`ig_media_id`는 있을 때만)
+- 타임아웃/소진 시 미기록; 마크다운 저장 성공 시 insert (`ig_media_id`는 있을 때만)
 
 ## 에러 처리
 

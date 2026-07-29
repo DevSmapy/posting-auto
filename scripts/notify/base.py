@@ -33,6 +33,11 @@ class GateStage(str, Enum):
     CLEANUP = "cleanup"
 
 
+def normalize_stage(stage: GateStage | str) -> GateStage:
+    """Return GateStage unchanged, or coerce a string via GateStage()."""
+    return stage if isinstance(stage, GateStage) else GateStage(stage)
+
+
 class Notifier(Protocol):
     name: str
 
@@ -58,6 +63,8 @@ class Notifier(Protocol):
         image_paths: Sequence[Path] | None = None,
         remaining: int | None = None,
         max_retries: int | None = None,
+        run_id: str = "",
+        attempt: str = "",
     ) -> GateAction:
         """Multi-stage draft gate. Default adapters implement this."""
 

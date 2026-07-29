@@ -16,7 +16,7 @@ from .approve_copy import (
     gate_footer,
     timeout_message,
 )
-from .base import GateAction, GateStage
+from .base import GateAction, GateStage, normalize_stage
 from .envutil import approve_timeout_sec, env
 
 
@@ -244,7 +244,7 @@ class TelegramNotifier:
                 "Telegram gate requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID"
             )
 
-        stage_s = GateStage(stage) if not isinstance(stage, GateStage) else stage
+        stage_s = normalize_stage(stage)
         images = existing_image_paths(image_paths)
         if images:
             self._send_images(images)

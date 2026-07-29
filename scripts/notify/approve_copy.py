@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Sequence
 
-from .base import APPROVE_CONTROLS_HINT, APPROVE_IMAGE_HINT, GateStage
+from .base import APPROVE_CONTROLS_HINT, APPROVE_IMAGE_HINT, GateStage, normalize_stage
 
 _KEYCAPS = {
     0: "0️⃣",
@@ -41,7 +41,7 @@ def remaining_line(
     remaining: int,
     max_retries: int,
 ) -> str:
-    stage_s = GateStage(stage) if not isinstance(stage, GateStage) else stage
+    stage_s = normalize_stage(stage)
     if stage_s == GateStage.CONTENT:
         label = "🔁 내용 재생성 남은 기회"
     elif stage_s == GateStage.RENDER:
@@ -59,7 +59,7 @@ def stage_header(
     run_id: str = "",
     attempt: str = "",
 ) -> str:
-    stage_s = GateStage(stage) if not isinstance(stage, GateStage) else stage
+    stage_s = normalize_stage(stage)
     if stage_s == GateStage.CONTENT:
         title = "① 내용 확정"
     elif stage_s == GateStage.RENDER:
@@ -77,7 +77,7 @@ def stage_header(
 
 
 def gate_controls_hint(stage: GateStage | str) -> str:
-    stage_s = GateStage(stage) if not isinstance(stage, GateStage) else stage
+    stage_s = normalize_stage(stage)
     if stage_s == GateStage.CONTENT:
         return (
             "**Approve:** ✅  ·  **Rerank(다른 기사):** 🔀  ·  **Rewrite(같은 기사 다시쓰기):** ✍️\n"
@@ -115,7 +115,7 @@ def gate_footer(
     run_id: str = "",
     attempt: str = "",
 ) -> str:
-    stage_s = GateStage(stage) if not isinstance(stage, GateStage) else stage
+    stage_s = normalize_stage(stage)
     lines = [
         "",
         "---",
@@ -139,7 +139,7 @@ def gate_footer(
 
 
 def exhausted_message(stage: GateStage | str) -> str:
-    stage_s = GateStage(stage) if not isinstance(stage, GateStage) else stage
+    stage_s = normalize_stage(stage)
     if stage_s == GateStage.CONTENT:
         kind = "내용 재생성(랭킹/다시쓰기)"
     else:
@@ -153,7 +153,7 @@ def exhausted_message(stage: GateStage | str) -> str:
 
 
 def timeout_message(stage: GateStage | str, timeout_sec: int) -> str:
-    stage_s = GateStage(stage) if not isinstance(stage, GateStage) else stage
+    stage_s = normalize_stage(stage)
     return (
         f"[타임아웃] {stage_s.value} 게이트 — {timeout_sec}s 내 응답 없음.\n"
         "재시도 횟수는 차감되지 않았습니다. attempt는 디스크에 유지됩니다.\n"
