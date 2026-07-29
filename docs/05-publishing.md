@@ -4,26 +4,28 @@
 
 ## Approve 채널 (`NOTIFY_CHANNEL`)
 
-`MVP_MODE=draft` 일 때 흐름:
+`MVP_MODE=draft` 일 때 **2단계 게이트** 흐름:
 
-1. 브리핑 준비  
-2. **로컬 카드 PNG 렌더** (`run_dir/cards/`)  
-3. `NOTIFY_SEND_AT`(예: `07:50`, Asia/Seoul)까지 대기 후 초안 + **슬라이드 이미지** 발송  
-4. **이미지를 확인한 뒤** Approve / Skip  
+1. 브리핑 준비 → `attempts/content-NN/`  
+2. ① **내용 게이트** (텍스트만): ✅ Approve / 🔀 Rerank / ✍️ Rewrite (`CONTENT_RETRY_MAX`)  
+3. 선택 `briefing.json`으로 **로컬 카드 PNG** → `renders/render-NN/`  
+4. ② **렌더 게이트** (이미지): ✅ Approve / 🔁 Re-render (`RENDER_RETRY_MAX`)  
+5. Approve 후 `briefing.md` (+ 선택 R2/IG) → `seen_urls`  
+6. ③ **Cleanup ask**: 확정본만 유지(삭제 책임 경고) / 전부 보관 (`CLEANUP_MODE=ask`, 타임아웃→확정본만)
 
-`NOTIFY_SEND_AT`이 비어 있으면 준비 즉시 발송하고, 이미 지난 시각이면 대기 없이 보냅니다.  
-구현: [`scripts/notify/`](../scripts/notify/).
+첫 content 게이트 전에만 `NOTIFY_SEND_AT`(예: `07:50`, Asia/Seoul)까지 대기합니다.  
+구현: [`scripts/notify/`](../scripts/notify/), [`scripts/draft_run.py`](../scripts/draft_run.py).
 
 | `NOTIFY_CHANNEL` | 동작 |
 |------------------|------|
 | (미설정) | Discord(주력) → telegram → slack → cli |
-| `discord` | 슬라이드 PNG 첨부 + ✅ / ⏭ 리액션 |
-| `telegram` | 슬라이드 사진(media group) + 인라인 Approve/Skip |
-| `slack` | 슬라이드 파일 업로드 + ✅ / ⏭ 리액션 |
-| `cli` | 터미널 `approve` / `skip` (+ 로컬 이미지 경로 출력) |
-| `auto` | 대기 없이 승인 (로컬 스모크) |
+| `discord` | 단계별 리액션 (내용/렌더/클린업) |
+| `telegram` | 인라인 버튼 (Approve/Rerank/Rewrite 등) |
+| `slack` | 단계별 리액션 |
+| `cli` | 터미널 입력 (`approve` / `rerank` / …) |
+| `auto` | 대기 없이 Approve → keep_final (로컬 스모크) |
 
-공통 타임아웃: `APPROVE_TIMEOUT_SEC` (기본 900초).
+공통 타임아웃: `APPROVE_TIMEOUT_SEC` (기본 900초). 게이트 타임아웃은 재시도 횟수를 차감하지 않습니다.
 
 ### 미리보기에 포함
 
@@ -34,9 +36,9 @@
 
 | 선택 | 동작 |
 |------|------|
-| Approve | `briefing.md` 저장 (+ 채널에 md 첨부) → `PUBLISH_CARDS=1`이면 R2/인스타 (Approve 때 쓴 PNG 재사용) → `seen_urls` |
-| Skip | 종료. `seen_urls` 미기록 |
-| 타임아웃 | Skip과 동일 |
+| Approve (렌더) | `briefing.md` 저장 (+ 채널에 md 첨부) → `PUBLISH_CARDS=1`이면 R2/인스타 (렌더 게이트 PNG 재사용) → `seen_urls` → cleanup ask |
+| Rerank / Rewrite / Re-render | 해당 단계 재생성 (성공한 재생성만 남은 기회 차감). 후보 소진·생성 실패 시 차감 없음. attempt는 cleanup 전까지 유지 |
+| 타임아웃 / 횟수 소진 | 중단. `seen_urls` 미기록. 스크립트 재실행 안내 |
 
 마크다운 저장 성공 시 `seen_urls`에 insert합니다. 인스타만 실패해도 마크다운·`seen_urls`는 유지하고 단계 알림을 보냅니다.
 
@@ -146,9 +148,9 @@ uv run python scripts/preview_cardnews.py --from-run output/<YYYYMMDD_HHMMSS>
 
 ### 파이프라인 (`PUBLISH_CARDS`)
 
-- **draft:** Approve **전**에 항상 로컬 카드 PNG를 만들어 채널에 첨부합니다.
-- **`PUBLISH_CARDS=1`:** Approve **후** 같은 PNG로 R2 업로드 → Instagram 캐러셀(2–10장). 기본 `0`이면 마크다운만.
-- R2/IG가 없어도 Approve 미리보기용 로컬 `run_dir/cards/`는 남습니다.
+- **draft:** ① 내용 Approve 후 ② 렌더 게이트용 로컬 카드 PNG를 만들어 채널에 첨부합니다.
+- **`PUBLISH_CARDS=1`:** 렌더 Approve **후** 같은 PNG로 R2 업로드 → Instagram 캐러셀(2–10장). 기본 `0`이면 마크다운만.
+- R2/IG가 없어도 렌더 미리보기용 `renders/render-NN/cards/`는 남습니다 (cleanup 정책에 따름).
 
 발행(호스팅·Graph) 로직은 [`scripts/publish/`](../scripts/publish/)에 있습니다.
 

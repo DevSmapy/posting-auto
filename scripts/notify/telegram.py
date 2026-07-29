@@ -10,7 +10,13 @@ from typing import Any, Sequence
 
 import requests
 
-from .approve_copy import approve_footer, existing_image_paths
+from .approve_copy import (
+    approve_footer,
+    existing_image_paths,
+    gate_footer,
+    timeout_message,
+)
+from .base import GateAction, GateStage, normalize_stage
 from .envutil import approve_timeout_sec, env
 
 
@@ -220,3 +226,142 @@ class TelegramNotifier:
         self.send_text(f"[타임아웃] {timeout}s 내 응답 없음 — 마크다운 저장 취소")
         print("   Approve timeout — skip export")
         return False
+
+    def wait_for_gate(
+        self,
+        stage: GateStage | str,
+        preview: str,
+        *,
+        image_paths: Sequence[Path] | None = None,
+        remaining: int | None = None,
+        max_retries: int | None = None,
+        run_id: str = "",
+        attempt: str = "",
+    ) -> GateAction:
+        timeout = approve_timeout_sec()
+        if not self.token or not self.chat_id:
+            raise RuntimeError(
+                "Telegram gate requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID"
+            )
+
+        stage_s = normalize_stage(stage)
+        images = existing_image_paths(image_paths)
+        if images:
+            self._send_images(images)
+
+        request_id = uuid.uuid4().hex[:12]
+        footer = gate_footer(
+            stage_s,
+            has_images=bool(images),
+            remaining=remaining,
+            max_retries=max_retries,
+            run_id=run_id,
+            attempt=attempt,
+        )
+        preview_limit = max(0, 3500 - len(footer))
+        chunk = preview[:preview_limit] + footer
+
+        if stage_s == GateStage.CONTENT:
+            rows = [
+                [
+                    {"text": "✅ Approve", "callback_data": f"approve:{request_id}"},
+                    {"text": "🔀 Rerank", "callback_data": f"rerank:{request_id}"},
+                    {"text": "✍️ Rewrite", "callback_data": f"rewrite:{request_id}"},
+                ]
+            ]
+            action_map = {
+                f"approve:{request_id}": GateAction.APPROVE,
+                f"rerank:{request_id}": GateAction.RERANK,
+                f"rewrite:{request_id}": GateAction.REWRITE,
+            }
+            text_map = {
+                "/approve": GateAction.APPROVE,
+                "approve": GateAction.APPROVE,
+                "/rerank": GateAction.RERANK,
+                "rerank": GateAction.RERANK,
+                "/rewrite": GateAction.REWRITE,
+                "rewrite": GateAction.REWRITE,
+            }
+        elif stage_s == GateStage.RENDER:
+            rows = [
+                [
+                    {"text": "✅ Approve", "callback_data": f"approve:{request_id}"},
+                    {"text": "🔁 Re-render", "callback_data": f"rerender:{request_id}"},
+                ]
+            ]
+            action_map = {
+                f"approve:{request_id}": GateAction.APPROVE,
+                f"rerender:{request_id}": GateAction.RERENDER,
+            }
+            text_map = {
+                "/approve": GateAction.APPROVE,
+                "approve": GateAction.APPROVE,
+                "/rerender": GateAction.RERENDER,
+                "rerender": GateAction.RERENDER,
+            }
+        else:
+            rows = [
+                [
+                    {"text": "✅ 확정본만", "callback_data": f"keep_final:{request_id}"},
+                    {"text": "🗄 전부 보관", "callback_data": f"keep_all:{request_id}"},
+                ]
+            ]
+            action_map = {
+                f"keep_final:{request_id}": GateAction.KEEP_FINAL,
+                f"keep_all:{request_id}": GateAction.KEEP_ALL,
+            }
+            text_map = {
+                "/keep_final": GateAction.KEEP_FINAL,
+                "keep_final": GateAction.KEEP_FINAL,
+                "/keep_all": GateAction.KEEP_ALL,
+                "keep_all": GateAction.KEEP_ALL,
+            }
+
+        boot = self._api("getUpdates", {"offset": -1, "timeout": 0})
+        offset = 0
+        for upd in boot.get("result") or []:
+            offset = max(offset, int(upd.get("update_id", 0)) + 1)
+
+        self._api(
+            "sendMessage",
+            {
+                "chat_id": self.chat_id,
+                "text": chunk + f"\n\n[게이트 {stage_s.value} {request_id}]",
+                "reply_markup": {"inline_keyboard": rows},
+            },
+        )
+        print(f"   Telegram {stage_s.value} gate sent — waiting…")
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            remaining_s = max(1, int(deadline - time.time()))
+            poll_timeout = min(25, remaining_s)
+            data = self._api(
+                "getUpdates",
+                {
+                    "offset": offset,
+                    "timeout": poll_timeout,
+                    "allowed_updates": ["callback_query", "message"],
+                },
+            )
+            for upd in data.get("result") or []:
+                offset = max(offset, int(upd.get("update_id", 0)) + 1)
+                cb = upd.get("callback_query")
+                if cb:
+                    raw = str(cb.get("data") or "")
+                    cq_id = cb.get("id")
+                    if raw in action_map:
+                        if cq_id:
+                            self._api(
+                                "answerCallbackQuery",
+                                {"callback_query_id": cq_id, "text": action_map[raw].value},
+                            )
+                        return action_map[raw]
+                msg = upd.get("message") or {}
+                text = (msg.get("text") or "").strip().lower()
+                if str(msg.get("chat", {}).get("id")) == str(self.chat_id) and text in text_map:
+                    return text_map[text]
+
+        self.send_text(timeout_message(stage_s, timeout))
+        print(f"   {stage_s.value} gate timeout")
+        return GateAction.TIMEOUT

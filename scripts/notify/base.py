@@ -1,7 +1,8 @@
-"""Notifier protocol for draft preview + Approve/Skip."""
+"""Notifier protocol for draft preview + Approve/Skip and multi-stage gates."""
 
 from __future__ import annotations
 
+from enum import Enum
 from pathlib import Path
 from typing import Protocol, Sequence
 
@@ -14,6 +15,27 @@ APPROVE_IMAGE_HINT = (
 APPROVE_CONTROLS_HINT = (
     "Discord: ✅ / ⏭  ·  Telegram·Slack: Approve/Skip 버튼 또는 리액션"
 )
+
+
+class GateAction(str, Enum):
+    APPROVE = "approve"
+    RERANK = "rerank"
+    REWRITE = "rewrite"
+    RERENDER = "rerender"
+    KEEP_FINAL = "keep_final"
+    KEEP_ALL = "keep_all"
+    TIMEOUT = "timeout"
+
+
+class GateStage(str, Enum):
+    CONTENT = "content"
+    RENDER = "render"
+    CLEANUP = "cleanup"
+
+
+def normalize_stage(stage: GateStage | str) -> GateStage:
+    """Return GateStage unchanged, or coerce a string via GateStage()."""
+    return stage if isinstance(stage, GateStage) else GateStage(stage)
 
 
 class Notifier(Protocol):
@@ -32,6 +54,19 @@ class Notifier(Protocol):
         ``image_paths`` are local card PNGs to attach before the Approve control
         so the operator can review slides visually.
         """
+
+    def wait_for_gate(
+        self,
+        stage: GateStage | str,
+        preview: str,
+        *,
+        image_paths: Sequence[Path] | None = None,
+        remaining: int | None = None,
+        max_retries: int | None = None,
+        run_id: str = "",
+        attempt: str = "",
+    ) -> GateAction:
+        """Multi-stage draft gate. Default adapters implement this."""
 
     def send_file(self, path: Path, caption: str = "") -> None:
         """Optional file attach (Discord/Telegram/Slack)."""

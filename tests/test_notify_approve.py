@@ -144,10 +144,13 @@ class SlackWaitApproveTest(unittest.TestCase):
             n._add_reaction = MagicMock()  # type: ignore[method-assign]
             n.send_text = MagicMock()  # type: ignore[method-assign]
             n._api = MagicMock(return_value={"user_id": "B0", "ok": True})  # type: ignore[method-assign]
+            n._reaction_data = MagicMock(  # type: ignore[method-assign]
+                return_value={"message": {"reactions": []}}
+            )
 
             state = {"n": 0}
 
-            def reaction_users(ts: str, name: str):
+            def reaction_users(data: dict, name: str):  # noqa: ANN001
                 state["n"] += 1
                 if name == "white_check_mark" and state["n"] >= 2:
                     return ["U_HUMAN"]

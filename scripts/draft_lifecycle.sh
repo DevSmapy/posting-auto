@@ -315,11 +315,16 @@ draft_start_ollama() {
   ollama_wait_ready
 }
 
-# Start everything needed for a draft run.
-draft_start_all() {
-  draft_start_aux_containers
+# Start LLM runtime only (ollama + warm). Aux starts before render/publish.
+draft_start_llm_runtime() {
   draft_start_ollama
   ollama_warm_model
+}
+
+# Start everything needed for a draft run (legacy / full bootstrap).
+draft_start_all() {
+  draft_start_aux_containers
+  draft_start_llm_runtime
 }
 
 # After LLM work finishes — free RAM before Discord wait / Approve.

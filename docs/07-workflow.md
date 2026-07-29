@@ -11,10 +11,17 @@ MVP_MODE=draft uv run python scripts/mvp_pipeline.py
 ./scripts/run_draft.sh
 ```
 
+로컬에서 기능 브랜치를 받을 때:
+
+```bash
+git fetch origin
+git checkout -t origin/<feature-branch>
+```
+
 n8n UI 네이티브 워크플로(`workflows/econ-briefing-daily.json`)는 **후속**입니다.  
 스케줄은 macOS/Linux cron + `scripts/cron_run_draft.sh` / `run_draft.sh`를 쓰는 것을 권장합니다.
 
-## Python draft 순서
+## Python draft 순서 (2단계 게이트)
 
 | # | 단계 | 역할 |
 |---|------|------|
@@ -22,14 +29,19 @@ n8n UI 네이티브 워크플로(`workflows/econ-briefing-daily.json`)는 **후�
 | 2 | Google News RSS | BUSINESS + NATION |
 | 3 | 창 필터 | `NEWS_WINDOW_MODE=since_prev_day_hour` (전일 15:00~now, KST) |
 | 4 | Postgres `seen_urls` | 이미 쓴 URL 제외 |
-| 5 | Ollama 중요도·브리핑 | 또는 heuristic |
-| 6 | 카드 PNG | Browserless/Chrome → `run_dir/cards/` |
-| 7 | Notify Approve | Discord(주력) / Telegram / Slack — **이미지 확인 후** Approve/Skip |
-| 8 | Skip | 종료, `seen_urls` 미기록 |
+| 5 | Content loop | Ollama 랭킹+layered story → `attempts/content-NN/` |
+| 6 | ① 내용 게이트 | 텍스트만. ✅ Approve / 🔀 Rerank / ✍️ Rewrite (`CONTENT_RETRY_MAX`) |
+| 7 | Render loop | 선택 `briefing.json` → `renders/render-NN/cards/` PNG |
+| 8 | ② 렌더 게이트 | 이미지 확인. ✅ Approve / 🔁 Re-render (`RENDER_RETRY_MAX`) |
 | 9a | Approve | `briefing.md` 저장 (블로그 수동 붙여넣기) |
 | 9b | `PUBLISH_CARDS=1` | 동일 PNG → R2 → Instagram carousel |
 | 10 | Postgres | `seen_urls` insert (마크다운 성공 시; IG 실패해도 기록) |
-| 11 | Notify | 결과 / 단계 실패·부분스킵 알림 |
+| 11 | ③ Cleanup ask | 확정본만 유지(삭제 책임 경고) / 전부 보관. 타임아웃→확정본만 |
+| 12 | Notify | 결과 / 단계 실패·부분스킵 알림 |
+
+Rerank는 이번 run의 이전 content attempt URL을 제외한 뒤 재랭킹한다. Rewrite는 같은 `picked`로 스토리만 재생성한다.  
+남은 후보가 없으면 Rerank는 차감 없이 내용 게이트를 다시 띄운다. 재생성 도중 실패하면 차감분도 복구한다.  
+재시도 소진·게이트 타임아웃 시 `seen_urls` 없이 중단하고 스크립트 재실행을 안내한다 (run-dir resume은 후속).
 
 ## `seen_urls`
 
@@ -47,7 +59,7 @@ CREATE TABLE IF NOT EXISTS seen_urls (
 ```
 
 - `url_hash`: URL 문자열의 SHA-256 (현재 정규화 없음)
-- Skip 시 미기록; 마크다운 저장 성공 시 insert (`ig_media_id`는 있을 때만)
+- 타임아웃/소진 시 미기록; 마크다운 저장 성공 시 insert (`ig_media_id`는 있을 때만)
 
 ## 에러 처리
 

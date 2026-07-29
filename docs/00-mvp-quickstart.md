@@ -95,7 +95,7 @@ RANK_MODE=heuristic BRIEFING_MODE=llm MVP_MODE=dry_run \
 결과: `output/<시각>/candidates.json`, `ranked.json`, `briefing.json`  
 랭킹이 비면 `importance_raw.json`을 보고, 자동으로 heuristic 폴백이 돕니다.
 
-### draft (Approve → 마크다운)
+### draft (2단계 게이트 → 마크다운)
 
 `.env`에 Discord, Telegram, 또는 Slack 토큰을 넣고 `NOTIFY_CHANNEL`을 고른 뒤:
 
@@ -103,12 +103,15 @@ RANK_MODE=heuristic BRIEFING_MODE=llm MVP_MODE=dry_run \
 uv run python scripts/smoke_discord.py    # 또는 smoke_telegram.py / smoke_slack.py
 uv run python scripts/smoke_seen_urls.py
 
-# 권장: postgres(+browserless) · ollama start → LLM → ollama stop → Discord Approve → aux stop
+# 권장: content gate → render gate → cleanup ask
 ./scripts/run_draft.sh
 # 또는 수동으로 컨테이너를 켠 채:
 # MVP_MODE=draft OLLAMA_AUTO_CONTAINER=0 DRAFT_AUTO_AUX=0 \
 #   uv run python scripts/mvp_pipeline.py
 ```
+
+로컬 트래킹 예: `git fetch origin && git checkout -t origin/<feature-branch>`  
+① 내용(✅/🔀/✍️) → ② 이미지(✅/🔁) → ③ cleanup. 재시도: `CONTENT_RETRY_MAX` / `RENDER_RETRY_MAX`.
 
 토큰 없이 게이트만 검증할 때:
 
@@ -156,11 +159,11 @@ cron은 `.zshrc`를 읽지 않으므로 `scripts/cron_run_draft.sh`가 PATH에 d
 
 `./scripts/run_draft.sh` 수명주기:
 
-1. `postgres` (+ `browserless` if `PUBLISH_CARDS`) · `ollama` **start** (필요 시 `OLLAMA_LOAD_TIMEOUT` 반영 재생성) → 모델 warm (**스토리와 동일 `num_ctx`/`num_thread`**, 기본 600초; 실패해도 draft 계속)
-2. 랭킹·스토리 건당 LLM
-3. **ollama + aux stop** (Discord 발송/Approve 대기 전 — 메모리 반환)
-4. Discord Approve 대기 → Approve 시 aux 재기동 → `briefing.md`
-5. 종료 시 남은 컨테이너 **stop** (`OLLAMA_AUTO_CONTAINER`/`DRAFT_AUTO_AUX`는 run_draft가 1로 켬)
+1. `ollama` **start** → 모델 warm (**스토리와 동일 `num_ctx`/`num_thread`**, 기본 600초; 실패해도 draft 계속)
+2. 랭킹·스토리 건당 LLM (① 내용 게이트 동안 Rerank/Rewrite 시 **ollama 유지** — 재 warm 없음)
+3. 내용 **Approve** 후 **ollama stop** (Discord ② 렌더 게이트 대기 전 — 메모리 반환)
+4. `postgres` (+ `browserless` if `PUBLISH_CARDS`) **start** → 카드 렌더 (Re-render 시 aux 유지)
+5. 렌더 단계 종료 후 aux **stop** → publish 직전에 aux **재기동**(postgres/browserless) → publish → 종료 시 남은 컨테이너 **stop** (`OLLAMA_AUTO_CONTAINER`/`DRAFT_AUTO_AUX`는 run_draft가 1로 켬)
 
 Docker Desktop은 켜 두세요. 포스팅 목표 시각(예: 08:00)은 수동 붙여넣기 기준이며 코드로 강제하지 않습니다.
 

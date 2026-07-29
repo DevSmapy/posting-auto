@@ -4,10 +4,8 @@
 # Usage: ./scripts/run_draft.sh
 #
 # Starts postgres (+ browserless if cards) and ollama, warms the model, runs the
-# pipeline. Warm uses OLLAMA_WARM_TIMEOUT_SEC (default 600); warm failure does not
-# abort the draft. After LLM work, mvp_pipeline stops ollama *before* Discord Approve.
-# Remaining containers stop on EXIT. Disable with OLLAMA_AUTO_CONTAINER=0 /
-# DRAFT_AUTO_AUX=0.
+# pipeline. Content gate keeps ollama loaded for Rerank/Rewrite; ollama stops after
+# content Approve. Browserless starts for the render gate only.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -66,6 +64,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-draft_start_all
+# Content phase: ollama only. Postgres/browserless start before render gate in Python.
+draft_start_llm_runtime
 
 run_py scripts/mvp_pipeline.py

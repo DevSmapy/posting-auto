@@ -1,4 +1,4 @@
-"""Discord Approve via message + ✅ / ⏭ reaction polling."""
+"""Discord gate via message + stage-specific reaction polling."""
 
 from __future__ import annotations
 
@@ -10,14 +10,39 @@ from urllib.parse import quote
 
 import requests
 
-from .approve_copy import approve_footer, existing_image_paths
+from .approve_copy import (
+    approve_footer,
+    existing_image_paths,
+    gate_footer,
+    timeout_message,
+)
+from .base import GateAction, GateStage, normalize_stage
 from .envutil import approve_timeout_sec, env
 
 API = "https://discord.com/api/v10"
 APPROVE_EMOJI = "✅"
 SKIP_EMOJI = "⏭"
-# Discord allows up to 10 attachments per message.
+RERANK_EMOJI = "🔀"
+REWRITE_EMOJI = "✍️"
+RERENDER_EMOJI = "🔁"
+KEEP_ALL_EMOJI = "🗄"
 _MAX_FILES_PER_MESSAGE = 10
+
+_STAGE_EMOJIS: dict[GateStage, list[tuple[str, GateAction]]] = {
+    GateStage.CONTENT: [
+        (APPROVE_EMOJI, GateAction.APPROVE),
+        (RERANK_EMOJI, GateAction.RERANK),
+        (REWRITE_EMOJI, GateAction.REWRITE),
+    ],
+    GateStage.RENDER: [
+        (APPROVE_EMOJI, GateAction.APPROVE),
+        (RERENDER_EMOJI, GateAction.RERENDER),
+    ],
+    GateStage.CLEANUP: [
+        (APPROVE_EMOJI, GateAction.KEEP_FINAL),
+        (KEEP_ALL_EMOJI, GateAction.KEEP_ALL),
+    ],
+}
 
 
 class DiscordNotifier:
@@ -68,7 +93,6 @@ class DiscordNotifier:
         self._post_files([path], caption or f"첨부: {path.name}")
 
     def _post_files(self, paths: list[Path], content: str) -> str | None:
-        """Upload files; return message id of the last successful batch."""
         last_id: str | None = None
         for start in range(0, len(paths), _MAX_FILES_PER_MESSAGE):
             batch = paths[start : start + _MAX_FILES_PER_MESSAGE]
@@ -139,6 +163,7 @@ class DiscordNotifier:
         preview: str,
         image_paths: Sequence[Path] | None = None,
     ) -> bool:
+        """Legacy approve/skip (⏭ maps to non-approve)."""
         timeout = approve_timeout_sec()
         if not self.token or not self.channel_id:
             raise RuntimeError("Discord Approve requires DISCORD_BOT_TOKEN and DISCORD_CHANNEL_ID")
@@ -185,3 +210,64 @@ class DiscordNotifier:
         self.send_text(f"[타임아웃] {timeout}s 내 응답 없음 — 마크다운 저장 취소")
         print("   Approve timeout — skip export")
         return False
+
+    def wait_for_gate(
+        self,
+        stage: GateStage | str,
+        preview: str,
+        *,
+        image_paths: Sequence[Path] | None = None,
+        remaining: int | None = None,
+        max_retries: int | None = None,
+        run_id: str = "",
+        attempt: str = "",
+    ) -> GateAction:
+        timeout = approve_timeout_sec()
+        if not self.token or not self.channel_id:
+            raise RuntimeError("Discord gate requires DISCORD_BOT_TOKEN and DISCORD_CHANNEL_ID")
+
+        stage_s = normalize_stage(stage)
+        images = existing_image_paths(image_paths)
+        footer = gate_footer(
+            stage_s,
+            has_images=bool(images),
+            remaining=remaining,
+            max_retries=max_retries,
+            run_id=run_id,
+            attempt=attempt,
+        )
+        body = preview[:1600] + footer
+
+        msg_id: str | None = None
+        if images:
+            msg_id = self._post_files(images, body)
+        if not msg_id:
+            msg_id = self._create_message(body)
+
+        mapping = _STAGE_EMOJIS[stage_s]
+        try:
+            for emoji, _action in mapping:
+                self._add_reaction(msg_id, emoji)
+        except Exception as exc:  # noqa: BLE001
+            print(f"   !! Discord seed reactions failed: {exc}")
+        print(f"   Discord {stage_s.value} gate sent — waiting…")
+
+        me = self._request("GET", "/users/@me")
+        bot_id = str(me.get("id") or "")
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                for emoji, action in mapping:
+                    users = self._reaction_users(msg_id, emoji)
+                    if any(str(u.get("id")) != bot_id and not u.get("bot") for u in users):
+                        return action
+            except Exception as exc:  # noqa: BLE001
+                print(f"   !! Discord reaction poll error: {exc}")
+                time.sleep(2)
+                continue
+            time.sleep(2)
+
+        self.send_text(timeout_message(stage_s, timeout))
+        print(f"   {stage_s.value} gate timeout")
+        return GateAction.TIMEOUT
