@@ -52,7 +52,6 @@ from ops_config import (  # noqa: E402
     resolve_bundle_id,
     resolve_feeds,
     resolve_notify_at,
-    write_last_run_date,
 )
 from publish import (  # noqa: E402
     PublishCardsPipeline,
