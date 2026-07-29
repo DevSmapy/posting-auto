@@ -252,7 +252,4 @@ def _cards_tab() -> None:
                 st.json(json.loads(meta.read_text(encoding="utf-8")))
 
 
-if __name__ == "__main__":
-    print("Run: uv run streamlit run apps/ops_console/app.py", file=sys.stderr)
-else:
-    main()
+main()
