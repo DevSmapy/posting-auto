@@ -261,14 +261,14 @@ def write_last_run_date(day: str | None = None, path: Path | None = None) -> Non
     target.write_text(stamp + "\n", encoding="utf-8")
 
 
-def should_run_now(
+def _should_run_details(
     now: datetime | None = None,
     *,
     ops: dict[str, Any] | None = None,
     last_run: str | None = None,
     window_minutes: int = 5,
-) -> tuple[bool, str]:
-    """Whether cron should start a draft run.
+) -> tuple[bool, str, str | None]:
+    """Return whether to run, the reason, and the matched scheduled date.
 
     Matches configured weekday + run_at within [run_at, run_at+window_minutes).
     Cross-midnight windows retain the scheduled local date for duplicate checks.
@@ -290,7 +290,7 @@ def should_run_now(
     try:
         hour, minute = _parse_hhmm(str(schedule.get("run_at") or "07:00"), field="run_at")
     except ValueError as exc:
-        return False, str(exc)
+        return False, str(exc), None
 
     window = timedelta(minutes=max(1, window_minutes))
     scheduled_date = None
@@ -312,26 +312,49 @@ def should_run_now(
 
     if scheduled_date is None:
         if matched_weekday is not None:
-            return False, f"weekday {matched_weekday} not in {sorted(days)}"
-        return False, (
+            return False, f"weekday {matched_weekday} not in {sorted(days)}", None
+        return (
+            False,
             f"outside run window {hour:02d}:{minute:02d}"
-            f"+{window_minutes}m (now {clock.strftime('%H:%M')})"
+            f"+{window_minutes}m (now {clock.strftime('%H:%M')})",
+            None,
         )
 
     scheduled_day = scheduled_date.isoformat()
     stamp = last_run if last_run is not None else read_last_run_date()
     if stamp == scheduled_day:
-        return False, f"already ran scheduled date ({scheduled_day})"
-    return True, "ok"
+        return False, f"already ran scheduled date ({scheduled_day})", scheduled_day
+    return True, "ok", scheduled_day
 
 
-def main_should_run() -> int:
+def should_run_now(
+    now: datetime | None = None,
+    *,
+    ops: dict[str, Any] | None = None,
+    last_run: str | None = None,
+    window_minutes: int = 5,
+) -> tuple[bool, str]:
+    """Whether cron should start a draft run."""
+    ok, reason, _scheduled_day = _should_run_details(
+        now,
+        ops=ops,
+        last_run=last_run,
+        window_minutes=window_minutes,
+    )
+    return ok, reason
+
+
+def main_should_run(*, scheduled_day_only: bool = False) -> int:
     """CLI for cron_run_draft.sh — exit 0 run, 1 skip."""
-    ok, reason = should_run_now()
+    ok, reason, scheduled_day = _should_run_details()
     if ok:
-        print(f"==> ops schedule: run ({reason})")
+        if scheduled_day_only:
+            print(scheduled_day)
+        else:
+            print(f"==> ops schedule: run ({reason}, scheduled date {scheduled_day})")
         return 0
-    print(f"==> ops schedule: skip ({reason})")
+    if not scheduled_day_only:
+        print(f"==> ops schedule: skip ({reason})")
     return 1
 
 
@@ -339,7 +362,10 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) > 1 and sys.argv[1] == "--mark-run":
-        write_last_run_date()
+        scheduled_day = sys.argv[2] if len(sys.argv) > 2 else None
+        write_last_run_date(day=scheduled_day)
         print(f"==> ops last_run stamped → {last_run_path()}")
         raise SystemExit(0)
+    if len(sys.argv) > 1 and sys.argv[1] == "--scheduled-day":
+        raise SystemExit(main_should_run(scheduled_day_only=True))
     raise SystemExit(main_should_run())

@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from ops_config import (  # noqa: E402
+    _should_run_details,
     load_ops_config,
     normalize_ops,
     resolve_bundle_id,
@@ -194,8 +195,14 @@ class ShouldRunNowTest(unittest.TestCase):
             }
         )
         now = datetime(2026, 7, 28, 0, 1, tzinfo=self.tz)
-        ok, reason = should_run_now(now, ops=ops, last_run=None, window_minutes=5)
+        ok, reason, scheduled_day = _should_run_details(
+            now,
+            ops=ops,
+            last_run=None,
+            window_minutes=5,
+        )
         self.assertTrue(ok, reason)
+        self.assertEqual(scheduled_day, "2026-07-27")
 
         ok, reason = should_run_now(
             now,

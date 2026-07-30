@@ -29,13 +29,14 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! run_py "$ROOT/scripts/ops_config.py"; then
+if ! scheduled_day="$(run_py "$ROOT/scripts/ops_config.py" --scheduled-day)"; then
   exit 0
 fi
+echo "==> ops schedule: run (scheduled date ${scheduled_day})"
 
 ./scripts/run_draft.sh
 status=$?
 if [[ "$status" -eq 0 ]]; then
-  run_py "$ROOT/scripts/ops_config.py" --mark-run || true
+  run_py "$ROOT/scripts/ops_config.py" --mark-run "$scheduled_day" || true
 fi
 exit "$status"
