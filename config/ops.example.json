@@ -1,0 +1,21 @@
+{
+  "timezone": "Asia/Seoul",
+  "schedule": {
+    "weekdays": [1, 2, 3, 4, 5],
+    "run_at": "07:00",
+    "notify_at": "07:50"
+  },
+  "feeds": [
+    {
+      "label": "BUSINESS",
+      "url": "https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=ko&gl=KR&ceid=KR:ko"
+    },
+    {
+      "label": "NATION",
+      "url": "https://news.google.com/rss/headlines/section/topic/NATION?hl=ko&gl=KR&ceid=KR:ko"
+    }
+  ],
+  "cards": {
+    "bundle_id": "daily_briefing"
+  }
+}

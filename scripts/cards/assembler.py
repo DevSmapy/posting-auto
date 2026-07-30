@@ -30,6 +30,7 @@ class CardAssembler:
         stories: list[dict],
         now: datetime,
         related_keywords: list[str] | None = None,
+        template_id: str | None = None,
     ) -> CardBundle:
         # Contract: upstream should pass 3–5 stories so the deck is 5–7 slides.
         # Clamp overflow; allow fewer than 3 for thin news days / tests.
@@ -44,6 +45,7 @@ class CardAssembler:
             slides=tuple(slides),
             post=post,
             related_keywords=tuple(keywords),
+            template_id=template_id or "daily_briefing",
         )
 
     def _build_slides(self, stories: list[dict], now: datetime) -> list[Slide]:

@@ -48,6 +48,11 @@ from notify.approve_copy import (  # noqa: E402
     render_stage_start_ack,
 )
 from draft_run import DraftRunStore  # noqa: E402
+from ops_config import (  # noqa: E402
+    resolve_bundle_id,
+    resolve_feeds,
+    resolve_notify_at,
+)
 from publish import (  # noqa: E402
     PublishCardsPipeline,
     PublishConfig,
@@ -88,7 +93,8 @@ def parse_notify_send_at(raw: str) -> tuple[int, int] | None:
 
 def notify_send_at_target(now: datetime, raw: str | None = None) -> datetime | None:
     """Today's send deadline in NEWS_TIMEZONE, or None if unset."""
-    parsed = parse_notify_send_at(raw if raw is not None else env("NOTIFY_SEND_AT"))
+    text = raw if raw is not None else resolve_notify_at()
+    parsed = parse_notify_send_at(text)
     if parsed is None:
         return None
     hour, minute = parsed
@@ -225,17 +231,13 @@ def in_news_window(dt: datetime | None, now: datetime, start: datetime) -> bool:
 
 
 def fetch_candidates(now: datetime) -> list[dict[str, Any]]:
-    business = env(
-        "GNEWS_BUSINESS_RSS",
-        "https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=ko&gl=KR&ceid=KR:ko",
-    )
-    nation = env(
-        "GNEWS_NATION_RSS",
-        "https://news.google.com/rss/headlines/section/topic/NATION?hl=ko&gl=KR&ceid=KR:ko",
-    )
-    merged = fetch_topic(business, "BUSINESS") + fetch_topic(nation, "NATION")
+    feeds = resolve_feeds()
+    merged: list[dict[str, Any]] = []
+    for label, url in feeds:
+        merged.extend(fetch_topic(url, label))
     start = news_window_start(now)
     print(f"   news window: {start.isoformat()} → {now.astimezone(TZ).isoformat()}")
+    print(f"   feeds: {len(feeds)} ({', '.join(label for label, _ in feeds)})")
     windowed = [a for a in merged if in_news_window(a.get("published_dt"), now, start)]
     print(f"   after window filter: {len(windowed)} (raw merge={len(merged)})")
     seen: set[str] = set()
@@ -248,7 +250,15 @@ def fetch_candidates(now: datetime) -> list[dict[str, Any]]:
         seen.add(key)
         seen.add(title_key)
         unique.append(a)
-    unique.sort(key=lambda x: (0 if x["topic"] == "BUSINESS" else 1, x["feed_rank"], -x["cluster_size"]))
+    # Prefer first configured feed label as primary sort key when present.
+    primary = feeds[0][0] if feeds else "BUSINESS"
+    unique.sort(
+        key=lambda x: (
+            0 if x["topic"] == primary else 1,
+            x["feed_rank"],
+            -x["cluster_size"],
+        )
+    )
     limit = int(env("NEWS_MAX_CANDIDATES", "20"))
     return unique[:limit]
 
@@ -616,7 +626,13 @@ def _card_bundle_from_stories(
     """Assemble card slides + Instagram caption via scripts/cards."""
     config = CardFormatConfig.from_env()
     keywords = related_keywords or ["경제", "증시", "브리핑", "시장", "뉴스"]
-    return CardAssembler(config).assemble(stories, now, related_keywords=keywords)
+    bundle_id = resolve_bundle_id()
+    return CardAssembler(config).assemble(
+        stories,
+        now,
+        related_keywords=keywords,
+        template_id=bundle_id,
+    )
 
 
 def assemble_briefing_from_stories(
@@ -1194,7 +1210,10 @@ def bundle_from_briefing(
     stories = list(briefing.get("stories") or [])
     if stories:
         return CardAssembler(cfg).assemble(
-            stories, clock, related_keywords=keywords or None
+            stories,
+            clock,
+            related_keywords=keywords or None,
+            template_id=resolve_bundle_id(),
         )
 
     slides = tuple(Slide.from_dict(s) for s in raw_slides)
