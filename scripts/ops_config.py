@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 import os
 import re
+import tempfile
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -137,10 +138,25 @@ def save_ops_config(data: dict[str, Any], path: Path | None = None) -> Path:
     target = path or ops_path()
     normalized = normalize_ops(data)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(
-        json.dumps(normalized, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    serialized = json.dumps(normalized, ensure_ascii=False, indent=2) + "\n"
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=target.parent,
+            prefix=f".{target.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as fh:
+            temp_path = Path(fh.name)
+            fh.write(serialized)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(temp_path, target)
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink()
     return target
 
 
@@ -173,13 +189,14 @@ def resolve_notify_at(ops: dict[str, Any] | None = None) -> str:
 def resolve_feeds(ops: dict[str, Any] | None = None) -> list[tuple[str, str]]:
     """Return (label, url) pairs.
 
-    Prefer ops.json feeds when the file exists. If there is no ops file,
-    fall back to GNEWS_* env (then built-in Google News defaults).
+    Non-empty GNEWS_* env values take precedence over ops.json feeds.
+    When either is set, the unset counterpart uses its built-in default.
     """
-    target = ops_path()
-    if ops is None and not target.is_file():
-        business = (os.getenv("GNEWS_BUSINESS_RSS") or "").strip() or DEFAULT_FEEDS[0]["url"]
-        nation = (os.getenv("GNEWS_NATION_RSS") or "").strip() or DEFAULT_FEEDS[1]["url"]
+    business_env = (os.getenv("GNEWS_BUSINESS_RSS") or "").strip()
+    nation_env = (os.getenv("GNEWS_NATION_RSS") or "").strip()
+    if business_env or nation_env:
+        business = business_env or DEFAULT_FEEDS[0]["url"]
+        nation = nation_env or DEFAULT_FEEDS[1]["url"]
         return [("BUSINESS", business), ("NATION", nation)]
 
     cfg = ops if ops is not None else load_ops_config()
@@ -231,7 +248,16 @@ def read_last_run_date(path: Path | None = None) -> str | None:
 def write_last_run_date(day: str | None = None, path: Path | None = None) -> None:
     target = path or last_run_path()
     target.parent.mkdir(parents=True, exist_ok=True)
-    stamp = day or datetime.now(ZoneInfo("Asia/Seoul")).date().isoformat()
+    if day is not None:
+        stamp = day
+    else:
+        cfg = load_ops_config()
+        tz_name = str(cfg.get("timezone") or "Asia/Seoul")
+        try:
+            tz = ZoneInfo(tz_name)
+        except Exception:  # noqa: BLE001
+            tz = ZoneInfo("Asia/Seoul")
+        stamp = datetime.now(tz).date().isoformat()
     target.write_text(stamp + "\n", encoding="utf-8")
 
 
@@ -244,8 +270,8 @@ def should_run_now(
 ) -> tuple[bool, str]:
     """Whether cron should start a draft run.
 
-    Matches KST weekday + run_at within [run_at, run_at+window_minutes).
-    Skips if already ran today (ISO date in last_run stamp).
+    Matches configured weekday + run_at within [run_at, run_at+window_minutes).
+    Cross-midnight windows retain the scheduled local date for duplicate checks.
     """
     cfg = ops if ops is not None else load_ops_config()
     tz_name = str(cfg.get("timezone") or "Asia/Seoul")
@@ -261,26 +287,41 @@ def should_run_now(
         days = {int(d) for d in weekdays}
     except (TypeError, ValueError):
         days = {1, 2, 3, 4, 5}
-    if clock.isoweekday() not in days:
-        return False, f"weekday {clock.isoweekday()} not in {sorted(days)}"
-
     try:
         hour, minute = _parse_hhmm(str(schedule.get("run_at") or "07:00"), field="run_at")
     except ValueError as exc:
         return False, str(exc)
 
-    run_minutes = hour * 60 + minute
-    now_minutes = clock.hour * 60 + clock.minute
-    if not (run_minutes <= now_minutes < run_minutes + max(1, window_minutes)):
+    window = timedelta(minutes=max(1, window_minutes))
+    scheduled_date = None
+    matched_weekday: int | None = None
+    for candidate_date in (clock.date(), clock.date() - timedelta(days=1)):
+        scheduled = datetime(
+            candidate_date.year,
+            candidate_date.month,
+            candidate_date.day,
+            hour,
+            minute,
+            tzinfo=tz,
+        )
+        if scheduled <= clock < scheduled + window:
+            matched_weekday = candidate_date.isoweekday()
+            if matched_weekday in days:
+                scheduled_date = candidate_date
+                break
+
+    if scheduled_date is None:
+        if matched_weekday is not None:
+            return False, f"weekday {matched_weekday} not in {sorted(days)}"
         return False, (
             f"outside run window {hour:02d}:{minute:02d}"
             f"+{window_minutes}m (now {clock.strftime('%H:%M')})"
         )
 
-    today = clock.date().isoformat()
+    scheduled_day = scheduled_date.isoformat()
     stamp = last_run if last_run is not None else read_last_run_date()
-    if stamp == today:
-        return False, f"already ran today ({today})"
+    if stamp == scheduled_day:
+        return False, f"already ran scheduled date ({scheduled_day})"
     return True, "ok"
 
 

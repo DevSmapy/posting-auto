@@ -10,6 +10,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from uuid import uuid4
 
 import streamlit as st
 
@@ -116,7 +117,11 @@ def _feeds_tab() -> None:
     # Keep an editable buffer in session for add/remove outside the save form.
     if "feeds_draft" not in st.session_state:
         st.session_state.feeds_draft = [
-            {"label": str(f.get("label") or ""), "url": str(f.get("url") or "")}
+            {
+                "_id": uuid4().hex,
+                "label": str(f.get("label") or ""),
+                "url": str(f.get("url") or ""),
+            }
             for f in feeds
         ]
 
@@ -125,6 +130,7 @@ def _feeds_tab() -> None:
 
     remove_idx: int | None = None
     for i, row in enumerate(draft):
+        row_id = str(row.setdefault("_id", uuid4().hex))
         c1, c2, c3 = st.columns([2, 6, 1])
         with c1:
             row["label"] = st.text_input(
@@ -132,7 +138,7 @@ def _feeds_tab() -> None:
                 value=row.get("label") or "",
                 label_visibility="collapsed",
                 placeholder="Label",
-                key=f"feed_label_{i}",
+                key=f"feed_label_{row_id}",
             )
         with c2:
             row["url"] = st.text_input(
@@ -140,10 +146,10 @@ def _feeds_tab() -> None:
                 value=row.get("url") or "",
                 label_visibility="collapsed",
                 placeholder="https://…/rss",
-                key=f"feed_url_{i}",
+                key=f"feed_url_{row_id}",
             )
         with c3:
-            if st.button("Del", key=f"feed_del_{i}"):
+            if st.button("Del", key=f"feed_del_{row_id}"):
                 remove_idx = i
 
     if remove_idx is not None:
@@ -152,7 +158,7 @@ def _feeds_tab() -> None:
         st.rerun()
 
     if st.button("Add feed"):
-        draft.append({"label": "FEED", "url": ""})
+        draft.append({"_id": uuid4().hex, "label": "FEED", "url": ""})
         st.session_state.feeds_draft = draft
         st.rerun()
 
@@ -160,22 +166,27 @@ def _feeds_tab() -> None:
         st.caption("위 목록을 확인한 뒤 Save feeds를 누르세요.")
         if st.form_submit_button("Save feeds"):
             cleaned = []
+            cleaned_draft = []
             for row in st.session_state.feeds_draft:
                 url = str(row.get("url") or "").strip()
                 if not url:
                     continue
                 label = str(row.get("label") or "FEED").strip() or "FEED"
                 cleaned.append({"label": label, "url": url})
+                cleaned_draft.append(
+                    {
+                        "_id": str(row.get("_id") or uuid4().hex),
+                        "label": label,
+                        "url": url,
+                    }
+                )
             if not cleaned:
                 st.error("URL이 있는 피드를 하나 이상 남겨 주세요.")
             else:
                 updated = {**ops, "feeds": cleaned}
                 save_ops_config(updated)
                 _reload_ops()
-                st.session_state.feeds_draft = [
-                    {"label": f["label"], "url": f["url"]}
-                    for f in st.session_state.ops.get("feeds") or []
-                ]
+                st.session_state.feeds_draft = cleaned_draft
                 st.success(f"Saved {len(cleaned)} feed(s).")
 
 
@@ -184,6 +195,10 @@ def _cards_tab() -> None:
     cards = dict(ops.get("cards") or {})
     bundles = list(list_bundles())
     ids = [b.id for b in bundles]
+    if not ids:
+        st.subheader("Instagram card bundle")
+        st.info("사용 가능한 카드 번들이 없습니다.")
+        return
     current = str(cards.get("bundle_id") or "daily_briefing")
     if current not in ids and ids:
         current = ids[0]
@@ -252,4 +267,5 @@ def _cards_tab() -> None:
                 st.json(json.loads(meta.read_text(encoding="utf-8")))
 
 
-main()
+if __name__ == "__main__":
+    main()

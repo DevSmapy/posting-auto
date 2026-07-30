@@ -2,6 +2,8 @@
 # cron용: 로그인 셸(.zshrc) 없이 docker/PATH 보장
 # Ops console: config/ops.json 의 run_at/weekdays 와 맞을 때만 draft 실행.
 # crontab 예: */5 * * * 1-5 "/ABS/scripts/cron_run_draft.sh" >>"/ABS/output/cron.log" 2>&1
+# macOS /etc/newsyslog.d/posting-auto.conf 예 (1MB, 압축본 5개 보관):
+# /ABS/output/cron.log  640  5  1024  *  J
 set -euo pipefail
 
 export PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin${PATH:+:$PATH}"
