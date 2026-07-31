@@ -1,4 +1,4 @@
-"""Instagram Content Publishing API — carousel (docs/05, Meta Graph)."""
+"""Instagram Content Publishing API — carousel (docs/04, Meta Graph)."""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 # Mirrored from pyproject.toml for tools that still expect a requirements file.
-# Prefer: `uv sync` (see README / docs/06-setup.md).
+# Prefer: `uv sync` (see README / docs/00-mvp-quickstart.md).
 feedparser>=6.0.11
 requests>=2.32.0
 python-dotenv>=1.0.1

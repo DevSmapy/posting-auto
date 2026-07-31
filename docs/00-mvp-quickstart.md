@@ -1,6 +1,68 @@
-# 외장 드라이브 + 기존 n8n/Ollama 기준 실행 순서
+# MVP 빠른 시작 (실행 · 설치)
 
-## 스토리지 배치
+외장 드라이브 + 기존 n8n/Ollama 기준 실행 순서와 사전 설정 체크리스트입니다.
+
+## 사전 준비 체크리스트
+
+### 공통
+
+- [ ] Docker Desktop
+- [ ] 여유 RAM: `14b` 기준 16GB+ 권장 (`7b`는 더 낮아도 가능)
+
+### Ollama (Docker)
+
+- [ ] `docker compose up -d ollama` (또는 기존 Ollama 컨테이너 실행 중)
+- [ ] `docker compose exec ollama ollama pull qwen2.5:14b`
+- [ ] `./scripts/smoke_ollama.sh` (호스트 → `127.0.0.1:11434`)
+
+### 티스토리 / 블로그
+
+- [x] Open API 종료 → **반자동 마크다운** (`briefing.md` 수동 붙여넣기)
+- [ ] (운영) Approve 후 에디터에 붙여넣기 습관화
+
+### Instagram / Meta
+
+- [ ] 프로페셔널 계정 + Facebook 페이지
+- [ ] Meta 앱 + Content Publishing
+- [ ] `IG_USER_ID`, long-lived `META_ACCESS_TOKEN`
+
+> 인스타 연동이 준비 중 가장 오래 걸리는 구간입니다.
+
+### Discord (권장 Approve 채널 · 주력)
+
+- [ ] Developer Portal Bot → `DISCORD_BOT_TOKEN`
+- [ ] **텍스트 채널** ID → `DISCORD_CHANNEL_ID` (카테고리 ID 금지) + 봇 초대 (Send / Attach Files / React / History)
+- [ ] `NOTIFY_CHANNEL=discord` (또는 자동 선택)
+- [ ] `uv run python scripts/smoke_discord.py`
+
+### Telegram
+
+- [ ] BotFather 봇 → `TELEGRAM_BOT_TOKEN`
+- [ ] `TELEGRAM_CHAT_ID` + 봇에게 `/start`
+- [ ] `uv run python scripts/smoke_telegram.py`
+
+### Slack
+
+- [ ] Slack 앱 Bot Token → `SLACK_BOT_TOKEN`
+- [ ] 채널에 봇 invite → `SLACK_CHANNEL_ID`
+- [ ] `NOTIFY_CHANNEL=slack`
+- [ ] `uv run python scripts/smoke_slack.py`
+
+### Postgres / seen_urls
+
+- [x] `docker compose up -d postgres`
+- [x] `uv run python scripts/smoke_seen_urls.py`
+
+### Cloudflare R2
+
+- [ ] 버킷 + 공개(또는 커스텀 도메인) base URL
+- [ ] S3 호환 액세스 키
+
+---
+
+## 환경 변수 · 스토리지
+
+전체 목록은 [`.env.example`](../.env.example)을 보세요. (`cp .env.example .env`)
 
 | 대상 | 드라이브 | 경로 |
 |------|----------|------|
@@ -10,7 +72,15 @@
 | Ollama 이미지 tar | **Extreme SSD** | `/Volumes/Extreme SSD/DockerData/images` |
 | Ollama 모델 데이터 | **Extreme SSD** | `/Volumes/Extreme SSD/DockerData/ollama_data` |
 
-지금 PC에는 이미 아래가 떠 있습니다.
+| 변수 | 기본 경로 |
+|------|-----------|
+| `IMAGE_DIR` | `/Volumes/WD_BLACK/Careers/DockerData/images` |
+| `POSTGRES_DATA_PATH` | `/Volumes/WD_BLACK/Careers/DockerData/posting-auto/postgres` |
+| `N8N_DATA_PATH` | `/Volumes/WD_BLACK/Careers/DockerData/n8n_data` |
+| `OLLAMA_IMAGE_DIR` | `"/Volumes/Extreme SSD/DockerData/images"` (따옴표 필수) |
+| `OLLAMA_DATA_PATH` | `"/Volumes/Extreme SSD/DockerData/ollama_data"` (따옴표 필수) |
+
+지금 PC에는 이미 아래가 떠 있는 경우가 많습니다.
 
 - `n8n` → `:5678` (WD_BLACK `n8n_data`)
 - `ollama` → `:11434` (Extreme SSD `ollama_data`)
@@ -18,8 +88,15 @@
 그래서 **이 프로젝트 Compose로 ollama/n8n을 다시 올리면 포트 충돌**이 납니다.  
 MVP는 **기존 컨테이너를 재사용**하고, 부족한 이미지(postgres·browserless)만 WD_BLACK에 skopeo로 받습니다.
 
-관련 환경 변수: `.env` / `.env.example` 의 `IMAGE_DIR`, `OLLAMA_IMAGE_DIR`, `OLLAMA_DATA_PATH`, `POSTGRES_DATA_PATH`, `N8N_DATA_PATH`  
-(`Extreme SSD` 경로는 공백 때문에 `.env`에서 **반드시 따옴표**로 감쌉니다.)
+> `Extreme SSD`처럼 경로에 공백이 있으면 `.env`에서 **반드시 `"..."`로 감싸야** 합니다.  
+> 따옴표 없이 `source .env` 하면 `/Volumes/Extreme` 까지만 변수에 들어가고 깨집니다.
+
+Ollama API: 컨테이너용 `OLLAMA_BASE_URL=http://host.docker.internal:11434`,  
+호스트 스크립트용 `OLLAMA_HOST_URL=http://127.0.0.1:11434`.  
+`.env`는 git에 올리지 않습니다.
+
+의존성·가상환경은 **uv** 기준입니다 (`pyproject.toml`).  
+(`requirements.txt`는 호환용 미러이며, 신규 설치는 `uv sync`를 쓰세요.)
 
 ---
 
@@ -52,7 +129,6 @@ chmod +x scripts/skopeo_pull_images.sh
 Ollama 이미지 tar만 Extreme SSD에 둘 때(선택):
 
 ```bash
-# 스크립트 하단 ollama 줄 주석 해제 후
 IMAGE_DIR="$OLLAMA_IMAGE_DIR" ./scripts/skopeo_pull_images.sh
 # 또는
 IMAGE_DIR="/Volumes/Extreme SSD/DockerData/images" ./scripts/skopeo_pull_images.sh
@@ -74,6 +150,12 @@ docker compose ps
 ./scripts/smoke_ollama.sh
 ```
 
+| 서비스 | 역할 | 포트 | 비고 |
+|--------|------|------|------|
+| `postgres` | DB + `seen_urls` | `5433` | WD_BLACK 데이터 |
+| `browserless` | 카드 스크린샷 | `3000` | |
+| `n8n` / `ollama` | — | — | 기존 컨테이너 재사용 (`full` 프로필만) |
+
 ---
 
 ## 3) MVP 파이프라인
@@ -83,7 +165,6 @@ cd "/Users/leeyongkyun/포스팅 자동화"
 uv sync   # 최초 1회 또는 의존성 변경 시
 
 # (권장) Ollama 컨테이너 CPU/메모리 상한 — M2 Air + Desktop ~12GB
-# Desktop Settings의 Memory와 컨테이너 --memory는 별개입니다.
 chmod +x scripts/limit_ollama_resources.sh
 ./scripts/limit_ollama_resources.sh   # 기본 4 CPU / 10GB
 
@@ -105,13 +186,11 @@ uv run python scripts/smoke_seen_urls.py
 
 # 권장: content gate → render gate → cleanup ask
 ./scripts/run_draft.sh
-# 또는 수동으로 컨테이너를 켠 채:
-# MVP_MODE=draft OLLAMA_AUTO_CONTAINER=0 DRAFT_AUTO_AUX=0 \
-#   uv run python scripts/mvp_pipeline.py
 ```
 
 로컬 트래킹 예: `git fetch origin && git checkout -t origin/<feature-branch>`  
-① 내용(✅/🔀/✍️) → ② 이미지(✅/🔁) → ③ cleanup. 재시도: `CONTENT_RETRY_MAX` / `RENDER_RETRY_MAX`.
+① 내용(✅/🔀/✍️) → ② 이미지(✅/🔁) → ③ cleanup. 재시도: `CONTENT_RETRY_MAX` / `RENDER_RETRY_MAX`.  
+게이트·parked resume 상세: [04. 발행·워크플로](04-publishing.md).
 
 토큰 없이 게이트만 검증할 때:
 
@@ -133,20 +212,15 @@ uv run python -m unittest discover -s tests -v
 
 ```bash
 docker compose up -d browserless   # PNG용 (선택; Chrome만 있어도 됨)
-# .env 의 BROWSERLESS_TOKEN 은 compose TOKEN 과 같아야 함 (기본 local-dev-token)
-# chromium 이미지 REST 경로: /chromium/screenshot
 uv run python scripts/preview_cardnews.py
 # → output/cardnews-preview/
-#    HTML·caption/instagram_post.txt 는 항상 생성
-#    PNG 는 Browserless 또는 로컬 Chrome 등 스크린샷 백엔드가 있을 때만 생성
 ```
 
-슬라이드·인스타 본문 포맷: [05. 발행](05-publishing.md).  
-템플릿 구조·에디토리얼 UI: [09. 카드 템플릿](09-card-templates.md).
+슬라이드·인스타 본문·발행: [04. 발행·워크플로](04-publishing.md).  
+템플릿 구조·에디토리얼 UI: [05. 카드 템플릿](05-card-templates.md).  
+Template Studio: `uv run streamlit run apps/template_studio/app.py`
 
 ### 평일 cron + Ops Console (macOS/Linux)
-
-스케줄·RSS·카드 번들은 Ops Console에서 바꿉니다.
 
 ```bash
 cp config/ops.example.json config/ops.json
@@ -157,23 +231,17 @@ uv run streamlit run apps/ops_console/app.py
 `config/ops.json`의 `schedule.run_at` / `notify_at` / `feeds` / `cards.bundle_id`를 저장하면 파이프라인·cron이 읽습니다.  
 `NOTIFY_SEND_AT`·`CARD_BUNDLE_ID`·`GNEWS_*` env가 있으면 해당 항목만 env가 우선합니다.
 
-cron은 crontab에 고정 시각 대신 **5분마다** 돌리고, `cron_run_draft.sh`가 `run_at` 창·요일·오늘 실행 여부를 검사합니다.
-
 ```cron
 */5 * * * 1-5 "/ABSOLUTE/PATH/TO/REPO/scripts/cron_run_draft.sh" >>"/ABSOLUTE/PATH/TO/REPO/output/cron.log" 2>&1
 ```
 
-`/ABSOLUTE/PATH/TO/REPO`를 이 저장소의 실제 절대 경로로 바꾸세요. cron은 `.zshrc`를 읽지 않으므로 wrapper가 PATH에 docker를 넣습니다.
-
 `./scripts/run_draft.sh` 수명주기:
 
-1. `ollama` **start** → 모델 warm (**스토리와 동일 `num_ctx`/`num_thread`**, 기본 600초; 실패해도 draft 계속)
-2. 랭킹·스토리 건당 LLM (① 내용 게이트 동안 Rerank/Rewrite 시 **ollama 유지** — 재 warm 없음)
-3. 내용 **Approve** 후 **ollama stop** (Discord ② 렌더 게이트 대기 전 — 메모리 반환)
-4. `postgres` (+ `browserless` if `PUBLISH_CARDS`) **start** → 카드 렌더 (Re-render 시 aux 유지)
-5. 렌더 단계 종료 후 aux **stop** → publish 직전에 aux **재기동**(postgres/browserless) → publish → 종료 시 남은 컨테이너 **stop** (`OLLAMA_AUTO_CONTAINER`/`DRAFT_AUTO_AUX`는 run_draft가 1로 켬)
-
-Docker Desktop은 켜 두세요. 포스팅 목표 시각(예: 08:00)은 수동 붙여넣기 기준이며 코드로 강제하지 않습니다.
+1. `ollama` **start** → 모델 warm (기본 600초; 실패해도 draft 계속)
+2. 랭킹·스토리 건당 LLM (① 내용 게이트 동안 Rerank/Rewrite 시 **ollama 유지**)
+3. 내용 **Approve** 후 **ollama stop**
+4. `postgres` (+ `browserless` if cards) **start** → 카드 렌더
+5. 렌더 종료 후 aux **stop** → publish 직전 aux **재기동** → publish → 종료 시 stop
 
 | `MVP_MODE` | 동작 |
 |------------|------|
@@ -181,21 +249,17 @@ Docker Desktop은 켜 두세요. 포스팅 목표 시각(예: 08:00)은 수동 �
 | `draft` | 초안 → Approve 대기 → `briefing.md` |
 | `publish` | Approve 없이 바로 `briefing.md` |
 
-CPU가 여전히 높거나 스토리 요약이 타임아웃되면 `.env`에서:
+CPU가 높거나 스토리 타임아웃이면 `.env`에서:
 
 ```bash
 OLLAMA_NUM_THREAD=4
-OLLAMA_NUM_CTX=4096          # warm과 스토리 LLM이 같은 값이어야 함 (다르면 재로드)
+OLLAMA_NUM_CTX=4096
 OLLAMA_STORY_TIMEOUT_MS=300000
-OLLAMA_LOAD_TIMEOUT=10m       # 컨테이너 env — run_draft가 다르면 ollama 재생성
+OLLAMA_LOAD_TIMEOUT=10m
 OLLAMA_WARM_TIMEOUT_SEC=600
-RANK_MODE=heuristic   # 랭킹만 규칙 기반, 스토리만 건당 LLM
+RANK_MODE=heuristic
 BRIEFING_MODE=llm
-# 500/restart 안내가 나면 한 번:
-# OLLAMA_DOCKER_RESTART=1 ./scripts/run_draft.sh
 ```
-
-컨테이너 한도를 Desktop에 맞춘 뒤:
 
 ```bash
 OLLAMA_DOCKER_MEMORY=10g OLLAMA_DOCKER_CPUS=4 ./scripts/limit_ollama_resources.sh
@@ -220,4 +284,6 @@ OLLAMA_DOCKER_MEMORY=10g OLLAMA_DOCKER_CPUS=4 ./scripts/limit_ollama_resources.s
 docker compose --profile full up -d
 ```
 
-지금처럼 이미 `ollama`/`n8n`이 있으면 **실행하지 마세요.**
+이미 `ollama`/`n8n`이 있으면 **실행하지 마세요.**
+
+다음: [01. 개요·아키텍처](01-overview.md)
