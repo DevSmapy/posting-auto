@@ -50,8 +50,9 @@ def _cmd_publish(run_dir: Path, *, r2_prefix: str | None) -> int:
         print("publish_ready missing — building package first")
         pkg = ensure_publish_ready_from_run(run_dir)
 
-    if len(pkg.png_paths) < 2:
-        print(f"!! need 2-10 PNGs, got {len(pkg.png_paths)}", file=sys.stderr)
+    n = len(pkg.png_paths)
+    if n < 2 or n > 10:
+        print(f"!! need 2-10 PNGs, got {n}", file=sys.stderr)
         return 1
 
     cfg = PublishConfig.from_env()
@@ -75,6 +76,10 @@ def _cmd_publish(run_dir: Path, *, r2_prefix: str | None) -> int:
     print("==> create_containers")
     creation_id = publisher.create_containers(urls, pkg.caption)
     print(f"   creation_id={creation_id}")
+    (pkg.root / "creation_id.json").write_text(
+        json.dumps({"creation_id": creation_id}, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
     print("==> media_publish")
     media_id = publisher.media_publish(creation_id)
     print(f"   ig media id: {media_id}")

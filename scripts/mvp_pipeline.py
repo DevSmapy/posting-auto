@@ -1837,7 +1837,6 @@ def resume_parked_draft(
         print(f"!! unknown parked_stage={stage!r}", file=sys.stderr)
         return 1
 
-    draft_store.clear_parked()
     notifier = notifier or get_notifier()
     channel = resolve_channel()
     seen = store or SeenUrlsStore()
@@ -1849,8 +1848,13 @@ def resume_parked_draft(
             print("!! no current_content to resume", file=sys.stderr)
             return 1
         attempt_dir = draft_store.content_dir(content_name)
-        briefing = _load_attempt_briefing(attempt_dir)
-        picked = _load_attempt_ranked(attempt_dir)
+        try:
+            briefing = _load_attempt_briefing(attempt_dir)
+            picked = _load_attempt_ranked(attempt_dir)
+        except Exception:
+            draft_store.mark_parked("content")
+            raise
+        draft_store.clear_parked()
         generation_mode = "resume"
         action = _run_content_gate(
             notifier=notifier,
@@ -1873,6 +1877,11 @@ def resume_parked_draft(
                 f"!! resume content gate returned {action.value}; "
                 "re-run resume after regenerating via a fresh draft if needed.",
                 file=sys.stderr,
+            )
+            notifier.send_text(
+                f"[resume] 내용 게이트 응답이 `{action.value}` 입니다. "
+                "이어서 진행할 수 없어 park 상태를 유지합니다. "
+                "필요하면 새 draft를 실행하세요."
             )
             draft_store.mark_parked("content")
             return 1
@@ -1912,6 +1921,11 @@ def resume_parked_draft(
             draft_store.mark_parked("render")
             return 0
         if action != GateAction.APPROVE:
+            notifier.send_text(
+                f"[resume] 렌더 게이트 응답이 `{action.value}` 입니다. "
+                "이어서 진행할 수 없어 park 상태를 유지합니다. "
+                "필요하면 새 draft를 실행하세요."
+            )
             draft_store.mark_parked("render")
             print(f"!! unexpected render action on resume: {action}", file=sys.stderr)
             return 1
@@ -1934,8 +1948,13 @@ def resume_parked_draft(
         print("!! missing selected_content/current_render for render resume", file=sys.stderr)
         return 1
     attempt_dir = draft_store.content_dir(content_name)
-    briefing = _load_attempt_briefing(attempt_dir)
-    picked = _load_attempt_ranked(attempt_dir)
+    try:
+        briefing = _load_attempt_briefing(attempt_dir)
+        picked = _load_attempt_ranked(attempt_dir)
+    except Exception:
+        draft_store.mark_parked("render")
+        raise
+    draft_store.clear_parked()
     generation_mode = "resume"
     render_dir = draft_store.render_dir(render_name)
     cards_dir = render_dir / "cards"
@@ -1970,9 +1989,18 @@ def resume_parked_draft(
         return 0
     if action == GateAction.RERENDER:
         print("!! Rerender on resume: start a fresh render via draft run", file=sys.stderr)
+        notifier.send_text(
+            "[resume] Re-render는 resume 경로에서 지원하지 않습니다. "
+            "park 상태를 유지하니 새 draft를 실행해 주세요."
+        )
         draft_store.mark_parked("render")
         return 1
     if action != GateAction.APPROVE:
+        notifier.send_text(
+            f"[resume] 렌더 게이트 응답이 `{action.value}` 입니다. "
+            "이어서 진행할 수 없어 park 상태를 유지합니다. "
+            "필요하면 새 draft를 실행하세요."
+        )
         draft_store.mark_parked("render")
         return 1
     return _finish_draft_after_render_approve(

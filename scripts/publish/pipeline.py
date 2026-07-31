@@ -70,6 +70,15 @@ class PublishCardsPipeline:
                 skipped_reason="no PNG paths",
             )
 
+        n = len(png_paths)
+        if n < 2 or n > 10:
+            return PublishCardsResult(
+                attempted=True,
+                image_urls=[],
+                ig_media_id=None,
+                skipped_reason=f"need 2-10 PNGs, got {n}",
+            )
+
         if not self.config.r2_configured:
             self._log("R2 not configured — skip Instagram (local cards kept)")
             return PublishCardsResult(
@@ -108,6 +117,12 @@ class PublishCardsPipeline:
         caption = caption_from_briefing(briefing)
         self._log("Instagram create_containers")
         creation_id = self.publisher.create_containers(image_urls, caption)
+        if run_dir is not None:
+            (run_dir / "creation_id.json").write_text(
+                json.dumps({"creation_id": creation_id}, ensure_ascii=False, indent=2)
+                + "\n",
+                encoding="utf-8",
+            )
         self._log("Instagram media_publish")
         ig_media_id = self.publisher.media_publish(creation_id)
         self._log(f"ig media id: {ig_media_id}")

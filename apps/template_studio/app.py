@@ -9,6 +9,7 @@ Separated from Ops Console. Pipeline morning-run wiring is follow-up.
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -135,7 +136,11 @@ def _placeholders_tab() -> None:
     fields = dict(content.get(slide) or {})
     updated: dict[str, str] = {}
     with st.form(f"fields_{slide}"):
+        new_field = st.text_input("New field name", value="")
         keys = sorted(fields.keys()) or ["headline"]
+        nk = (new_field or "").strip()
+        if nk and nk not in keys:
+            keys = sorted([*keys, nk])
         for key in keys:
             updated[key] = st.text_area(key, value=str(fields.get(key, "")), height=80)
         if st.form_submit_button("Apply slide fields"):
@@ -167,6 +172,9 @@ def _preview_tab() -> None:
                 content=content,
                 templates_dir=theme_dir(theme),
             )
+            old_preview = st.session_state.get("studio_preview_dir")
+            if old_preview:
+                shutil.rmtree(old_preview, ignore_errors=True)
             out = Path(tempfile.mkdtemp(prefix="template_studio_"))
             result = tpl.export(out, render_png=render_png)
             st.session_state.studio_preview_dir = str(out)

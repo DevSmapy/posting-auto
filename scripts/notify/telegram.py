@@ -14,10 +14,9 @@ from .approve_copy import (
     approve_footer,
     existing_image_paths,
     gate_footer,
-    reminder_message,
     timeout_message,
 )
-from .base import GateAction, GateStage, normalize_stage
+from .base import GateAction, GateStage, maybe_send_gate_reminder, normalize_stage
 from .envutil import approve_reminder_sec, approve_timeout_sec, env
 
 
@@ -338,14 +337,13 @@ class TelegramNotifier:
         reminded = False
         while time.time() < deadline:
             remaining_s = max(1, int(deadline - time.time()))
-            if (
-                not reminded
-                and reminder_sec > 0
-                and remaining_s <= reminder_sec
-                and stage_s != GateStage.CLEANUP
-            ):
-                self.send_text(reminder_message(stage_s, remaining_s))
-                reminded = True
+            reminded = maybe_send_gate_reminder(
+                self.send_text,
+                stage_s,
+                deadline=deadline,
+                reminder_sec=reminder_sec,
+                reminded=reminded,
+            )
             poll_timeout = min(25, remaining_s)
             data = self._api(
                 "getUpdates",

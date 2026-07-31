@@ -27,8 +27,22 @@ def list_editorial_themes(templates_dir: Path | None = None) -> list[str]:
 
 
 def theme_dir(name: str, templates_dir: Path | None = None) -> Path:
-    base = Path(templates_dir) if templates_dir is not None else TEMPLATES
-    return base / name
+    base = (Path(templates_dir) if templates_dir is not None else TEMPLATES).resolve()
+    raw = (name or "").strip()
+    candidate = Path(raw)
+    if (
+        not raw
+        or candidate.is_absolute()
+        or ".." in candidate.parts
+        or candidate.name != raw
+    ):
+        raise ValueError(f"invalid theme name: {name!r}")
+    resolved = (base / raw).resolve()
+    try:
+        resolved.relative_to(base)
+    except ValueError as exc:
+        raise ValueError(f"theme path escapes templates dir: {name!r}") from exc
+    return resolved
 
 
 def clone_theme(

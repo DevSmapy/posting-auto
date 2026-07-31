@@ -294,7 +294,7 @@ class PublishCardsPipelineTest(unittest.TestCase):
             _cfg(r2_access_key_id=""),
             log=logs.append,
         ).run(
-            png_paths=[Path("/tmp/a.png")],
+            png_paths=[Path("/tmp/a.png"), Path("/tmp/b.png")],
             briefing={"instagram_post": "hi"},
             r2_prefix="briefs/x",
         )
@@ -302,9 +302,27 @@ class PublishCardsPipelineTest(unittest.TestCase):
         self.assertEqual(result.skipped_reason, "R2 not configured")
         self.assertTrue(any("R2 not configured" in m for m in logs))
 
+    def test_rejects_carousel_count_outside_2_to_10(self) -> None:
+        result = PublishCardsPipeline(_cfg()).run(
+            png_paths=[Path("/tmp/a.png")],
+            briefing={},
+            r2_prefix="briefs/x",
+        )
+        self.assertTrue(result.attempted)
+        self.assertEqual(result.skipped_reason, "need 2-10 PNGs, got 1")
+        result_hi = PublishCardsPipeline(_cfg()).run(
+            png_paths=[Path(f"/tmp/{i}.png") for i in range(11)],
+            briefing={},
+            r2_prefix="briefs/x",
+        )
+        self.assertEqual(result_hi.skipped_reason, "need 2-10 PNGs, got 11")
+
     def test_happy_path(self) -> None:
         uploader = MagicMock()
-        uploader.upload.return_value = ["https://cdn.example/a.png"]
+        uploader.upload.return_value = [
+            "https://cdn.example/a.png",
+            "https://cdn.example/b.png",
+        ]
         publisher = MagicMock()
         publisher.create_containers.return_value = "parent-1"
         publisher.media_publish.return_value = "media-1"
@@ -313,34 +331,43 @@ class PublishCardsPipelineTest(unittest.TestCase):
             uploader=uploader,
             publisher=publisher,
         ).run(
-            png_paths=[Path("/tmp/a.png")],
+            png_paths=[Path("/tmp/a.png"), Path("/tmp/b.png")],
             briefing={"instagram_post": "본문"},
             r2_prefix="briefs/2026-07-28",
         )
         self.assertEqual(result.ig_media_id, "media-1")
-        self.assertEqual(result.image_urls, ["https://cdn.example/a.png"])
+        self.assertEqual(
+            result.image_urls,
+            ["https://cdn.example/a.png", "https://cdn.example/b.png"],
+        )
         self.assertEqual(result.creation_id, "parent-1")
         self.assertIsNone(result.skipped_reason)
         publisher.create_containers.assert_called_once_with(
-            ["https://cdn.example/a.png"], "본문"
+            ["https://cdn.example/a.png", "https://cdn.example/b.png"], "본문"
         )
         publisher.media_publish.assert_called_once_with("parent-1")
 
     def test_package_mode_skips_media_publish(self) -> None:
         uploader = MagicMock()
-        uploader.upload.return_value = ["https://cdn.example/a.png"]
+        uploader.upload.return_value = [
+            "https://cdn.example/a.png",
+            "https://cdn.example/b.png",
+        ]
         publisher = MagicMock()
         result = PublishCardsPipeline(
             _cfg(publish_mode="package"),
             uploader=uploader,
             publisher=publisher,
         ).run(
-            png_paths=[Path("/tmp/a.png")],
+            png_paths=[Path("/tmp/a.png"), Path("/tmp/b.png")],
             briefing={"instagram_post": "본문"},
             r2_prefix="briefs/x",
         )
         self.assertEqual(result.skipped_reason, "PUBLISH_MODE=package")
-        self.assertEqual(result.image_urls, ["https://cdn.example/a.png"])
+        self.assertEqual(
+            result.image_urls,
+            ["https://cdn.example/a.png", "https://cdn.example/b.png"],
+        )
         publisher.create_containers.assert_not_called()
         publisher.media_publish.assert_not_called()
 
@@ -348,7 +375,10 @@ class PublishCardsPipelineTest(unittest.TestCase):
         import tempfile
 
         uploader = MagicMock()
-        uploader.upload.return_value = ["https://cdn.example/a.png"]
+        uploader.upload.return_value = [
+            "https://cdn.example/a.png",
+            "https://cdn.example/b.png",
+        ]
         publisher = MagicMock()
         publisher.create_containers.return_value = "parent"
         publisher.media_publish.return_value = "media-1"
@@ -359,13 +389,15 @@ class PublishCardsPipelineTest(unittest.TestCase):
                 uploader=uploader,
                 publisher=publisher,
             ).run(
-                png_paths=[Path("/tmp/a.png")],
+                png_paths=[Path("/tmp/a.png"), Path("/tmp/b.png")],
                 briefing={"instagram_post": "x"},
                 r2_prefix="briefs/x",
                 run_dir=run_dir,
             )
             saved = (run_dir / "image_urls.json").read_text(encoding="utf-8")
             self.assertIn("https://cdn.example/a.png", saved)
+            creation = (run_dir / "creation_id.json").read_text(encoding="utf-8")
+            self.assertIn("parent", creation)
 
 
 if __name__ == "__main__":

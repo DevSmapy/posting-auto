@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "apps" / "template_studio"))
 
-from themes import clone_theme, list_editorial_themes  # noqa: E402
+from themes import clone_theme, list_editorial_themes, theme_dir  # noqa: E402
 
 
 class TemplateStudioHelpersTest(unittest.TestCase):
@@ -28,6 +28,39 @@ class TemplateStudioHelpersTest(unittest.TestCase):
             themes = list_editorial_themes(templates)
             self.assertIn("editorial", themes)
             self.assertIn("editorial_dawn", themes)
+
+    def test_clone_theme_rejects_empty_name(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            templates = Path(tmp) / "cards"
+            (templates / "editorial").mkdir(parents=True)
+            with self.assertRaises(ValueError):
+                clone_theme("editorial", "   ", templates_dir=templates)
+
+    def test_clone_theme_rejects_existing_destination(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            templates = Path(tmp) / "cards"
+            (templates / "editorial").mkdir(parents=True)
+            (templates / "editorial_dawn").mkdir(parents=True)
+            with self.assertRaises(FileExistsError):
+                clone_theme("editorial", "dawn", templates_dir=templates)
+
+    def test_clone_theme_rejects_missing_source(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            templates = Path(tmp) / "cards"
+            templates.mkdir(parents=True)
+            with self.assertRaises(FileNotFoundError):
+                clone_theme("editorial", "dawn", templates_dir=templates)
+
+    def test_theme_dir_rejects_traversal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            templates = Path(tmp) / "cards"
+            templates.mkdir(parents=True)
+            with self.assertRaises(ValueError):
+                theme_dir("../secret", templates_dir=templates)
+            with self.assertRaises(ValueError):
+                theme_dir("/tmp/secret", templates_dir=templates)
+            with self.assertRaises(ValueError):
+                clone_theme("../secret", "dawn", templates_dir=templates)
 
 
 if __name__ == "__main__":

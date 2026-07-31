@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import warnings
 from dataclasses import dataclass
 
 
@@ -34,9 +35,15 @@ class PublishConfig:
 
     @classmethod
     def from_env(cls) -> PublishConfig:
-        mode = (_env("PUBLISH_MODE", "publish") or "publish").lower()
+        raw_mode = _env("PUBLISH_MODE", "publish") or "publish"
+        mode = raw_mode.lower()
         if mode not in {"publish", "package"}:
-            mode = "publish"
+            warnings.warn(
+                f"Unrecognized PUBLISH_MODE={raw_mode!r}; falling back to 'package'",
+                UserWarning,
+                stacklevel=2,
+            )
+            mode = "package"
         return cls(
             publish_cards=_truthy(_env("PUBLISH_CARDS", "0")),
             publish_mode=mode,
