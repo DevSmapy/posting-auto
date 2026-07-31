@@ -152,12 +152,37 @@ def exhausted_message(stage: GateStage | str) -> str:
     )
 
 
-def timeout_message(stage: GateStage | str, timeout_sec: int) -> str:
+def timeout_message(
+    stage: GateStage | str,
+    timeout_sec: int,
+    *,
+    run_id: str = "",
+) -> str:
     stage_s = normalize_stage(stage)
+    lines = [
+        f"[타임아웃] {stage_s.value} 게이트 — {timeout_sec}s 내 응답 없음.",
+        "재시도 횟수는 차감되지 않았습니다. attempt는 디스크에 유지됩니다 (parked).",
+    ]
+    if run_id:
+        lines.append(f"이어서: `./scripts/resume_draft.sh output/{run_id}`")
+    else:
+        lines.append("계속하려면: `./scripts/resume_draft.sh output/<run_id>`")
+    return "\n".join(lines)
+
+
+def reminder_message(stage: GateStage | str, remaining_sec: int) -> str:
+    stage_s = normalize_stage(stage)
+    mins = max(1, (remaining_sec + 59) // 60)
     return (
-        f"[타임아웃] {stage_s.value} 게이트 — {timeout_sec}s 내 응답 없음.\n"
-        "재시도 횟수는 차감되지 않았습니다. attempt는 디스크에 유지됩니다.\n"
-        "계속하려면 스크립트를 다시 실행하세요: `./scripts/run_draft.sh`"
+        f"⏰ 리마인더: {stage_s.value} 게이트 응답이 약 {mins}분 남았습니다. "
+        "이모지/버튼으로 응답해 주세요."
+    )
+
+
+def parked_timeout_message(stage: str, run_id: str) -> str:
+    return (
+        f"[parked] {stage} 게이트 타임아웃 — 산출물은 유지됩니다.\n"
+        f"`./scripts/resume_draft.sh output/{run_id}`"
     )
 
 

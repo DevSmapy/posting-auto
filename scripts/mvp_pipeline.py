@@ -1558,7 +1558,8 @@ def run_draft_two_stage(
                             draft_store.set_selected_content()
                             break
                         if action == GateAction.TIMEOUT:
-                            print("Done (content timeout). seen_urls not updated.")
+                            draft_store.mark_parked("content")
+                            print("Done (content timeout, parked). seen_urls not updated.")
                             return 0
                         if action in {GateAction.RERANK, GateAction.REWRITE}:
                             next_content = action
@@ -1626,7 +1627,8 @@ def run_draft_two_stage(
                 draft_store.set_selected_content()
                 break
             if action == GateAction.TIMEOUT:
-                print("Done (content timeout). seen_urls not updated.")
+                draft_store.mark_parked("content")
+                print("Done (content timeout, parked). seen_urls not updated.")
                 return 0
             if action in {GateAction.RERANK, GateAction.REWRITE}:
                 next_content = action
@@ -1707,7 +1709,8 @@ def run_draft_two_stage(
             if action == GateAction.APPROVE:
                 break
             if action == GateAction.TIMEOUT:
-                print("Done (render timeout). seen_urls not updated.")
+                draft_store.mark_parked("render")
+                print("Done (render timeout, parked). seen_urls not updated.")
                 return 0
             if action == GateAction.RERENDER:
                 next_render = GateAction.RERENDER
@@ -1717,6 +1720,51 @@ def run_draft_two_stage(
     finally:
         release_aux_only()
 
+    return _finish_draft_after_render_approve(
+        draft_store=draft_store,
+        briefing=briefing,
+        picked=picked,
+        now=now,
+        run_dir=run_dir,
+        store=store,
+        notifier=notifier,
+        generation_mode=generation_mode,
+        card_pngs=card_pngs,
+    )
+
+
+def _load_attempt_briefing(attempt_dir: Path) -> dict[str, Any]:
+    path = attempt_dir / "briefing.json"
+    if not path.is_file():
+        raise FileNotFoundError(f"briefing.json missing: {path}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"briefing.json must be an object: {path}")
+    return data
+
+
+def _load_attempt_ranked(attempt_dir: Path) -> list[dict[str, Any]]:
+    path = attempt_dir / "ranked.json"
+    if not path.is_file():
+        return []
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, list):
+        return []
+    return [row for row in data if isinstance(row, dict)]
+
+
+def _finish_draft_after_render_approve(
+    *,
+    draft_store: DraftRunStore,
+    briefing: dict[str, Any],
+    picked: list[dict[str, Any]],
+    now: datetime,
+    run_dir: Path,
+    store: SeenUrlsStore,
+    notifier: Any,
+    generation_mode: str,
+    card_pngs: list[Path],
+) -> int:
     ensure_aux_before_publish()
     store.reopen()
     run_publish(
@@ -1762,7 +1810,182 @@ def run_draft_two_stage(
                 "클린업: 확정본만 유지했습니다."
                 + (f" 삭제={', '.join(deleted)}" if deleted else "")
             )
+    draft_store.mark_completed()
     return 0
+
+
+def resume_parked_draft(
+    run_dir: Path,
+    *,
+    now: datetime | None = None,
+    store: SeenUrlsStore | None = None,
+    notifier: Any | None = None,
+) -> int:
+    """Resume a content/render gate that timed out into parked status."""
+    now = now or datetime.now(TZ)
+    run_dir = Path(run_dir)
+    draft_store = DraftRunStore(run_dir)
+    draft_store.load()
+    if draft_store.manifest.status != "parked":
+        print(
+            f"!! run is not parked (status={draft_store.manifest.status!r})",
+            file=sys.stderr,
+        )
+        return 1
+    stage = (draft_store.manifest.parked_stage or "").strip().lower()
+    if stage not in {"content", "render"}:
+        print(f"!! unknown parked_stage={stage!r}", file=sys.stderr)
+        return 1
+
+    draft_store.clear_parked()
+    notifier = notifier or get_notifier()
+    channel = resolve_channel()
+    seen = store or SeenUrlsStore()
+    ensure_runtime_before_llm("draft")
+
+    if stage == "content":
+        content_name = draft_store.manifest.current_content
+        if not content_name:
+            print("!! no current_content to resume", file=sys.stderr)
+            return 1
+        attempt_dir = draft_store.content_dir(content_name)
+        briefing = _load_attempt_briefing(attempt_dir)
+        picked = _load_attempt_ranked(attempt_dir)
+        generation_mode = "resume"
+        action = _run_content_gate(
+            notifier=notifier,
+            channel=channel,
+            draft_store=draft_store,
+            run_dir=run_dir,
+            briefing=briefing,
+            picked=picked,
+            generation_mode=generation_mode,
+            attempt_dir=attempt_dir,
+            write_preview=False,
+            skip_reason="resume",
+        )
+        if action == GateAction.TIMEOUT:
+            draft_store.mark_parked("content")
+            print("Done (content timeout, parked again).")
+            return 0
+        if action != GateAction.APPROVE:
+            print(
+                f"!! resume content gate returned {action.value}; "
+                "re-run resume after regenerating via a fresh draft if needed.",
+                file=sys.stderr,
+            )
+            draft_store.mark_parked("content")
+            return 1
+        draft_store.set_selected_content()
+        notifier.send_text(
+            render_stage_start_ack(
+                run_id=run_dir.name,
+                content_attempt=draft_store.manifest.selected_content or "",
+            )
+        )
+        ensure_aux_before_publish()
+        try:
+            render_dir = draft_store.new_render_attempt()
+            card_pngs = render_cards_for_approve(briefing, render_dir, now)
+        except Exception as exc:  # noqa: BLE001
+            notifier.send_text(f"[이미지 생성 실패] {exc}")
+            draft_store.mark_parked("render")
+            return 1
+        preview = preview_text(
+            briefing,
+            picked,
+            generation_mode=generation_mode,
+            has_card_images=bool(card_pngs),
+            include_approve_hints=False,
+        )
+        action = notifier.wait_for_gate(
+            GateStage.RENDER,
+            preview,
+            image_paths=card_pngs,
+            remaining=draft_store.manifest.render_remaining,
+            max_retries=draft_store.manifest.render_max,
+            run_id=run_dir.name,
+            attempt=draft_store.manifest.current_render or "",
+        )
+        draft_store.record_action("render", action.value)
+        if action == GateAction.TIMEOUT:
+            draft_store.mark_parked("render")
+            return 0
+        if action != GateAction.APPROVE:
+            draft_store.mark_parked("render")
+            print(f"!! unexpected render action on resume: {action}", file=sys.stderr)
+            return 1
+        return _finish_draft_after_render_approve(
+            draft_store=draft_store,
+            briefing=briefing,
+            picked=picked,
+            now=now,
+            run_dir=run_dir,
+            store=seen,
+            notifier=notifier,
+            generation_mode=generation_mode,
+            card_pngs=card_pngs,
+        )
+
+    # render stage
+    content_name = draft_store.manifest.selected_content or draft_store.manifest.current_content
+    render_name = draft_store.manifest.current_render
+    if not content_name or not render_name:
+        print("!! missing selected_content/current_render for render resume", file=sys.stderr)
+        return 1
+    attempt_dir = draft_store.content_dir(content_name)
+    briefing = _load_attempt_briefing(attempt_dir)
+    picked = _load_attempt_ranked(attempt_dir)
+    generation_mode = "resume"
+    render_dir = draft_store.render_dir(render_name)
+    cards_dir = render_dir / "cards"
+    card_pngs = sorted(cards_dir.glob("*.png")) if cards_dir.is_dir() else []
+    if not card_pngs:
+        ensure_aux_before_publish()
+        try:
+            card_pngs = render_cards_for_approve(briefing, render_dir, now)
+        except Exception as exc:  # noqa: BLE001
+            notifier.send_text(f"[이미지 생성 실패] {exc}")
+            draft_store.mark_parked("render")
+            return 1
+    preview = preview_text(
+        briefing,
+        picked,
+        generation_mode=generation_mode,
+        has_card_images=bool(card_pngs),
+        include_approve_hints=False,
+    )
+    action = notifier.wait_for_gate(
+        GateStage.RENDER,
+        preview,
+        image_paths=card_pngs,
+        remaining=draft_store.manifest.render_remaining,
+        max_retries=draft_store.manifest.render_max,
+        run_id=run_dir.name,
+        attempt=render_name,
+    )
+    draft_store.record_action("render", action.value)
+    if action == GateAction.TIMEOUT:
+        draft_store.mark_parked("render")
+        return 0
+    if action == GateAction.RERENDER:
+        print("!! Rerender on resume: start a fresh render via draft run", file=sys.stderr)
+        draft_store.mark_parked("render")
+        return 1
+    if action != GateAction.APPROVE:
+        draft_store.mark_parked("render")
+        return 1
+    return _finish_draft_after_render_approve(
+        draft_store=draft_store,
+        briefing=briefing,
+        picked=picked,
+        now=now,
+        run_dir=run_dir,
+        store=seen,
+        notifier=notifier,
+        generation_mode=generation_mode,
+        card_pngs=card_pngs,
+    )
 
 
 def main() -> int:

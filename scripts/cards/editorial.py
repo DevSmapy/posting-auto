@@ -125,10 +125,13 @@ class EditorialCarouselTemplate:
         self,
         brand: str = "BRAND",
         content: dict[str, dict[str, str]] | None = None,
+        *,
+        templates_dir: Path | None = None,
     ) -> None:
         self.brand = brand
         self.content = content or placeholder_content(brand)
-        self.css = (EDITORIAL_DIR / "design-system.css").read_text(encoding="utf-8")
+        self.templates_dir = Path(templates_dir) if templates_dir else EDITORIAL_DIR
+        self.css = (self.templates_dir / "design-system.css").read_text(encoding="utf-8")
         self.width = 1080
         self.height = 1350
 
@@ -137,7 +140,7 @@ class EditorialCarouselTemplate:
         for name in SLIDE_FILES:
             fields = dict(self.content.get(name) or {})
             fields.setdefault("brand", self.brand)
-            raw = (EDITORIAL_DIR / name).read_text(encoding="utf-8")
+            raw = (self.templates_dir / name).read_text(encoding="utf-8")
             html_doc = raw.replace("{{DESIGN_SYSTEM_CSS}}", self.css)
             for key, value in fields.items():
                 safe = "<br />".join(html.escape(p) for p in str(value).split("\n"))
@@ -163,7 +166,7 @@ class EditorialCarouselTemplate:
             brand=self.brand,
             width=self.width,
             height=self.height,
-            templates_dir=EDITORIAL_DIR,
+            templates_dir=self.templates_dir,
         )
         renderer = CardRenderer(config)
         html_paths: list[Path] = []

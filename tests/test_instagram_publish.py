@@ -23,6 +23,7 @@ from publish import (  # noqa: E402
 def _cfg(**overrides: Any) -> PublishConfig:
     base = dict(
         publish_cards=True,
+        publish_mode="publish",
         ig_user_id="ig-user",
         meta_access_token="token",
         meta_graph_version="v21.0",
@@ -98,6 +99,32 @@ class R2UploaderTest(unittest.TestCase):
 
 
 class InstagramCarouselPublisherTest(unittest.TestCase):
+    def test_create_containers_then_media_publish(self) -> None:
+        posts: list[tuple[str, dict[str, Any]]] = []
+
+        def post(url: str, data: dict[str, Any] | None = None, **_: Any) -> _FakeResp:
+            posts.append((url, dict(data or {})))
+            if url.endswith("/media_publish"):
+                return _FakeResp({"id": "published-99"})
+            if data and data.get("media_type") == "CAROUSEL":
+                return _FakeResp({"id": "parent-1"})
+            return _FakeResp({"id": f"child-{len(posts)}"})
+
+        pub = InstagramCarouselPublisher(
+            _cfg(),
+            post=post,
+            get=lambda *a, **k: _FakeResp({"status_code": "FINISHED"}),
+            sleep=lambda _: None,
+        )
+        creation_id = pub.create_containers(
+            ["https://cdn.example/a.png", "https://cdn.example/b.png"],
+            "caption",
+        )
+        self.assertEqual(creation_id, "parent-1")
+        self.assertFalse(any(u.endswith("/media_publish") for u, _ in posts))
+        media_id = pub.media_publish(creation_id)
+        self.assertEqual(media_id, "published-99")
+
     def test_carousel_sequence(self) -> None:
         posts: list[tuple[str, dict[str, Any]]] = []
         gets: list[str] = []
@@ -279,7 +306,8 @@ class PublishCardsPipelineTest(unittest.TestCase):
         uploader = MagicMock()
         uploader.upload.return_value = ["https://cdn.example/a.png"]
         publisher = MagicMock()
-        publisher.publish.return_value = "media-1"
+        publisher.create_containers.return_value = "parent-1"
+        publisher.media_publish.return_value = "media-1"
         result = PublishCardsPipeline(
             _cfg(),
             uploader=uploader,
@@ -291,10 +319,30 @@ class PublishCardsPipelineTest(unittest.TestCase):
         )
         self.assertEqual(result.ig_media_id, "media-1")
         self.assertEqual(result.image_urls, ["https://cdn.example/a.png"])
+        self.assertEqual(result.creation_id, "parent-1")
         self.assertIsNone(result.skipped_reason)
-        publisher.publish.assert_called_once_with(
+        publisher.create_containers.assert_called_once_with(
             ["https://cdn.example/a.png"], "본문"
         )
+        publisher.media_publish.assert_called_once_with("parent-1")
+
+    def test_package_mode_skips_media_publish(self) -> None:
+        uploader = MagicMock()
+        uploader.upload.return_value = ["https://cdn.example/a.png"]
+        publisher = MagicMock()
+        result = PublishCardsPipeline(
+            _cfg(publish_mode="package"),
+            uploader=uploader,
+            publisher=publisher,
+        ).run(
+            png_paths=[Path("/tmp/a.png")],
+            briefing={"instagram_post": "본문"},
+            r2_prefix="briefs/x",
+        )
+        self.assertEqual(result.skipped_reason, "PUBLISH_MODE=package")
+        self.assertEqual(result.image_urls, ["https://cdn.example/a.png"])
+        publisher.create_containers.assert_not_called()
+        publisher.media_publish.assert_not_called()
 
     def test_writes_image_urls_json(self) -> None:
         import tempfile
@@ -302,7 +350,8 @@ class PublishCardsPipelineTest(unittest.TestCase):
         uploader = MagicMock()
         uploader.upload.return_value = ["https://cdn.example/a.png"]
         publisher = MagicMock()
-        publisher.publish.return_value = "media-1"
+        publisher.create_containers.return_value = "parent"
+        publisher.media_publish.return_value = "media-1"
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = Path(tmp)
             PublishCardsPipeline(

@@ -24,6 +24,8 @@ class RunManifest:
     selected_content: str | None = None
     current_render: str | None = None
     final: str | None = None
+    status: str = "active"
+    parked_stage: str | None = None
     content_attempts: list[str] = field(default_factory=list)
     render_attempts: list[str] = field(default_factory=list)
     actions: list[dict[str, Any]] = field(default_factory=list)
@@ -43,6 +45,8 @@ class RunManifest:
             selected_content=data.get("selected_content"),
             current_render=data.get("current_render"),
             final=data.get("final"),
+            status=str(data.get("status") or "active"),
+            parked_stage=data.get("parked_stage"),
             content_attempts=list(data.get("content_attempts") or []),
             render_attempts=list(data.get("render_attempts") or []),
             actions=list(data.get("actions") or []),
@@ -223,6 +227,22 @@ class DraftRunStore:
         self.save()
         return self.final_dir
 
+    def mark_parked(self, stage: str) -> None:
+        self.manifest.status = "parked"
+        self.manifest.parked_stage = stage
+        self.record_action("park", stage)
+        self.save()
+
+    def clear_parked(self) -> None:
+        self.manifest.status = "active"
+        self.manifest.parked_stage = None
+        self.save()
+
+    def mark_completed(self) -> None:
+        self.manifest.status = "completed"
+        self.manifest.parked_stage = None
+        self.save()
+
     def copy_into_final(
         self,
         *,
@@ -231,6 +251,8 @@ class DraftRunStore:
         html_path: Path | None = None,
         card_pngs: list[Path] | None = None,
     ) -> None:
+        from publish.ready import write_publish_ready_package
+
         final = self.mark_final()
         if briefing is not None:
             (final / "briefing.json").write_text(
@@ -243,9 +265,19 @@ class DraftRunStore:
             shutil.copy2(html_path, final / "briefing.html")
         cards_out = final / "cards"
         cards_out.mkdir(exist_ok=True)
+        copied_pngs: list[Path] = []
         for path in card_pngs or []:
             if Path(path).is_file():
-                shutil.copy2(path, cards_out / Path(path).name)
+                dest = cards_out / Path(path).name
+                shutil.copy2(path, dest)
+                copied_pngs.append(dest)
+        if copied_pngs:
+            write_publish_ready_package(
+                final,
+                png_paths=copied_pngs,
+                briefing=briefing,
+                extra_manifest={"run_id": self.manifest.run_id},
+            )
 
     def cleanup_keep_final(self) -> list[str]:
         """Delete unselected content/render attempts. Keep final/ + manifest."""
