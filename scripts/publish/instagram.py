@@ -22,6 +22,9 @@ class InstagramCarouselPublisher:
     2. Create parent CAROUSEL container with caption
     3. Poll ``status_code`` until FINISHED (or ERROR)
     4. ``media_publish`` with ``creation_id``
+
+    Steps 1–3 are ``create_containers``; step 4 is ``media_publish``.
+    ``publish`` runs both (end-to-end, same as before).
     """
 
     def __init__(
@@ -37,7 +40,8 @@ class InstagramCarouselPublisher:
         self._get = get or requests.get
         self._sleep = sleep or time.sleep
 
-    def publish(self, image_urls: list[str], caption: str) -> str:
+    def create_containers(self, image_urls: list[str], caption: str) -> str:
+        """Create child + parent containers; wait until FINISHED. Returns creation_id."""
         if not image_urls:
             raise ValueError("instagram carousel requires at least one image_url")
         n = len(image_urls)
@@ -78,9 +82,21 @@ class InstagramCarouselPublisher:
             timeout=60,
         )
         parent.raise_for_status()
-        creation_id = parent.json()["id"]
+        creation_id = str(parent.json()["id"])
 
         self._wait_until_finished(base, creation_id, token)
+        return creation_id
+
+    def media_publish(self, creation_id: str) -> str:
+        """Publish a finished container via ``media_publish``."""
+        if not self.config.instagram_configured:
+            raise RuntimeError("IG_USER_ID / META_ACCESS_TOKEN required")
+        if not creation_id:
+            raise ValueError("creation_id required")
+
+        ig_user = self.config.ig_user_id
+        token = self.config.meta_access_token
+        base = self.config.graph_base_url
 
         pub = self._post(
             f"{base}/{ig_user}/media_publish",
@@ -89,6 +105,10 @@ class InstagramCarouselPublisher:
         )
         pub.raise_for_status()
         return str(pub.json().get("id", creation_id))
+
+    def publish(self, image_urls: list[str], caption: str) -> str:
+        creation_id = self.create_containers(image_urls, caption)
+        return self.media_publish(creation_id)
 
     def _wait_until_finished(
         self, base: str, creation_id: str, token: str

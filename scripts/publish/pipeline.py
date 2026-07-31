@@ -20,6 +20,7 @@ class PublishCardsResult:
     image_urls: list[str]
     ig_media_id: str | None
     skipped_reason: str | None = None
+    creation_id: str | None = None
 
 
 LogFn = Callable[[str], None]
@@ -69,6 +70,15 @@ class PublishCardsPipeline:
                 skipped_reason="no PNG paths",
             )
 
+        n = len(png_paths)
+        if n < 2 or n > 10:
+            return PublishCardsResult(
+                attempted=True,
+                image_urls=[],
+                ig_media_id=None,
+                skipped_reason=f"need 2-10 PNGs, got {n}",
+            )
+
         if not self.config.r2_configured:
             self._log("R2 not configured — skip Instagram (local cards kept)")
             return PublishCardsResult(
@@ -86,6 +96,15 @@ class PublishCardsPipeline:
                 encoding="utf-8",
             )
 
+        if self.config.package_only:
+            self._log("PUBLISH_MODE=package — skip media_publish (use publish_ready CLI)")
+            return PublishCardsResult(
+                attempted=True,
+                image_urls=image_urls,
+                ig_media_id=None,
+                skipped_reason="PUBLISH_MODE=package",
+            )
+
         if not self.config.instagram_configured:
             self._log("Instagram not configured — R2 URLs saved")
             return PublishCardsResult(
@@ -96,12 +115,21 @@ class PublishCardsPipeline:
             )
 
         caption = caption_from_briefing(briefing)
-        self._log("Instagram carousel")
-        ig_media_id = self.publisher.publish(image_urls, caption)
+        self._log("Instagram create_containers")
+        creation_id = self.publisher.create_containers(image_urls, caption)
+        if run_dir is not None:
+            (run_dir / "creation_id.json").write_text(
+                json.dumps({"creation_id": creation_id}, ensure_ascii=False, indent=2)
+                + "\n",
+                encoding="utf-8",
+            )
+        self._log("Instagram media_publish")
+        ig_media_id = self.publisher.media_publish(creation_id)
         self._log(f"ig media id: {ig_media_id}")
         return PublishCardsResult(
             attempted=True,
             image_urls=image_urls,
             ig_media_id=ig_media_id,
             skipped_reason=None,
+            creation_id=creation_id,
         )

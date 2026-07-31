@@ -34,14 +34,16 @@ n8n UI 네이티브 워크플로(`workflows/econ-briefing-daily.json`)는 **후�
 | 7 | Render loop | 선택 `briefing.json` → `renders/render-NN/cards/` PNG |
 | 8 | ② 렌더 게이트 | 이미지 확인. ✅ Approve / 🔁 Re-render (`RENDER_RETRY_MAX`) |
 | 9a | Approve | `briefing.md` 저장 (블로그 수동 붙여넣기) |
-| 9b | `PUBLISH_CARDS=1` | 동일 PNG → R2 → Instagram carousel |
+| 9b | `PUBLISH_CARDS=1` | 동일 PNG → R2 → (`PUBLISH_MODE`) Instagram carousel |
+| 9c | `final/publish_ready/` | 카드 PNG·캡션·manifest 패키지 (나중에 CLI/n8n 게시) |
 | 10 | Postgres | `seen_urls` insert (마크다운 성공 시; IG 실패해도 기록) |
 | 11 | ③ Cleanup ask | 확정본만 유지(삭제 책임 경고) / 전부 보관. 타임아웃→확정본만 |
 | 12 | Notify | 결과 / 단계 실패·부분스킵 알림 |
 
 Rerank는 이번 run의 이전 content attempt URL을 제외한 뒤 재랭킹한다. Rewrite는 같은 `picked`로 스토리만 재생성한다.  
 남은 후보가 없으면 Rerank는 차감 없이 내용 게이트를 다시 띄운다. 재생성 도중 실패하면 차감분도 복구한다.  
-재시도 소진·게이트 타임아웃 시 `seen_urls` 없이 중단하고 스크립트 재실행을 안내한다 (run-dir resume은 후속).
+재시도 소진 시 `seen_urls` 없이 중단한다.  
+내용/렌더 게이트 **타임아웃** 시 run을 `parked`로 남기고 `./scripts/resume_draft.sh output/<run_id>`로 이어서 게이트를 연다 (`APPROVE_TIMEOUT_SEC` 기본 3600, 만료 전 `APPROVE_REMINDER_SEC` 재알림).
 
 ## `seen_urls`
 

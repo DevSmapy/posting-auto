@@ -16,8 +16,8 @@ from .approve_copy import (
     gate_footer,
     timeout_message,
 )
-from .base import GateAction, GateStage, normalize_stage
-from .envutil import approve_timeout_sec, env
+from .base import GateAction, GateStage, maybe_send_gate_reminder, normalize_stage
+from .envutil import approve_reminder_sec, approve_timeout_sec, env
 
 API = "https://discord.com/api/v10"
 APPROVE_EMOJI = "✅"
@@ -256,7 +256,16 @@ class DiscordNotifier:
         bot_id = str(me.get("id") or "")
 
         deadline = time.time() + timeout
+        reminder_sec = approve_reminder_sec()
+        reminded = False
         while time.time() < deadline:
+            reminded = maybe_send_gate_reminder(
+                self.send_text,
+                stage_s,
+                deadline=deadline,
+                reminder_sec=reminder_sec,
+                reminded=reminded,
+            )
             try:
                 for emoji, action in mapping:
                     users = self._reaction_users(msg_id, emoji)
@@ -268,6 +277,6 @@ class DiscordNotifier:
                 continue
             time.sleep(2)
 
-        self.send_text(timeout_message(stage_s, timeout))
+        self.send_text(timeout_message(stage_s, timeout, run_id=run_id))
         print(f"   {stage_s.value} gate timeout")
         return GateAction.TIMEOUT

@@ -17,12 +17,16 @@ from notify.approve_copy import (  # noqa: E402
     cleanup_prompt,
     empty_rerank_pool_message,
     exhausted_message,
+    parked_timeout_message,
     remaining_line,
+    reminder_message,
     render_stage_start_ack,
+    timeout_message,
 )
 from notify.auto import AutoNotifier  # noqa: E402
 from notify.base import GateAction, GateStage  # noqa: E402
 from notify.cli import CliNotifier  # noqa: E402
+from notify.envutil import approve_reminder_sec, approve_timeout_sec  # noqa: E402
 
 
 class DraftRunStoreTest(unittest.TestCase):
@@ -60,6 +64,20 @@ class DraftRunStoreTest(unittest.TestCase):
             self.assertEqual(store.manifest.content_remaining, 3)
             self.assertEqual(store.consume_render_retry(), 1)
             self.assertEqual(store.restore_render_retry(), 2)
+
+    def test_mark_parked_and_clear(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = DraftRunStore(Path(tmp) / "park")
+            store.init_layout()
+            store.new_content_attempt()
+            store.mark_parked("content")
+            self.assertEqual(store.manifest.status, "parked")
+            self.assertEqual(store.manifest.parked_stage, "content")
+            data = json.loads(store.manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(data["status"], "parked")
+            store.clear_parked()
+            self.assertEqual(store.manifest.status, "active")
+            self.assertIsNone(store.manifest.parked_stage)
 
     def test_cleanup_keep_final_deletes_siblings_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -111,6 +129,28 @@ class GateCopyTest(unittest.TestCase):
         )
         self.assertIn(KEEP_FINAL_WARNING, text)
         self.assertIn("attempts/content-01", text)
+
+    def test_timeout_and_parked_copy(self) -> None:
+        text = timeout_message(GateStage.CONTENT, 3600, run_id="20260728_070000")
+        self.assertIn("parked", text)
+        self.assertIn("resume_draft.sh output/20260728_070000", text)
+        self.assertIn("resume_draft.sh", parked_timeout_message("render", "rid"))
+        self.assertIn("리마인더", reminder_message(GateStage.RENDER, 600))
+
+    def test_approve_timeout_defaults(self) -> None:
+        import os
+        from unittest.mock import patch
+
+        with patch.dict(os.environ, {}, clear=False):
+            for key in (
+                "APPROVE_TIMEOUT_SEC",
+                "DISCORD_APPROVE_TIMEOUT_SEC",
+                "TELEGRAM_APPROVE_TIMEOUT_SEC",
+                "APPROVE_REMINDER_SEC",
+            ):
+                os.environ.pop(key, None)
+            self.assertEqual(approve_timeout_sec(), 3600)
+            self.assertEqual(approve_reminder_sec(), 600)
 
 
 class AutoCliGateTest(unittest.TestCase):

@@ -12,4 +12,12 @@ def approve_timeout_sec() -> int:
         raw = env(key)
         if raw:
             return int(raw)
-    return 900
+    return 3600
+
+
+def approve_reminder_sec() -> int:
+    """Seconds before timeout to send a one-shot reminder (0 disables)."""
+    raw = env("APPROVE_REMINDER_SEC", "600")
+    if not raw:
+        return 600
+    return max(0, int(raw))

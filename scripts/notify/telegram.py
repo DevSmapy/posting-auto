@@ -16,8 +16,8 @@ from .approve_copy import (
     gate_footer,
     timeout_message,
 )
-from .base import GateAction, GateStage, normalize_stage
-from .envutil import approve_timeout_sec, env
+from .base import GateAction, GateStage, maybe_send_gate_reminder, normalize_stage
+from .envutil import approve_reminder_sec, approve_timeout_sec, env
 
 
 class TelegramNotifier:
@@ -333,8 +333,17 @@ class TelegramNotifier:
         print(f"   Telegram {stage_s.value} gate sent — waiting…")
 
         deadline = time.time() + timeout
+        reminder_sec = approve_reminder_sec()
+        reminded = False
         while time.time() < deadline:
             remaining_s = max(1, int(deadline - time.time()))
+            reminded = maybe_send_gate_reminder(
+                self.send_text,
+                stage_s,
+                deadline=deadline,
+                reminder_sec=reminder_sec,
+                reminded=reminded,
+            )
             poll_timeout = min(25, remaining_s)
             data = self._api(
                 "getUpdates",
@@ -362,6 +371,6 @@ class TelegramNotifier:
                 if str(msg.get("chat", {}).get("id")) == str(self.chat_id) and text in text_map:
                     return text_map[text]
 
-        self.send_text(timeout_message(stage_s, timeout))
+        self.send_text(timeout_message(stage_s, timeout, run_id=run_id))
         print(f"   {stage_s.value} gate timeout")
         return GateAction.TIMEOUT

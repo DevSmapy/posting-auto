@@ -25,7 +25,8 @@
 | `cli` | 터미널 입력 (`approve` / `rerank` / …) |
 | `auto` | 대기 없이 Approve → keep_final (로컬 스모크) |
 
-공통 타임아웃: `APPROVE_TIMEOUT_SEC` (기본 900초). 게이트 타임아웃은 재시도 횟수를 차감하지 않습니다.
+공통 타임아웃: `APPROVE_TIMEOUT_SEC` (기본 **3600초**). 만료 N분 전 재알림(`APPROVE_REMINDER_SEC`, 기본 600).  
+타임아웃 시 run은 **parked**로 남고 `./scripts/resume_draft.sh output/<run_id>`로 이어서 게이트를 다시 열 수 있습니다. 재시도 횟수는 차감하지 않습니다.
 
 ### 미리보기에 포함
 
@@ -38,7 +39,8 @@
 |------|------|
 | Approve (렌더) | `briefing.md` 저장 (+ 채널에 md 첨부) → `PUBLISH_CARDS=1`이면 R2/인스타 (렌더 게이트 PNG 재사용) → `seen_urls` → cleanup ask |
 | Rerank / Rewrite / Re-render | 해당 단계 재생성 (성공한 재생성만 남은 기회 차감). 후보 소진·생성 실패 시 차감 없음. attempt는 cleanup 전까지 유지 |
-| 타임아웃 / 횟수 소진 | 중단. `seen_urls` 미기록. 스크립트 재실행 안내 |
+| 타임아웃 | parked 저장. `seen_urls` 미기록. `resume_draft.sh`로 재개 가능 |
+| 횟수 소진 | 중단. `seen_urls` 미기록. `./scripts/run_draft.sh` 재실행 |
 
 마크다운 저장 성공 시 `seen_urls`에 insert합니다. 인스타만 실패해도 마크다운·`seen_urls`는 유지하고 단계 알림을 보냅니다.
 
@@ -146,20 +148,42 @@ uv run python scripts/preview_cardnews.py --from-run output/<YYYYMMDD_HHMMSS>
 
 `full_text`는 Graph API 한도(2100자)에 맞춰 자릅니다. IG 미연동 시 `instagram_post.txt`를 수동 복붙하면 됩니다.
 
-### 파이프라인 (`PUBLISH_CARDS`)
+### 파이프라인 (`PUBLISH_CARDS` / `PUBLISH_MODE`)
 
 - **draft:** ① 내용 Approve 후 ② 렌더 게이트용 로컬 카드 PNG를 만들어 채널에 첨부합니다.
-- **`PUBLISH_CARDS=1`:** 렌더 Approve **후** 같은 PNG로 R2 업로드 → Instagram 캐러셀(2–10장). 기본 `0`이면 마크다운만.
-- R2/IG가 없어도 렌더 미리보기용 `renders/render-NN/cards/`는 남습니다 (cleanup 정책에 따름).
+- 확정 후 `final/publish_ready/`에 카드 PNG·캡션·`publish_manifest.json` 패키지를 남깁니다.
+- **`PUBLISH_CARDS=1`:** 렌더 Approve **후** R2 업로드 → (모드에 따라) Instagram.
+- **`PUBLISH_MODE`:** `publish`(기본, R2+`media_publish`) | `package`(R2까지 또는 로컬 패키지만; Graph 게시는 CLI로 분리).
+- R2/IG가 없어도 렌더 미리보기용 `renders/render-NN/cards/`와 `final/publish_ready/`는 남습니다.
+
+나중에 게시:
+
+```bash
+uv run python scripts/publish_ready.py publish output/<run_id>
+# n8n: Execute Command로 동일 CLI 호출
+```
+
+### Instagram ‘임시 저장’ / Archive — 조사 요약
+
+| 형태 | 가능? | 비고 |
+|------|-------|------|
+| 앱 Drafts 폴더 | 불가 | Content Publishing API에 draft 없음 |
+| unpublished media container | 부분 | `creation_id`, 약 24시간 만료 |
+| `final/publish_ready/` 패키지 | **권장** | PNG + caption + manifest |
+| Archive → 프로필에 다시 표시 | 앱만 | **새 게시 도달이 아님** (원래 날짜로 그리드 복귀). 임시저장·예약 공개 대용 비추 |
+| 계정 Private → Public | 계정 단위 | 게시물별 임시저장 아님 |
+
+공개 발행 후 Archive(숨김)했다가 다시 표시하면, 해당 포스트의 **추가 배포는 보관 중 끊기고**, 복구 시 **팔로워 피드에 ‘새 글’로 재배포되지 않습니다**. 그리드 정리용으로는 쓸 수 있으나 아침 브리핑 타이밍용 임시저장으로는 부적합합니다. Graph API로 archive/unarchive는 지원되지 않습니다.
 
 발행(호스팅·Graph) 로직은 [`scripts/publish/`](../scripts/publish/)에 있습니다.
 
 | 모듈 | 역할 |
 |------|------|
-| `PublishConfig` | `PUBLISH_CARDS`, R2_*, IG_*, Meta Graph 버전 |
+| `PublishConfig` | `PUBLISH_CARDS`, `PUBLISH_MODE`, R2_*, IG_* |
 | `R2Uploader` | PNG → Cloudflare R2 공개 HTTPS URL |
-| `InstagramCarouselPublisher` | children → CAROUSEL → status poll → `media_publish` |
+| `InstagramCarouselPublisher` | children → CAROUSEL → poll → `media_publish` (단계 분리) |
 | `PublishCardsPipeline` | Approve 후 R2 + 인스타 오케스트레이션 |
+| `publish_ready` | `final/publish_ready` 패키지 write/load + CLI |
 
 논리 테스트(실제 Meta/R2/채널 호출 없음):
 

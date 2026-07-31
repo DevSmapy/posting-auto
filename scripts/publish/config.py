@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import warnings
 from dataclasses import dataclass
 
 
@@ -19,6 +20,7 @@ class PublishConfig:
     """Env-backed settings for optional card → R2 → Instagram publish."""
 
     publish_cards: bool = False
+    publish_mode: str = "publish"
     ig_user_id: str = ""
     meta_access_token: str = ""
     meta_graph_version: str = "v21.0"
@@ -33,8 +35,18 @@ class PublishConfig:
 
     @classmethod
     def from_env(cls) -> PublishConfig:
+        raw_mode = _env("PUBLISH_MODE", "publish") or "publish"
+        mode = raw_mode.lower()
+        if mode not in {"publish", "package"}:
+            warnings.warn(
+                f"Unrecognized PUBLISH_MODE={raw_mode!r}; falling back to 'package'",
+                UserWarning,
+                stacklevel=2,
+            )
+            mode = "package"
         return cls(
             publish_cards=_truthy(_env("PUBLISH_CARDS", "0")),
+            publish_mode=mode,
             ig_user_id=_env("IG_USER_ID"),
             meta_access_token=_env("META_ACCESS_TOKEN"),
             meta_graph_version=_env("META_GRAPH_VERSION", "v21.0") or "v21.0",
@@ -73,3 +85,7 @@ class PublishConfig:
     @property
     def graph_base_url(self) -> str:
         return f"https://graph.facebook.com/{self.meta_graph_version}"
+
+    @property
+    def package_only(self) -> bool:
+        return self.publish_mode == "package"
