@@ -1328,7 +1328,10 @@ def run_publish(
     generation_mode: str = "llm",
     card_png_paths: list[Path] | None = None,
 ) -> None:
-    """Approve 후: 마크다운 저장(+선택 R2/인스타) → seen_urls 기록.
+    """Approve 후: 마크다운 저장 → seen_urls → (선택 R2/인스타) → 알림.
+
+    ``briefing.md`` 성공 직후 ``seen_urls``를 남겨, 이후 알림/인스타 실패가
+    기록을 막거나 지우지 못하게 한다.
 
     ``card_png_paths`` — draft 게이트에서 이미 렌더한 PNG. 있으면 재렌더하지 않음.
     """
@@ -1336,11 +1339,15 @@ def run_publish(
     md = assemble_blog_markdown(briefing)
     md_path = run_dir / "briefing.md"
     md_path.write_text(md, encoding="utf-8")
+    export_ref = str(md_path.resolve())
+    print(f"   wrote {md_path}")
+
+    n = store.record_published(picked, tistory_post_id=export_ref, ig_media_id=None)
+    print(f"==> seen_urls recorded: {n} (backend={store.backend})")
+
     (run_dir / "briefing.html").write_text(
         briefing.get("blog_html") or assemble_blog_html(briefing), encoding="utf-8"
     )
-    export_ref = str(md_path.resolve())
-    print(f"   wrote {md_path}")
 
     ig_media_id: str | None = None
     publish_cfg = PublishConfig.from_env()
@@ -1379,6 +1386,24 @@ def run_publish(
         except Exception as exc:  # noqa: BLE001
             _notify_stage(notifier, f"[R2/인스타 실패] {exc}")
 
+    if ig_media_id:
+        try:
+            store.record_published(
+                picked, tistory_post_id=export_ref, ig_media_id=ig_media_id
+            )
+        except Exception as exc:  # noqa: BLE001
+            # ponytail: one retry then report; IG already succeeded externally
+            try:
+                store.record_published(
+                    picked, tistory_post_id=export_ref, ig_media_id=ig_media_id
+                )
+            except Exception as exc2:  # noqa: BLE001
+                _notify_stage(
+                    notifier,
+                    f"[seen_urls 부분실패] 인스타는 게시됨 media_id={ig_media_id}; "
+                    f"ig_media_id 미기록: {exc2}",
+                )
+
     mode_label = _generation_mode_label(generation_mode)
     caption = (
         f"[마크다운 준비됨]\n생성: {mode_label}\n{briefing.get('title')}\n"
@@ -1386,18 +1411,18 @@ def run_publish(
     )
     if ig_media_id:
         caption += f"\nInstagram media_id: {ig_media_id}"
-    send_file = getattr(notifier, "send_file", None)
-    if callable(send_file):
-        try:
-            send_file(md_path, caption=caption)
-        except Exception as exc:  # noqa: BLE001
-            print(f"   !! send_file failed: {exc}")
+    try:
+        send_file = getattr(notifier, "send_file", None)
+        if callable(send_file):
+            try:
+                send_file(md_path, caption=caption)
+            except Exception as exc:  # noqa: BLE001
+                print(f"   !! send_file failed: {exc}")
+                notifier.send_text(f"{caption}\n\n---\n{md[:1500]}")
+        else:
             notifier.send_text(f"{caption}\n\n---\n{md[:1500]}")
-    else:
-        notifier.send_text(f"{caption}\n\n---\n{md[:1500]}")
-
-    n = store.record_published(picked, tistory_post_id=export_ref, ig_media_id=ig_media_id)
-    print(f"==> seen_urls recorded: {n} (backend={store.backend})")
+    except Exception as exc:  # noqa: BLE001
+        print(f"   !! publish notify failed (seen_urls already recorded): {exc}")
     print("Done (markdown export).")
 
 

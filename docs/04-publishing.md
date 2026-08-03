@@ -54,11 +54,11 @@ flowchart TD
 | 7 | Render loop | 선택 `briefing.json` → `renders/render-NN/cards/` PNG |
 | 8 | ② 렌더 게이트 | 이미지 확인. ✅ Approve / 🔁 Re-render (`RENDER_RETRY_MAX`) |
 | 9a | Approve | `briefing.md` 저장 (블로그 수동 붙여넣기) |
-| 9b | `PUBLISH_CARDS=1` | 동일 PNG → R2 → (`PUBLISH_MODE`) Instagram carousel |
-| 9c | `final/publish_ready/` | 카드 PNG·캡션·manifest (나중에 CLI/n8n 게시) |
-| 10 | Postgres | `seen_urls` insert (마크다운 성공 시; IG 실패해도 기록) |
+| 9b | Postgres | **즉시** `seen_urls` insert (알림·IG 실패와 무관; 기록 삭제 없음) |
+| 9c | `PUBLISH_CARDS=1` | 동일 PNG → R2 → (`PUBLISH_MODE`) Instagram carousel |
+| 9d | `final/publish_ready/` | 카드 PNG·캡션·manifest (나중에 CLI/n8n 게시) |
+| 10 | Notify | 결과 / 단계 실패·부분스킵 알림 |
 | 11 | ③ Cleanup ask | 확정본만 유지 / 전부 보관. 타임아웃→확정본만 |
-| 12 | Notify | 결과 / 단계 실패·부분스킵 알림 |
 
 Rerank는 이번 run의 이전 content attempt URL을 제외한 뒤 재랭킹한다. Rewrite는 같은 `picked`로 스토리만 재생성한다.  
 남은 후보가 없으면 Rerank는 차감 없이 내용 게이트를 다시 띄운다. 재생성 도중 실패하면 차감분도 복구한다.  
@@ -92,15 +92,18 @@ Rerank는 이번 run의 이전 content attempt URL을 제외한 뒤 재랭킹한
 
 | 선택 | 동작 |
 |------|------|
-| Approve (렌더) | `briefing.md` → (선택) R2/인스타 → `seen_urls` → cleanup |
+| Approve (렌더) | `briefing.md` 저장 → **즉시 `seen_urls`** → (선택) R2/인스타 → **md 알림** → cleanup |
 | Rerank / Rewrite / Re-render | 해당 단계 재생성 (성공 시에만 기회 차감) |
 | 타임아웃 | parked. `seen_urls` 미기록. `resume_draft.sh`로 재개 |
 | 횟수 소진 | 중단. `seen_urls` 미기록. `./scripts/run_draft.sh` 재실행 |
 
+`briefing.md` 저장에 성공하면 **알림·인스타보다 먼저** `seen_urls`에 insert합니다. 이후 채널 알림 실패·인스타 실패가 나도 기록은 남고 삭제되지 않습니다.
+
 ### Discord 설정 (주력)
 
 1. [Discord Developer Portal](https://discord.com/developers/applications)에서 앱·Bot → `DISCORD_BOT_TOKEN`
-2. 권한: `Send Messages`, `Attach Files`, `Add Reactions`, `Read Message History`
+2. 권한: `View Channel`, `Send Messages`, `Attach Files`, `Add Reactions`, `Read Message History`  
+   (`View Channel`은 채널이 @everyone 등에서 상속하면 초대만으로 충분할 수 있음. 채널 권한을 덮어쓴 경우에는 명시적으로 부여)
 3. **텍스트 채널** ID → `DISCORD_CHANNEL_ID` (카테고리 ID 금지)
 4. `NOTIFY_CHANNEL=discord`
 

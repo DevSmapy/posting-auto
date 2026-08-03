@@ -11,9 +11,18 @@
 
 ### Ollama (Docker)
 
-- [ ] `docker compose up -d ollama` (또는 기존 Ollama 컨테이너 실행 중)
+**A) Compose가 ollama를 소유할 때** (`--profile full`, 기존 컨테이너 없을 때만):
+
+- [ ] `docker compose --profile full up -d ollama`
+- [ ] `curl -fsS --retry 15 --retry-delay 1 --retry-all-errors --max-time 2 http://127.0.0.1:11434/api/tags >/dev/null`
 - [ ] `docker compose exec ollama ollama pull qwen2.5:14b`
 - [ ] `./scripts/smoke_ollama.sh` (호스트 → `127.0.0.1:11434`)
+
+**B) 외장 Ollama 재사용** (기본 MVP — Compose로 start/exec 하지 않음):
+
+- [ ] `:11434` 응답 확인 (`curl http://127.0.0.1:11434/api/tags`)
+- [ ] 모델 없으면: `curl -N http://127.0.0.1:11434/api/pull -d '{"name":"qwen2.5:14b"}'`
+- [ ] `./scripts/smoke_ollama.sh`
 
 ### 티스토리 / 블로그
 
@@ -22,16 +31,19 @@
 
 ### Instagram / Meta
 
-- [ ] 프로페셔널 계정 + Facebook 페이지
+- [ ] Instagram 프로페셔널(비즈니스/크리에이터) 계정 + **연결된 Facebook Page**
 - [ ] Meta 앱 + Content Publishing
-- [ ] `IG_USER_ID`, long-lived `META_ACCESS_TOKEN`
+- [ ] 로그인·권한 (택 1):
+  - **Facebook Login for Business:** `instagram_content_publish` (+ 필요 시 `pages_read_engagement`)
+  - **Business Login for Instagram:** `instagram_business_content_publish` (+ 필요 시 `pages_read_engagement`)
+- [ ] `IG_USER_ID`, **long-lived** Page/IG `META_ACCESS_TOKEN`
 
 > 인스타 연동이 준비 중 가장 오래 걸리는 구간입니다.
 
 ### Discord (권장 Approve 채널 · 주력)
 
 - [ ] Developer Portal Bot → `DISCORD_BOT_TOKEN`
-- [ ] **텍스트 채널** ID → `DISCORD_CHANNEL_ID` (카테고리 ID 금지) + 봇 초대 (Send / Attach Files / React / History)
+- [ ] **텍스트 채널** ID → `DISCORD_CHANNEL_ID` (카테고리 ID 금지) + 봇 초대 (`View Channel` · Send · Attach Files · React · History; `View Channel`은 채널 상속 시 암묵 부여될 수 있음)
 - [ ] `NOTIFY_CHANNEL=discord` (또는 자동 선택)
 - [ ] `uv run python scripts/smoke_discord.py`
 
@@ -80,13 +92,26 @@
 | `OLLAMA_IMAGE_DIR` | `"/Volumes/Extreme SSD/DockerData/images"` (따옴표 필수) |
 | `OLLAMA_DATA_PATH` | `"/Volumes/Extreme SSD/DockerData/ollama_data"` (따옴표 필수) |
 
-지금 PC에는 이미 아래가 떠 있는 경우가 많습니다.
+### 경로 A — 기존 컨테이너 재사용 (이 PC 기본)
 
-- `n8n` → `:5678` (WD_BLACK `n8n_data`)
-- `ollama` → `:11434` (Extreme SSD `ollama_data`)
+이미 아래가 떠 있으면 Compose로 ollama/n8n을 **다시 올리지 마세요** (포트 충돌).
 
-그래서 **이 프로젝트 Compose로 ollama/n8n을 다시 올리면 포트 충돌**이 납니다.  
-MVP는 **기존 컨테이너를 재사용**하고, 부족한 이미지(postgres·browserless)만 WD_BLACK에 skopeo로 받습니다.
+- `n8n` → 포트 **5678** (WD_BLACK `n8n_data`)
+- `ollama` → 포트 **11434** (Extreme SSD `ollama_data`)
+
+모델 pull·스모크는 Compose exec 없이 호스트에서:
+
+```bash
+curl http://127.0.0.1:11434/api/tags
+curl -N http://127.0.0.1:11434/api/pull -d '{"name":"qwen2.5:14b"}'   # 없을 때만
+./scripts/smoke_ollama.sh
+```
+
+MVP는 이 경로로 **기존 컨테이너를 재사용**하고, 부족한 이미지(postgres·browserless)만 WD_BLACK에 skopeo로 받습니다.
+
+### 경로 B — Compose가 ollama를 소유 (`--profile full`)
+
+기존 `ollama`/`n8n`이 **없을 때만**. pull은 `docker compose exec ollama …`를 씁니다. 아래 “(참고) full 프로필” 참고.
 
 > `Extreme SSD`처럼 경로에 공백이 있으면 `.env`에서 **반드시 `"..."`로 감싸야** 합니다.  
 > 따옴표 없이 `source .env` 하면 `/Volumes/Extreme` 까지만 변수에 들어가고 깨집니다.
@@ -246,8 +271,8 @@ uv run streamlit run apps/ops_console/app.py
 | `MVP_MODE` | 동작 |
 |------------|------|
 | `dry_run` | 수집·LLM만, JSON 저장 |
-| `draft` | 초안 → Approve 대기 → `briefing.md` |
-| `publish` | Approve 없이 바로 `briefing.md` |
+| `draft` | 내용 게이트 → 렌더 게이트 Approve 후 `briefing.md` |
+| `publish` | 채널 Approve **우회**, 바로 `briefing.md` |
 
 CPU가 높거나 스토리 타임아웃이면 `.env`에서:
 
@@ -269,21 +294,25 @@ OLLAMA_DOCKER_MEMORY=10g OLLAMA_DOCKER_CPUS=4 ./scripts/limit_ollama_resources.s
 
 ## 포트 충돌 요약
 
-| 포트 | 이미 사용 | 이 프로젝트 |
-|------|-----------|-------------|
-| 11434 | 기존 `ollama` | **다시 띄우지 않음** |
-| 5678 | 기존 `n8n` | **다시 띄우지 않음** |
-| 5433 | — | `postgres` |
-| 3000 | — | `browserless` |
+| 포트 | 경로 A (재사용) | 경로 B (`--profile full`) |
+|------|-----------------|---------------------------|
+| 11434 | 기존 `ollama` | Compose `ollama` |
+| 5678 | 기존 `n8n` | Compose `n8n` |
+| 5433 | Compose `postgres` | Compose `postgres` |
+| 3000 | Compose `browserless` | Compose `browserless` |
 
 ---
 
-## (참고) full 프로필 — 기존 컨테이너 없을 때만
+## (참고) full 프로필 — 경로 B, 기존 컨테이너 없을 때만
 
 ```bash
 docker compose --profile full up -d
+curl -fsS --retry 15 --retry-delay 1 --retry-all-errors --max-time 2 \
+  http://127.0.0.1:11434/api/tags >/dev/null
+docker compose exec ollama ollama pull qwen2.5:14b
+./scripts/smoke_ollama.sh
 ```
 
-이미 `ollama`/`n8n`이 있으면 **실행하지 마세요.**
+경로 A처럼 이미 `ollama`/`n8n`이 있으면 **실행하지 마세요.**
 
 다음: [01. 개요·아키텍처](01-overview.md)
