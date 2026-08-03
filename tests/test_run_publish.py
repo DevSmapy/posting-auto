@@ -144,6 +144,48 @@ class RunPublishTest(unittest.TestCase):
         self.assertEqual(len(store.calls), 1)
         self.assertTrue(any("R2/인스타 실패" in t for t in notifier.texts))
 
+    def test_notify_failure_still_records_seen_urls(self) -> None:
+        """seen_urls must persist even if channel notify raises."""
+        briefing = {"title": "t"}
+        store = _FakeStore()
+        now = datetime(2026, 7, 28, tzinfo=timezone.utc)
+
+        class _BoomNotifier:
+            def send_text(self, text: str) -> None:
+                raise RuntimeError("channel down")
+
+            def send_file(self, path: Path, caption: str = "") -> None:
+                raise RuntimeError("channel down")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            cfg = PublishConfig(
+                publish_cards=False,
+                ig_user_id="",
+                meta_access_token="",
+                r2_endpoint="",
+                r2_access_key_id="",
+                r2_secret_access_key="",
+                r2_bucket="",
+                r2_public_base_url="",
+            )
+            with (
+                patch("mvp_pipeline.assemble_blog_markdown", return_value="# md"),
+                patch("mvp_pipeline.assemble_blog_html", return_value="<p>x</p>"),
+                patch("mvp_pipeline.PublishConfig.from_env", return_value=cfg),
+            ):
+                run_publish(
+                    briefing,
+                    [{"url": "http://a", "title": "A"}],
+                    now,
+                    run_dir,
+                    store,  # type: ignore[arg-type]
+                    _BoomNotifier(),
+                )
+            self.assertTrue((run_dir / "briefing.md").is_file())
+        self.assertEqual(len(store.calls), 1)
+        self.assertEqual(store.calls[0]["picked"][0]["url"], "http://a")
+
 
 if __name__ == "__main__":
     unittest.main()
