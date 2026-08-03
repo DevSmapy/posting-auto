@@ -1,7 +1,8 @@
-# 09. 카드뉴스 템플릿
+# 05. 카드뉴스 템플릿
 
 인스타그램 캐러셀용 HTML 템플릿과 번들 카탈로그를 정리합니다.  
-발행 흐름·캡션 규칙은 [05. 발행](05-publishing.md)을 보세요.
+발행 흐름·캡션 규칙은 [04. 발행·워크플로](04-publishing.md)을 보세요.  
+슬라이드 필드 계약은 [03. LLM·프롬프트](03-llm-and-prompts.md)를 따릅니다.
 
 ## 한눈에 보기
 
@@ -11,6 +12,17 @@
 |------|--------|--------|------|
 | [`templates/cards/*.html`](../templates/cards/) (루트) | 1080×1080 | 다크 | 파이프라인·내러티브 번들용 단순 슬라이드 |
 | [`templates/cards/editorial/`](../templates/cards/editorial/) | 1080×1350 | 라이트·에디토리얼 | **재사용 UI 템플릿** (플레이스홀더만) |
+
+```mermaid
+flowchart LR
+  briefing[briefing_json]
+  assembler[CardAssembler_or_Narrative]
+  rootHtml[root_1080x1080_HTML]
+  editorial[editorial_placeholders]
+  png[CardRenderer_PNG]
+  briefing --> assembler --> rootHtml --> png
+  editorial --> png
+```
 
 ```text
 templates/cards/
@@ -22,7 +34,6 @@ templates/cards/
 └── editorial/          # 에디토리얼 세트 (라이트)
     ├── design-system.css
     ├── 01-hook.html
-    ├── 02-what-happened.html
     ├── …
     └── 08-cta.html
 ```
@@ -159,7 +170,7 @@ uv run python scripts/preview_cardnews.py --list-bundles
 1. `templates/cards/<새이름>/` 아래에 `design-system.css` + 슬라이드 HTML (슬롯은 `{{key}}`)  
 2. `scripts/cards/bundles/NN_<id>.json`에 메타 등록  
 3. `EditorialCarouselTemplate`과 같은 방식으로 content dict → HTML 치환 → PNG  
-4. `docs/09-card-templates.md`(본 문서)와 [05. 발행](05-publishing.md) 표에 한 줄 추가  
+4. `docs/05-card-templates.md`(본 문서)와 [04. 발행·워크플로](04-publishing.md) 표에 한 줄 추가  
 5. 루트 `cover.html` 등과 **섞지 말 것** — 캔버스·톤이 다름  
 
 스펙만 있는 번들(`myth_vs_truth` 등)에 HTML을 붙일 때도 동일하게 **전용 디렉터리**를 두는 편이 안전합니다.
@@ -172,7 +183,7 @@ uv run python scripts/preview_cardnews.py --list-bundles
 |------|------|
 | [`scripts/cards/`](../scripts/cards/) | Assembler / Caption / Renderer / Editorial |
 | [`scripts/preview_cardnews.py`](../scripts/preview_cardnews.py) | 로컬 MVP 미리보기 CLI |
-| [`docs/05-publishing.md`](05-publishing.md) | 발행·캡션·`PUBLISH_CARDS` |
+| [`docs/04-publishing.md`](04-publishing.md) | 발행·캡션·`PUBLISH_CARDS` |
 | [`docs/00-mvp-quickstart.md`](00-mvp-quickstart.md) | 빠른 실행 |
 
-다음: [08. 로드맵·운영](08-roadmap.md) · [05. 발행](05-publishing.md)
+다음: [06. 로드맵·운영](06-roadmap.md) · [04. 발행·워크플로](04-publishing.md)
