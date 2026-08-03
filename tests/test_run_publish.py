@@ -147,16 +147,28 @@ class RunPublishTest(unittest.TestCase):
     def test_notify_failure_still_records_seen_urls(self) -> None:
         """seen_urls must persist even if channel notify raises."""
         briefing = {"title": "t"}
-        store = _FakeStore()
+        events: list[str] = []
         now = datetime(2026, 7, 28, tzinfo=timezone.utc)
+
+        class _OrderedStore(_FakeStore):
+            def record_published(self, picked, tistory_post_id=None, ig_media_id=None):  # noqa: ANN001
+                events.append("record")
+                return super().record_published(
+                    picked,
+                    tistory_post_id=tistory_post_id,
+                    ig_media_id=ig_media_id,
+                )
 
         class _BoomNotifier:
             def send_text(self, text: str) -> None:
+                events.append("notify")
                 raise RuntimeError("channel down")
 
             def send_file(self, path: Path, caption: str = "") -> None:
+                events.append("notify")
                 raise RuntimeError("channel down")
 
+        store = _OrderedStore()
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = Path(tmp)
             cfg = PublishConfig(
@@ -185,6 +197,68 @@ class RunPublishTest(unittest.TestCase):
             self.assertTrue((run_dir / "briefing.md").is_file())
         self.assertEqual(len(store.calls), 1)
         self.assertEqual(store.calls[0]["picked"][0]["url"], "http://a")
+        self.assertIn("record", events)
+        self.assertIn("notify", events)
+        self.assertLess(events.index("record"), events.index("notify"))
+
+    def test_ig_media_id_persist_failure_still_notifies(self) -> None:
+        """IG success + seen_urls ig upsert failure must not abort final notify."""
+        briefing = {"title": "t"}
+        notifier = _FakeNotifier()
+        now = datetime(2026, 7, 28, tzinfo=timezone.utc)
+
+        class _FailIgStore(_FakeStore):
+            def record_published(self, picked, tistory_post_id=None, ig_media_id=None):  # noqa: ANN001
+                if ig_media_id:
+                    raise RuntimeError("db down")
+                return super().record_published(
+                    picked,
+                    tistory_post_id=tistory_post_id,
+                    ig_media_id=ig_media_id,
+                )
+
+        store = _FailIgStore()
+        cfg = PublishConfig(
+            publish_cards=True,
+            ig_user_id="ig",
+            meta_access_token="tok",
+            r2_endpoint="https://r2",
+            r2_access_key_id="ak",
+            r2_secret_access_key="sk",
+            r2_bucket="b",
+            r2_public_base_url="https://cdn",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            png = run_dir / "a.png"
+            png.write_bytes(b"x")
+            with (
+                patch("mvp_pipeline.assemble_blog_markdown", return_value="# md"),
+                patch("mvp_pipeline.assemble_blog_html", return_value="<p>x</p>"),
+                patch("mvp_pipeline.PublishConfig.from_env", return_value=cfg),
+                patch("mvp_pipeline.PublishCardsPipeline") as pipe_cls,
+            ):
+                pipe = MagicMock()
+                pipe.run.return_value = PublishCardsResult(
+                    attempted=True,
+                    image_urls=["https://cdn/a.png"],
+                    ig_media_id="ig_123",
+                    skipped_reason=None,
+                )
+                pipe_cls.return_value = pipe
+                run_publish(
+                    briefing,
+                    [{"url": "http://a", "title": "A"}],
+                    now,
+                    run_dir,
+                    store,  # type: ignore[arg-type]
+                    notifier,
+                    card_png_paths=[png],
+                )
+            self.assertTrue((run_dir / "briefing.md").is_file())
+        self.assertEqual(len(store.calls), 1)  # initial md record only
+        self.assertTrue(any("부분실패" in t for t in notifier.texts))
+        self.assertTrue(any(f.suffix == ".md" for f in notifier.files))
 
 
 if __name__ == "__main__":

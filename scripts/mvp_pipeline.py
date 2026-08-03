@@ -1339,14 +1339,15 @@ def run_publish(
     md = assemble_blog_markdown(briefing)
     md_path = run_dir / "briefing.md"
     md_path.write_text(md, encoding="utf-8")
-    (run_dir / "briefing.html").write_text(
-        briefing.get("blog_html") or assemble_blog_html(briefing), encoding="utf-8"
-    )
     export_ref = str(md_path.resolve())
     print(f"   wrote {md_path}")
 
     n = store.record_published(picked, tistory_post_id=export_ref, ig_media_id=None)
     print(f"==> seen_urls recorded: {n} (backend={store.backend})")
+
+    (run_dir / "briefing.html").write_text(
+        briefing.get("blog_html") or assemble_blog_html(briefing), encoding="utf-8"
+    )
 
     ig_media_id: str | None = None
     publish_cfg = PublishConfig.from_env()
@@ -1386,9 +1387,22 @@ def run_publish(
             _notify_stage(notifier, f"[R2/인스타 실패] {exc}")
 
     if ig_media_id:
-        store.record_published(
-            picked, tistory_post_id=export_ref, ig_media_id=ig_media_id
-        )
+        try:
+            store.record_published(
+                picked, tistory_post_id=export_ref, ig_media_id=ig_media_id
+            )
+        except Exception as exc:  # noqa: BLE001
+            # ponytail: one retry then report; IG already succeeded externally
+            try:
+                store.record_published(
+                    picked, tistory_post_id=export_ref, ig_media_id=ig_media_id
+                )
+            except Exception as exc2:  # noqa: BLE001
+                _notify_stage(
+                    notifier,
+                    f"[seen_urls 부분실패] 인스타는 게시됨 media_id={ig_media_id}; "
+                    f"ig_media_id 미기록: {exc2}",
+                )
 
     mode_label = _generation_mode_label(generation_mode)
     caption = (
