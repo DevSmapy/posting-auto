@@ -4,6 +4,8 @@
 
 > 현재 상태: **반자동** — Discord/Telegram/Slack Approve → `briefing.md` 저장. 티스토리 Open API는 종료되어 사용하지 않습니다.
 
+운영자(사람)가 목표·범위·검수를 담당하고, AI·바이브코딩은 구현·문서·테스트 **도구**로 사용합니다. 역할 구분: [docs/01-overview.md](docs/01-overview.md).
+
 ---
 
 ## 한눈에 보기
@@ -12,18 +14,11 @@
 |------|------|
 | 스케줄 | 평일 07:00 실행 → `NOTIFY_SEND_AT`(기본 07:50) Discord/Telegram/Slack (cron `1-5`) |
 | 뉴스 소스 (MVP) | Google News KR 토픽 RSS — `BUSINESS` + `NATION` |
-| 날짜 | `pubDate` ∈ **전일 15:00 ~ 실행시각** (Asia/Seoul, 설정 가능) |
-| 중요도 | 피드 순서 + 클러스터 크기 + **Ollama 스니펫 점수** |
-| LLM | Docker Ollama (`qwen2.5:14b` 권장) |
-| 발행 | 마크다운 파일 반자동 (수동 붙여넣기) + 선택적 Instagram |
-| 안전장치 | `MVP_MODE=draft` → 카드 PNG 미리보기 → Discord/Telegram/Slack Approve → `briefing.md` |
-| 언어 품질 | 기사별 fact → translation → polish layer + target-language validator |
-
-```text
-Google News RSS → 전일15:00~now / seen_urls → Ollama 중요도 → Ollama 브리핑
-        → (draft) NOTIFY_SEND_AT 대기 → Discord|Telegram|Slack Approve/Skip
-        → briefing.md → seen_urls 기록
-```
+| 날짜 | `pubDate` ∈ **전일 15:00 ~ 실행시각** (Asia/Seoul) |
+| 중요도 | 피드 순서 + 클러스터 + **Ollama 스니펫 점수** |
+| LLM | Docker Ollama (`qwen2.5:14b` 권장), layered story |
+| 발행 | 마크다운 반자동 + 선택적 Instagram (`publish_ready`) |
+| 안전장치 | `MVP_MODE=draft` → 내용/렌더 게이트 → Approve → `briefing.md` |
 
 ---
 
@@ -44,17 +39,15 @@ MVP_MODE=dry_run uv run python scripts/mvp_pipeline.py
 
 | 문서 | 내용 |
 |------|------|
-| [docs/00-mvp-quickstart.md](docs/00-mvp-quickstart.md) | **MVP 실행 가이드** |
+| [docs/00-mvp-quickstart.md](docs/00-mvp-quickstart.md) | **실행·설치** |
 | [docs/README.md](docs/README.md) | 문서 목차 |
-| [docs/01-overview.md](docs/01-overview.md) | 목표, 산출물, 운영 원칙 |
-| [docs/02-architecture.md](docs/02-architecture.md) | 아키텍처, 스택 결정 |
-| [docs/03-news-collection.md](docs/03-news-collection.md) | Google News 수집·필터 |
-| [docs/04-llm-and-prompts.md](docs/04-llm-and-prompts.md) | Ollama, 중요도·브리핑 JSON |
-| [docs/05-publishing.md](docs/05-publishing.md) | 마크다운 반자동, 카드, 인스타, Telegram |
-| [docs/06-setup.md](docs/06-setup.md) | 사전 준비, 환경 변수 |
-| [docs/07-workflow.md](docs/07-workflow.md) | n8n 노드 흐름 |
-| [docs/08-roadmap.md](docs/08-roadmap.md) | 로드맵, 트러블슈팅, 보안 |
-| [docs/09-card-templates.md](docs/09-card-templates.md) | 카드 HTML 템플릿·번들·에디토리얼 UI |
+| [docs/01-overview.md](docs/01-overview.md) | 개요·아키텍처·사람/AI 역할 |
+| [docs/02-news-collection.md](docs/02-news-collection.md) | Google News 수집·필터 |
+| [docs/03-llm-and-prompts.md](docs/03-llm-and-prompts.md) | Ollama·브리핑 JSON |
+| [docs/04-publishing.md](docs/04-publishing.md) | 게이트·발행·publish_ready |
+| [docs/05-card-templates.md](docs/05-card-templates.md) | 카드 HTML·번들·editorial |
+| [docs/06-roadmap.md](docs/06-roadmap.md) | 로드맵·트러블슈팅·보안 |
+| [docs/07-pr-conventions.md](docs/07-pr-conventions.md) | PR Summary / Changes / Notes |
 
 ---
 
@@ -66,28 +59,17 @@ MVP_MODE=dry_run uv run python scripts/mvp_pipeline.py
 ├── docs/
 ├── docker-compose.yml
 ├── .env.example
-├── pyproject.toml           # uv 의존성 (권장: uv sync)
-├── requirements.txt         # pyproject 미러 (호환용)
+├── pyproject.toml
 ├── prompts/
 ├── templates/cards/
+├── apps/                  # ops_console, template_studio
 ├── scripts/
-│   ├── smoke_ollama.sh
-│   ├── mvp_pipeline.py      # MVP 실행 진입점
-│   ├── cards/               # 카드·인스타 본문 조립
-│   └── publish/             # R2 업로드 · Instagram Graph 캐러셀
+│   ├── mvp_pipeline.py
+│   ├── cards/
+│   └── publish/
 ├── workflows/
 └── init/01_seen_urls.sql
 ```
-
----
-
-## 핵심 결정 (요약)
-
-1. **뉴스**: Google News 토픽 RSS. 네이버 섹션·키워드 검색 RSS는 MVP 제외.
-2. **조회수 정렬 불가** → 구글 노출 순서 + 클러스터 + Ollama 중요도.
-3. **본문 HTML 파싱 안 함** (MVP) → RSS 제목·스니펫만으로 요약.
-4. **LLM = Ollama (Docker Compose)**.
-5. **발행 전** `draft`로 Discord/Telegram/Slack 승인 확인 권장.
 
 ---
 

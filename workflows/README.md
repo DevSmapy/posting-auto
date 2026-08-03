@@ -29,7 +29,7 @@ MVP_MODE=draft uv run python scripts/mvp_pipeline.py
 
 ## 권장 연결 (2차, 네이티브 노드 · 후속)
 
-[docs/07-workflow.md](../docs/07-workflow.md) 참고. 대략:
+[docs/04-publishing.md](../docs/04-publishing.md) 참고. 대략:
 
 1. Schedule  
 2. RSS Read ×2 (`GNEWS_*`)  
