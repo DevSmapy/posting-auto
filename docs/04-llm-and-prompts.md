@@ -15,8 +15,12 @@
 모델 pull 예:
 
 ```bash
-docker compose up -d ollama
+# Compose 소유 경로 (--profile full, 기존 ollama 없을 때만)
+docker compose --profile full up -d ollama
 docker compose exec ollama ollama pull qwen2.5:14b
+
+# 외장 컨테이너 재사용 (Compose start/exec 없음)
+curl -N http://127.0.0.1:11434/api/pull -d '{"name":"qwen2.5:14b"}'
 ```
 
 ### 스모크

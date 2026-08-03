@@ -9,9 +9,17 @@
 
 ### Ollama (Docker)
 
-- [ ] `docker compose up -d ollama` (또는 기존 Ollama 컨테이너 실행 중)
+**A) 이 프로젝트 Compose가 ollama를 소유할 때** (`--profile full`, 기존 컨테이너 없을 때만):
+
+- [ ] `docker compose --profile full up -d ollama`
 - [ ] `docker compose exec ollama ollama pull qwen2.5:14b`
 - [ ] `./scripts/smoke_ollama.sh` (호스트 → `127.0.0.1:11434`)
+
+**B) 이미 떠 있는 외장 Ollama를 재사용할 때** (기본 MVP 경로 — Compose로 start/exec 하지 않음):
+
+- [ ] 기존 컨테이너가 `:11434`에서 응답하는지 확인 (`curl http://127.0.0.1:11434/api/tags`)
+- [ ] 모델 없으면 호스트에서 pull: `curl -N http://127.0.0.1:11434/api/pull -d '{"name":"qwen2.5:14b"}'`
+- [ ] `./scripts/smoke_ollama.sh`
 
 ### 티스토리 / 블로그
 
@@ -20,16 +28,19 @@
 
 ### Instagram / Meta
 
-- [ ] 프로페셔널 계정 + Facebook 페이지
+- [ ] Instagram 프로페셔널(비즈니스/크리에이터) 계정 + **연결된 Facebook Page**
 - [ ] Meta 앱 + Content Publishing
-- [ ] `IG_USER_ID`, long-lived `META_ACCESS_TOKEN`
+- [ ] 로그인·권한 (택 1):
+  - **Facebook Login for Business:** `instagram_content_publish` (+ 필요 시 `pages_read_engagement`)
+  - **Business Login for Instagram:** `instagram_business_content_publish` (+ 필요 시 `pages_read_engagement`)
+- [ ] `IG_USER_ID`, **long-lived** Page/IG `META_ACCESS_TOKEN`
 
 > 인스타 연동이 준비 중 가장 오래 걸리는 구간입니다.
 
 ### Discord (권장 Approve 채널 · 주력)
 
 - [ ] Developer Portal Bot → `DISCORD_BOT_TOKEN`
-- [ ] **텍스트 채널** ID → `DISCORD_CHANNEL_ID` (카테고리 ID 금지) + 봇 초대 (Send / Attach Files / React / History)
+- [ ] **텍스트 채널** ID → `DISCORD_CHANNEL_ID` (카테고리 ID 금지) + 봇 초대 (`View Channel` · Send · Attach Files · React · History; `View Channel`은 채널 상속 시 암묵 부여될 수 있음)
 - [ ] `NOTIFY_CHANNEL=discord` (또는 자동 선택)
 - [ ] `uv run python scripts/smoke_discord.py`
 

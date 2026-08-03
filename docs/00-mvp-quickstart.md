@@ -10,13 +10,26 @@
 | Ollama 이미지 tar | **Extreme SSD** | `/Volumes/Extreme SSD/DockerData/images` |
 | Ollama 모델 데이터 | **Extreme SSD** | `/Volumes/Extreme SSD/DockerData/ollama_data` |
 
-지금 PC에는 이미 아래가 떠 있습니다.
+### 경로 A — 기존 컨테이너 재사용 (이 PC 기본)
 
-- `n8n` → `:5678` (WD_BLACK `n8n_data`)
-- `ollama` → `:11434` (Extreme SSD `ollama_data`)
+이미 아래가 떠 있으면 Compose로 ollama/n8n을 **다시 올리지 마세요** (포트 충돌).
 
-그래서 **이 프로젝트 Compose로 ollama/n8n을 다시 올리면 포트 충돌**이 납니다.  
-MVP는 **기존 컨테이너를 재사용**하고, 부족한 이미지(postgres·browserless)만 WD_BLACK에 skopeo로 받습니다.
+- `n8n` → 포트 **5678** (WD_BLACK `n8n_data`)
+- `ollama` → 포트 **11434** (Extreme SSD `ollama_data`)
+
+모델 pull·스모크는 Compose exec 없이 호스트에서:
+
+```bash
+curl http://127.0.0.1:11434/api/tags
+curl -N http://127.0.0.1:11434/api/pull -d '{"name":"qwen2.5:14b"}'   # 없을 때만
+./scripts/smoke_ollama.sh
+```
+
+MVP는 이 경로로 **기존 컨테이너를 재사용**하고, 부족한 이미지(postgres·browserless)만 WD_BLACK에 skopeo로 받습니다.
+
+### 경로 B — Compose가 ollama를 소유 (`--profile full`)
+
+기존 `ollama`/`n8n`이 **없을 때만**. pull은 `docker compose exec ollama …`를 씁니다. 아래 “(참고) full 프로필” 참고.
 
 관련 환경 변수: `.env` / `.env.example` 의 `IMAGE_DIR`, `OLLAMA_IMAGE_DIR`, `OLLAMA_DATA_PATH`, `POSTGRES_DATA_PATH`, `N8N_DATA_PATH`  
 (`Extreme SSD` 경로는 공백 때문에 `.env`에서 **반드시 따옴표**로 감쌉니다.)
@@ -178,8 +191,8 @@ Docker Desktop은 켜 두세요. 포스팅 목표 시각(예: 08:00)은 수동 �
 | `MVP_MODE` | 동작 |
 |------------|------|
 | `dry_run` | 수집·LLM만, JSON 저장 |
-| `draft` | 초안 → Approve 대기 → `briefing.md` |
-| `publish` | Approve 없이 바로 `briefing.md` |
+| `draft` | 내용 게이트 → 렌더 게이트 Approve 후 `briefing.md` |
+| `publish` | 채널 Approve **우회**, 바로 `briefing.md` |
 
 CPU가 여전히 높거나 스토리 요약이 타임아웃되면 `.env`에서:
 
@@ -205,19 +218,21 @@ OLLAMA_DOCKER_MEMORY=10g OLLAMA_DOCKER_CPUS=4 ./scripts/limit_ollama_resources.s
 
 ## 포트 충돌 요약
 
-| 포트 | 이미 사용 | 이 프로젝트 |
-|------|-----------|-------------|
-| 11434 | 기존 `ollama` | **다시 띄우지 않음** |
-| 5678 | 기존 `n8n` | **다시 띄우지 않음** |
-| 5433 | — | `postgres` |
-| 3000 | — | `browserless` |
+| 포트 | 경로 A (재사용) | 경로 B (`--profile full`) |
+|------|-----------------|---------------------------|
+| 11434 | 기존 `ollama` | Compose `ollama` |
+| 5678 | 기존 `n8n` | Compose `n8n` |
+| 5433 | Compose `postgres` | Compose `postgres` |
+| 3000 | Compose `browserless` | Compose `browserless` |
 
 ---
 
-## (참고) full 프로필 — 기존 컨테이너 없을 때만
+## (참고) full 프로필 — 경로 B, 기존 컨테이너 없을 때만
 
 ```bash
 docker compose --profile full up -d
+docker compose exec ollama ollama pull qwen2.5:14b
+./scripts/smoke_ollama.sh
 ```
 
-지금처럼 이미 `ollama`/`n8n`이 있으면 **실행하지 마세요.**
+경로 A처럼 이미 `ollama`/`n8n`이 있으면 **실행하지 마세요.**

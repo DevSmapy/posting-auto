@@ -10,7 +10,7 @@
 2. ① **내용 게이트** (텍스트만): ✅ Approve / 🔀 Rerank / ✍️ Rewrite (`CONTENT_RETRY_MAX`)  
 3. 선택 `briefing.json`으로 **로컬 카드 PNG** → `renders/render-NN/`  
 4. ② **렌더 게이트** (이미지): ✅ Approve / 🔁 Re-render (`RENDER_RETRY_MAX`)  
-5. Approve 후 `briefing.md` (+ 선택 R2/IG) → `seen_urls`  
+5. Approve 후 `briefing.md` 저장 → **즉시 `seen_urls`** → (선택 R2/IG) → 채널 알림  
 6. ③ **Cleanup ask**: 확정본만 유지(삭제 책임 경고) / 전부 보관 (`CLEANUP_MODE=ask`, 타임아웃→확정본만)
 
 첫 content 게이트 전에만 `NOTIFY_SEND_AT`(예: `07:50`, Asia/Seoul)까지 대기합니다.  
@@ -37,17 +37,18 @@
 
 | 선택 | 동작 |
 |------|------|
-| Approve (렌더) | `briefing.md` 저장 (+ 채널에 md 첨부) → `PUBLISH_CARDS=1`이면 R2/인스타 (렌더 게이트 PNG 재사용) → `seen_urls` → cleanup ask |
+| Approve (렌더) | `briefing.md` 저장 → **즉시 `seen_urls`** → (+ 채널에 md 첨부) → `PUBLISH_CARDS=1`이면 R2/인스타 (렌더 게이트 PNG 재사용) → cleanup ask |
 | Rerank / Rewrite / Re-render | 해당 단계 재생성 (성공한 재생성만 남은 기회 차감). 후보 소진·생성 실패 시 차감 없음. attempt는 cleanup 전까지 유지 |
 | 타임아웃 | parked 저장. `seen_urls` 미기록. `resume_draft.sh`로 재개 가능 |
 | 횟수 소진 | 중단. `seen_urls` 미기록. `./scripts/run_draft.sh` 재실행 |
 
-마크다운 저장 성공 시 `seen_urls`에 insert합니다. 인스타만 실패해도 마크다운·`seen_urls`는 유지하고 단계 알림을 보냅니다.
+`briefing.md` 저장에 성공하면 **알림·인스타보다 먼저** `seen_urls`에 insert합니다. 이후 채널 알림 실패·인스타 실패가 나도 기록은 남고 삭제되지 않습니다.
 
 ### Discord 설정 (주력)
 
 1. [Discord Developer Portal](https://discord.com/developers/applications)에서 앱·Bot 생성 → `DISCORD_BOT_TOKEN`
-2. Bot 권한: `Send Messages`, `Attach Files`, `Add Reactions`, `Read Message History`
+2. Bot 권한: `View Channel`, `Send Messages`, `Attach Files`, `Add Reactions`, `Read Message History`  
+   (`View Channel`은 채널이 @everyone 등에서 상속하면 초대만으로 충분할 수 있음. 채널 권한을 덮어쓴 경우에는 명시적으로 부여)
 3. 서버에 봇 초대 후 **텍스트 채널** ID → `DISCORD_CHANNEL_ID`
 4. `.env`에 `NOTIFY_CHANNEL=discord` (또는 토큰만 넣고 자동 선택)
 

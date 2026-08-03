@@ -18,8 +18,8 @@
 
 ## 운영 원칙
 
-1. **1단계**: Telegram에서 Approve 후에만 발행
-2. **2단계**(안정화 후): 승인 생략 또는 실패 시에만 알림
+1. **1단계 (`MVP_MODE=draft`)**: Discord/Telegram/Slack에서 **내용 게이트 → 렌더 게이트** Approve 후에만 `briefing.md`(+선택 R2/IG) 발행
+2. **2단계(안정화 후)**: 승인 생략 — `MVP_MODE=publish`는 채널 Approve를 **우회**하고 바로 `briefing.md`를 씁니다. 또는 실패 시에만 알림
 3. 원문 복붙 금지. 요약·해설만. 출처 링크 필수
 4. 종목 매수/매도·목표가·수익률 보장 문구 금지
 

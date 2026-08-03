@@ -57,7 +57,7 @@
 | LLM | Ollama (Docker) | 비용·프라이버시, n8n과 같은 Compose |
 | LLM 비채택 | LM Studio | 실험용. 스케줄 headless에는 Ollama |
 | 블로그 | 마크다운 반자동 | Open API 종료 → 수동 붙여넣기 |
-| 카드 채널 | Instagram Graph API | 비즈니스/크리에이터 + 페이지 |
+| 카드 채널 | Instagram Graph API | 비즈니스/크리에이터 + 연결 Facebook Page · long-lived 토큰 · `instagram_content_publish`(Facebook Login for Business) 또는 `instagram_business_content_publish`(Business Login for Instagram); 필요 시 `pages_read_engagement` |
 | 카드 이미지 | HTML + Browserless | 한글 타이포·레이아웃 통제 |
 | 이미지 호스팅 | Cloudflare R2 | 인스타 Media API는 공개 HTTPS URL 필요 |
 | 승인 | Discord(주력) / Telegram / Slack | 금융 콘텐츠 품질 게이트 · **이미지 확인 후 Approve** |
