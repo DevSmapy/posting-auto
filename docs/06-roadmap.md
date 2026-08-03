@@ -9,7 +9,7 @@
 | 2 | Ollama 스모크 스크립트 | `./scripts/smoke_ollama.sh` |
 | 3 | `prompts/` + `templates/cards/` | 샘플 템플릿·프롬프트 존재 |
 | 4 | MVP 파이프라인 (RSS→중요도→layered story→브리핑) | `MVP_MODE=dry_run uv run python scripts/mvp_pipeline.py` |
-| 5 | Notify draft → 마크다운 export | Discord/Telegram/Slack · **① 내용 게이트 → ② 렌더(이미지) 게이트 → cleanup** 후 `briefing.md` |
+| 5 | Notify draft → 마크다운 export | Discord/Telegram/Slack · **① 내용 게이트 → ② 렌더 게이트 → `briefing.md`(+선택 R2/IG) → cleanup** |
 | 5b | Slack Approve 어댑터 | `NOTIFY_CHANNEL=slack` (`scripts/notify/slack.py`) |
 | 6 | Browserless + R2 카드 렌더 | 내용 Approve 후 PNG 미리보기 · **렌더 Approve 후** R2 (`scripts/publish`) |
 | 7 | 인스타 캐러셀 | Meta 토큰 후 게시 (`InstagramCarouselPublisher`, 2–10장) |

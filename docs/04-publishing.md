@@ -92,7 +92,7 @@ Rerank는 이번 run의 이전 content attempt URL을 제외한 뒤 재랭킹한
 
 | 선택 | 동작 |
 |------|------|
-| Approve (렌더) | `briefing.md` 저장 → **즉시 `seen_urls`** → (선택) R2/인스타 → cleanup |
+| Approve (렌더) | `briefing.md` 저장 → **즉시 `seen_urls`** → (선택) R2/인스타 → **md 알림** → cleanup |
 | Rerank / Rewrite / Re-render | 해당 단계 재생성 (성공 시에만 기회 차감) |
 | 타임아웃 | parked. `seen_urls` 미기록. `resume_draft.sh`로 재개 |
 | 횟수 소진 | 중단. `seen_urls` 미기록. `./scripts/run_draft.sh` 재실행 |

@@ -14,6 +14,7 @@
 **A) Compose가 ollama를 소유할 때** (`--profile full`, 기존 컨테이너 없을 때만):
 
 - [ ] `docker compose --profile full up -d ollama`
+- [ ] `curl -fsS --retry 15 --retry-delay 1 --retry-all-errors --max-time 2 http://127.0.0.1:11434/api/tags >/dev/null`
 - [ ] `docker compose exec ollama ollama pull qwen2.5:14b`
 - [ ] `./scripts/smoke_ollama.sh` (호스트 → `127.0.0.1:11434`)
 
@@ -306,6 +307,8 @@ OLLAMA_DOCKER_MEMORY=10g OLLAMA_DOCKER_CPUS=4 ./scripts/limit_ollama_resources.s
 
 ```bash
 docker compose --profile full up -d
+curl -fsS --retry 15 --retry-delay 1 --retry-all-errors --max-time 2 \
+  http://127.0.0.1:11434/api/tags >/dev/null
 docker compose exec ollama ollama pull qwen2.5:14b
 ./scripts/smoke_ollama.sh
 ```
