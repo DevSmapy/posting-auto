@@ -1,0 +1,13 @@
+{
+  "expect_decision": "pass",
+  "story": {
+    "headline": "원·달러 환율 하루 만에 10원 하락",
+    "what_happened": "서울 외환시장에서 원·달러 환율이 전일 대비 10원 가까이 떨어졌습니다.",
+    "why_important": "환율 하락은 수입 물가와 수출 기업 채산성에 동시에 영향을 줍니다.",
+    "watch_next": "미국 고용지표 발표와 당국의 구두 개입 여부를 확인해야 합니다.",
+    "one_liner": "환율이 빠르게 내려 수입·수출 셈법이 바뀌고 있습니다.",
+    "source_name": "연합뉴스",
+    "source_url": "https://example.com/fx-1"
+  },
+  "sources": [{"title": "원·달러 환율 10원 하락", "link": "https://example.com/fx-1"}]
+}

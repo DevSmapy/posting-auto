@@ -1,0 +1,13 @@
+{
+  "expect_decision": "revise",
+  "story": {
+    "headline": "반도체 수출이 다시 늘었습니다",
+    "what_happened": "반도체 수출이 다시 늘었습니다. 반도체 수출이 다시 늘었습니다.",
+    "why_important": "반도체 수출이 다시 늘었습니다. 이는 수출 통계에 반영됩니다.",
+    "watch_next": "다음 달 수출 잠정치를 확인하세요.",
+    "one_liner": "반도체 수출이 다시 늘었습니다.",
+    "source_name": "통계청",
+    "source_url": "https://example.com/semi"
+  },
+  "sources": [{"title": "반도체 수출 증가", "link": "https://example.com/semi"}]
+}

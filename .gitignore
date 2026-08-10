@@ -22,3 +22,8 @@ __pycache__/
 # Ops console local settings (copy from config/ops.example.json)
 config/ops.json
 
+# Tistory / browser auth — never commit
+**/tistory-storage*.json
+.playwright/
+secrets/
+

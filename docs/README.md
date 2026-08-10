@@ -14,6 +14,9 @@ Python 의존성·실행은 **uv** 기준입니다 (`uv sync`, `uv run python �
 | 05 | [카드 템플릿](05-card-templates.md) | 루트 HTML vs editorial, 번들 |
 | 06 | [로드맵·운영](06-roadmap.md) | 구현 순서, MVP, 트러블슈팅, 보안 |
 | 07 | [PR 관례](07-pr-conventions.md) | Summary / Changes / Notes |
+| 08 | [2.0 Phase 0 Audit](08-v2-phase0-audit.md) | Posting Auto 2.0 감사 요약 |
+| — | [v2 Spikes](v2/README.md) | Tistory / Wake / Reviewer / n8n / LangGraph / Runtime |
+| — | [Phase 5 n8n note](v2/phase5-n8n-note.md) | n8n 제거 전 확인 |
 
 ```text
 docs/
@@ -25,5 +28,7 @@ docs/
 ├── 04-publishing.md
 ├── 05-card-templates.md
 ├── 06-roadmap.md
-└── 07-pr-conventions.md
+├── 07-pr-conventions.md
+├── 08-v2-phase0-audit.md
+└── v2/
 ```
