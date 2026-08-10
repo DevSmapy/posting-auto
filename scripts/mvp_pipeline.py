@@ -2,9 +2,10 @@
 """MVP pipeline: Google News → filter → Ollama rank/brief → gates → markdown export.
 
 Modes (MVP_MODE):
-  dry_run  - fetch + LLM, write output/*.json (default)
-  draft    - 2-stage gates (content → render) + cleanup ask → briefing.md
-  publish  - write briefing.md without Approve wait
+  dry_run     - fetch + LLM, write output/*.json (default)
+  draft       - 2-stage gates (content → render) + cleanup ask → briefing.md
+  publish     - write briefing.md without Approve wait
+  autonomous  - editorial validate/review/revise/decide; AUTO_PUBLISH controls live publish
 """
 
 from __future__ import annotations
@@ -66,6 +67,13 @@ from story_quality import (  # noqa: E402
     target_locale,
     validate_story_fields,
 )
+from editorial import (  # noqa: E402
+    auto_publish_enabled,
+    human_gates_enabled,
+    run_editorial_loop,
+)
+from editorial.validator import quality_gate_briefing  # noqa: E402
+from runtime.preflight import run_preflight  # noqa: E402
 
 TZ = ZoneInfo(os.getenv("NEWS_TIMEZONE", "Asia/Seoul"))
 PROMPTS = ROOT / "prompts"
@@ -615,6 +623,7 @@ def heuristic_story_fields(article: dict[str, Any], index: int = 1) -> dict[str,
         "one_liner": headline,
         "source_name": article.get("source") or "",
         "source_url": article.get("link") or "",
+        "_fallback": "heuristic",
     }
 
 
@@ -1173,6 +1182,16 @@ def build_briefing(
     else:
         mode = "mixed"
     print(f"   stories llm={llm_ok}/{n} → generation={mode}")
+    gate = quality_gate_briefing(briefing)
+    if run_dir is not None:
+        (run_dir / "quality_gate.json").write_text(
+            json.dumps(gate, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    if not gate.get("ok"):
+        print(
+            f"   !! quality_gate hard_fail indices={gate.get('hard_fail_indices')}"
+        )
     return briefing, mode
 
 
@@ -1446,6 +1465,55 @@ def _serialize_articles(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [{k: v for k, v in a.items() if k != "published_dt"} for a in rows]
 
 
+def apply_editorial_pass(
+    briefing: dict[str, Any],
+    picked: list[dict[str, Any]],
+    now: datetime,
+    run_dir: Path | None,
+    *,
+    use_llm_reviewer: bool | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Validator → Reviewer → bounded revise → editor decision."""
+    if use_llm_reviewer is None:
+        use_llm_reviewer = env("EDITORIAL_LLM_REVIEWER", "0").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+
+    def _rewrite(story: dict[str, Any], instr: dict[str, Any]) -> dict[str, Any]:
+        issues = [str(x) for x in (instr.get("risk_flags") or [])]
+        issues.extend(str(x) for x in (instr.get("revision_instructions") or []))
+        if not issues:
+            issues = ["improve depth and remove generic fallback phrasing"]
+        article = {
+            "title": story.get("headline") or "",
+            "link": story.get("source_url") or "",
+            "source": story.get("source_name") or "",
+            "snippet": story.get("what_happened") or "",
+            "id": story.get("source_url") or story.get("headline") or "",
+        }
+        polished, _raw = polish_story_llm(story, issues, article, now)
+        out = _with_story_source(deterministic_story_repair(polished), article)
+        out.pop("_fallback", None)
+        return out
+
+    result = run_editorial_loop(
+        briefing,
+        sources=_serialize_articles(picked),
+        rewrite_story=_rewrite if env("BRIEFING_MODE", "llm").lower() != "heuristic" else None,
+        use_llm_reviewer=use_llm_reviewer,
+        run_dir=run_dir,
+    )
+    decision = result.get("editor_decision") or {}
+    print(
+        f"   editorial decision={decision.get('decision')} "
+        f"revisions={result.get('revision_count')} "
+        f"stories={decision.get('story_count')}"
+    )
+    return result.get("briefing") or briefing, result
+
+
 def produce_content_attempt(
     draft_store: DraftRunStore,
     candidates: list[dict[str, Any]],
@@ -1478,6 +1546,13 @@ def produce_content_attempt(
     )
     print("==> Ollama briefing")
     briefing, generation_mode = build_briefing(picked, now, run_dir=attempt_dir)
+    if env("EDITORIAL_LOOP", "0").lower() in {"1", "true", "yes"}:
+        print("==> Editorial quality loop")
+        briefing, _editorial = apply_editorial_pass(
+            briefing, picked, now, attempt_dir
+        )
+        # Drop excluded picks when editor removed stories by index originally —
+        # briefing stories already filtered; keep picked list for seen_urls URLs.
     briefing["blog_html"] = assemble_blog_html(briefing)
     (attempt_dir / "briefing.json").write_text(
         json.dumps(briefing, ensure_ascii=False, indent=2),
@@ -2041,6 +2116,130 @@ def resume_parked_draft(
     )
 
 
+def run_autonomous(
+    *,
+    candidates: list[dict[str, Any]],
+    now: datetime,
+    run_dir: Path,
+    store: SeenUrlsStore,
+    notifier: Any,
+) -> int:
+    """Editorial loop without human gates; AUTO_PUBLISH controls live publish."""
+    pre = run_preflight(require_ollama=env("BRIEFING_MODE", "llm").lower() != "heuristic")
+    (run_dir / "preflight.json").write_text(
+        json.dumps(pre, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    if not pre.get("ok"):
+        notifier.send_text(
+            "ACTION REQUIRED\nPreflight failed.\n"
+            + json.dumps(pre.get("checks"), ensure_ascii=False)[:500]
+        )
+        print("Done (preflight failed).")
+        return 1
+
+    draft_store = DraftRunStore(
+        run_dir,
+        content_max=content_retry_max(),
+        render_max=render_retry_max(),
+    )
+    draft_store.init_layout()
+    try:
+        picked, briefing, generation_mode, attempt_dir = produce_content_attempt(
+            draft_store, candidates, now
+        )
+        # Always run editorial for autonomous (even if EDITORIAL_LOOP=0)
+        if env("EDITORIAL_LOOP", "0").lower() not in {"1", "true", "yes"}:
+            print("==> Editorial quality loop (autonomous)")
+            briefing, editorial = apply_editorial_pass(
+                briefing, picked, now, attempt_dir
+            )
+            briefing["blog_html"] = assemble_blog_html(briefing)
+            (attempt_dir / "briefing.json").write_text(
+                json.dumps(briefing, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        else:
+            editorial_path = attempt_dir / "editorial_result.json"
+            editorial = (
+                json.loads(editorial_path.read_text(encoding="utf-8"))
+                if editorial_path.is_file()
+                else {}
+            )
+
+        decision = (editorial.get("editor_decision") if editorial else None) or {}
+        # Re-read if produce already ran editorial
+        if not decision and (attempt_dir / "editorial_result.json").is_file():
+            editorial = json.loads(
+                (attempt_dir / "editorial_result.json").read_text(encoding="utf-8")
+            )
+            decision = editorial.get("editor_decision") or {}
+            if editorial.get("briefing"):
+                briefing = editorial["briefing"]
+                briefing["blog_html"] = assemble_blog_html(briefing)
+
+        draft_store.set_selected_content()
+        if decision.get("decision") != "publish":
+            reason = decision.get("reason") or "editorial_reject"
+            notifier.send_text(
+                "ACTION REQUIRED\n"
+                f"Editorial decision=reject ({reason}).\n"
+                f"Content preserved under output/{run_dir.name}/\n"
+                f"Revisions={editorial.get('revision_count', 0) if editorial else 0}"
+            )
+            print(f"Done (editorial reject: {reason}).")
+            return 0
+
+        if not auto_publish_enabled():
+            # Decision-only dry run: write markdown package, skip IG live publish.
+            ensure_aux_before_publish()
+            store.reopen()
+            card_pngs = render_cards_for_approve(briefing, run_dir, now)
+            # Force package mode when dry
+            os.environ.setdefault("PUBLISH_MODE", "package")
+            run_publish(
+                briefing,
+                picked,
+                now,
+                run_dir,
+                store,
+                notifier,
+                generation_mode=generation_mode,
+                card_png_paths=card_pngs,
+            )
+            notifier.send_text(
+                "Posting Auto completed (AUTO_PUBLISH=false).\n"
+                f"Stories: {len(briefing.get('stories') or [])}\n"
+                f"Revisions: {editorial.get('revision_count', 0) if editorial else 0}\n"
+                f"Run: {run_dir.name}"
+            )
+            print("Done (autonomous dry editorial publish decision).")
+            return 0
+
+        ensure_aux_before_publish()
+        store.reopen()
+        card_pngs = render_cards_for_approve(briefing, run_dir, now)
+        run_publish(
+            briefing,
+            picked,
+            now,
+            run_dir,
+            store,
+            notifier,
+            generation_mode=generation_mode,
+            card_png_paths=card_pngs,
+        )
+        notifier.send_text(
+            "Posting Auto completed.\n"
+            f"Stories: {len(briefing.get('stories') or [])}\n"
+            f"Revisions: {editorial.get('revision_count', 0) if editorial else 0}\n"
+            f"Run: {run_dir.name}"
+        )
+        print("Done (autonomous AUTO_PUBLISH=true).")
+        return 0
+    finally:
+        release_ollama_after_llm()
+
+
 def main() -> int:
     mode = env("MVP_MODE", "dry_run").lower()
     now = datetime.now(TZ)
@@ -2055,7 +2254,8 @@ def main() -> int:
     store = SeenUrlsStore()
     print(
         f"==> mode={mode} date={now.date()} tz={TZ} "
-        f"seen_urls={store.backend} notify={channel}"
+        f"seen_urls={store.backend} notify={channel} "
+        f"human_gates={human_gates_enabled()} auto_publish={auto_publish_enabled()}"
     )
     print(
         f"==> ollama threads={env('OLLAMA_NUM_THREAD', '4')} "
@@ -2078,7 +2278,7 @@ def main() -> int:
         )
         if not candidates:
             print("No candidates in news window. Exit.")
-            if mode in {"draft", "publish"}:
+            if mode in {"draft", "publish", "autonomous"}:
                 notifier.send_text(f"[경제브리핑] {now.date()} 창 내 후보 0건 — 스킵")
             return 0
 
@@ -2090,6 +2290,15 @@ def main() -> int:
                 store=store,
                 notifier=notifier,
                 channel=channel,
+            )
+
+        if mode == "autonomous":
+            return run_autonomous(
+                candidates=candidates,
+                now=now,
+                run_dir=run_dir,
+                store=store,
+                notifier=notifier,
             )
 
         briefing: dict[str, Any] | None = None
@@ -2113,6 +2322,8 @@ def main() -> int:
 
             print("==> Ollama briefing")
             briefing, generation_mode = build_briefing(picked, now, run_dir=run_dir)
+            if env("EDITORIAL_LOOP", "0").lower() in {"1", "true", "yes"}:
+                briefing, _ed = apply_editorial_pass(briefing, picked, now, run_dir)
             briefing["blog_html"] = assemble_blog_html(briefing)
             (run_dir / "briefing.json").write_text(
                 json.dumps(briefing, ensure_ascii=False, indent=2),
@@ -2136,12 +2347,23 @@ def main() -> int:
             )
             draft_store.init_layout()
             attempt_dir = draft_store.new_content_attempt()
-            for name in ("ranked.json", "briefing.json", "story_raw.json", "importance_raw.json"):
+            for name in (
+                "ranked.json",
+                "briefing.json",
+                "story_raw.json",
+                "importance_raw.json",
+                "editorial_result.json",
+            ):
                 src = run_dir / name
                 if src.is_file():
-                    (attempt_dir / name).write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+                    (attempt_dir / name).write_text(
+                        src.read_text(encoding="utf-8"), encoding="utf-8"
+                    )
             draft_store.set_selected_content()
-            print("Done (dry_run). Set MVP_MODE=draft for Approve→markdown, or publish to export.md.")
+            print(
+                "Done (dry_run). Set MVP_MODE=draft for Approve→markdown, "
+                "publish to export.md, or autonomous for editorial auto path."
+            )
             return 0
 
         if mode == "publish":
