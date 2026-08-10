@@ -2,7 +2,9 @@
 
 ## Goal
 
-Authenticated session → editor → test title/body → **draft/private** save → verify.
+Authenticated session → editor → test title/body → **click draft-save** → confirm success signal or draft URL.
+
+`--publish-draft` only reports success after the draft-save action is confirmed. Filling fields alone is treated as failure.
 
 ## Harness
 
@@ -11,7 +13,7 @@ Authenticated session → editor → test title/body → **draft/private** save 
 export TISTORY_STORAGE_STATE="$HOME/.config/posting-auto/tistory-storage.json"
 export TISTORY_BLOG_URL="https://YOUR.tistory.com/manage/newpost"
 uv run python scripts/spikes/tistory_draft.py --dry-check
-# live (writes draft only when --publish-draft):
+# live: fill + click draft-save + confirm (not public publish)
 uv run python scripts/spikes/tistory_draft.py --publish-draft
 ```
 

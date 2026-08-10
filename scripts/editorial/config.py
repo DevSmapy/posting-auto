@@ -25,7 +25,14 @@ def max_revision_count() -> int:
 
 
 def minimum_story_count() -> int:
-    return _env_int("QUALITY_MINIMUM_STORY_COUNT", 3)
+    raw = _env("QUALITY_MINIMUM_STORY_COUNT")
+    if not raw:
+        return 3
+    try:
+        value = int(raw)
+    except ValueError:
+        return 3
+    return max(1, value)
 
 
 def auto_publish_enabled() -> bool:

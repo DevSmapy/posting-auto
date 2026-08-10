@@ -26,6 +26,8 @@ def run_editorial_loop(
     current = briefing
     revision_count = 0
     max_rev = max_revision_count()
+    validation: dict[str, Any] = {"ok": True, "hard_fail_indices": [], "story_results": []}
+    review: dict[str, Any] = {"overall": "pass", "stories": []}
 
     while True:
         validation = quality_gate_briefing(current)
@@ -77,8 +79,6 @@ def run_editorial_loop(
         current["stories"] = new_stories
         revision_count += 1
 
-    validation = quality_gate_briefing(current)
-    review = review_briefing(current, sources=sources, use_llm=use_llm_reviewer)
     decision = editor_decide(
         briefing=current,
         validation=validation,

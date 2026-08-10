@@ -2183,7 +2183,7 @@ def run_autonomous(
             notifier.send_text(
                 "ACTION REQUIRED\n"
                 f"Editorial decision=reject ({reason}).\n"
-                f"Content preserved under output/{run_dir.name}/\n"
+                f"Content preserved under {run_dir}/\n"
                 f"Revisions={editorial.get('revision_count', 0) if editorial else 0}"
             )
             print(f"Done (editorial reject: {reason}).")
@@ -2194,18 +2194,24 @@ def run_autonomous(
             ensure_aux_before_publish()
             store.reopen()
             card_pngs = render_cards_for_approve(briefing, run_dir, now)
-            # Force package mode when dry
-            os.environ.setdefault("PUBLISH_MODE", "package")
-            run_publish(
-                briefing,
-                picked,
-                now,
-                run_dir,
-                store,
-                notifier,
-                generation_mode=generation_mode,
-                card_png_paths=card_pngs,
-            )
+            prev_publish_mode = os.environ.get("PUBLISH_MODE")
+            os.environ["PUBLISH_MODE"] = "package"
+            try:
+                run_publish(
+                    briefing,
+                    picked,
+                    now,
+                    run_dir,
+                    store,
+                    notifier,
+                    generation_mode=generation_mode,
+                    card_png_paths=card_pngs,
+                )
+            finally:
+                if prev_publish_mode is None:
+                    os.environ.pop("PUBLISH_MODE", None)
+                else:
+                    os.environ["PUBLISH_MODE"] = prev_publish_mode
             notifier.send_text(
                 "Posting Auto completed (AUTO_PUBLISH=false).\n"
                 f"Stories: {len(briefing.get('stories') or [])}\n"

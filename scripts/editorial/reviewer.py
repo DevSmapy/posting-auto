@@ -62,7 +62,7 @@ def review_story(
     use_llm: bool = False,
 ) -> dict[str, Any]:
     base = _deterministic_review(story, sources)
-    if not use_llm or base["decision"] == "pass":
+    if not use_llm:
         return base
     try:
         llm = _llm_review(story, sources or [], base)

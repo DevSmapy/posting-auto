@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -18,16 +17,22 @@ def _env(name: str, default: str = "") -> str:
     return os.getenv(name, default).strip()
 
 
+def _truthy(name: str, default: str = "0") -> bool:
+    return _env(name, default).lower() in {"1", "true", "yes"}
+
+
 def check_output_dir() -> dict[str, Any]:
-    out = ROOT / "output"
+    out = Path(_env("OUTPUT_DIR", str(ROOT / "output"))).expanduser()
+    if not out.is_absolute():
+        out = (ROOT / out).resolve()
     try:
         out.mkdir(parents=True, exist_ok=True)
         probe = out / ".preflight_write_probe"
         probe.write_text("ok", encoding="utf-8")
         probe.unlink(missing_ok=True)
-        return {"name": "filesystem_output", "ok": True}
+        return {"name": "filesystem_output", "ok": True, "path": str(out)}
     except OSError as exc:
-        return {"name": "filesystem_output", "ok": False, "error": str(exc)}
+        return {"name": "filesystem_output", "ok": False, "path": str(out), "error": str(exc)}
 
 
 def check_ollama() -> dict[str, Any]:
@@ -44,7 +49,20 @@ def check_ollama() -> dict[str, Any]:
 def check_publish_env() -> dict[str, Any]:
     keys = ["PUBLISH_CARDS", "R2_ENDPOINT", "IG_USER_ID", "META_ACCESS_TOKEN"]
     present = {k: bool(_env(k)) for k in keys}
-    return {"name": "publish_env", "ok": True, "present": present}
+    missing: list[str] = []
+    ok = True
+    # Live IG path only when autonomous publish + cards are both on.
+    if _truthy("AUTO_PUBLISH") and _truthy("PUBLISH_CARDS"):
+        for key in ("R2_ENDPOINT", "IG_USER_ID", "META_ACCESS_TOKEN"):
+            if not present[key]:
+                missing.append(key)
+        ok = not missing
+    return {
+        "name": "publish_env",
+        "ok": ok,
+        "present": present,
+        "missing": missing,
+    }
 
 
 def check_network() -> dict[str, Any]:
@@ -63,7 +81,7 @@ def run_preflight(*, require_ollama: bool = False) -> dict[str, Any]:
         check_publish_env(),
     ]
     soft = {"ollama"}
-    if _env("PREFLIGHT_REQUIRE_NETWORK", "0").lower() not in {"1", "true", "yes"}:
+    if not _truthy("PREFLIGHT_REQUIRE_NETWORK"):
         soft.add("network")
     required = []
     for c in checks:
