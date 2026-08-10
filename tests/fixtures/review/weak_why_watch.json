@@ -1,0 +1,13 @@
+{
+  "expect_decision": "revise",
+  "story": {
+    "headline": "추경 논의 재점화",
+    "what_happened": "국회에서 추가경정예산 편성 가능성이 다시 거론됐습니다.",
+    "why_important": "예산 이슈입니다.",
+    "watch_next": "추이를 봅니다.",
+    "one_liner": "추경 이야기가 다시 나왔습니다.",
+    "source_name": "국회",
+    "source_url": "https://example.com/budget"
+  },
+  "sources": [{"title": "추경 논의", "link": "https://example.com/budget"}]
+}

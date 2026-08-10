@@ -1,0 +1,14 @@
+{
+  "expect_decision": "revise",
+  "story": {
+    "headline": "금리 관련 이슈",
+    "what_happened": "금리 관련 이슈",
+    "why_important": "「금리 관련 이슈」은(는) 시장·정책 흐름에 영향을 줄 수 있는 이슈입니다.",
+    "watch_next": "「금리 관련 이슈」의 후속 보도와 시장 반응을 지켜볼 필요가 있습니다.",
+    "one_liner": "금리 관련 이슈",
+    "source_name": "예시",
+    "source_url": "https://example.com/generic",
+    "_fallback": "heuristic"
+  },
+  "sources": [{"title": "금리", "link": "https://example.com/generic"}]
+}

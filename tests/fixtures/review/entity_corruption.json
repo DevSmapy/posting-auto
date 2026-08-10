@@ -1,0 +1,14 @@
+{
+  "expect_decision": "revise",
+  "story": {
+    "headline": "삼성전자가 아니라 삼성잔자가 실적을 발표",
+    "what_happened": "삼성잔자 측은 분기 영업이익이 시장 예상치를 웃돌았다고 밝혔습니다.",
+    "why_important": "대형 기술주 실적은 지수와 투자 심리에 바로 반영되는 경우가 많습니다.",
+    "watch_next": "컨퍼런스콜에서 가이던스와 메모리 전망을 확인해야 합니다.",
+    "one_liner": "삼성잔자 실적이 예상치를 웃돌았습니다.",
+    "source_name": "공시",
+    "source_url": "https://example.com/entity",
+    "_entity_corruption": true
+  },
+  "sources": [{"title": "삼성전자 실적", "link": "https://example.com/entity"}]
+}

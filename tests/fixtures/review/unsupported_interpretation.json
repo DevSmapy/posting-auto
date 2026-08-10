@@ -1,0 +1,20 @@
+{
+  "expect_decision": "revise",
+  "story": {
+    "headline": "물가 둔화로 금리 인하가 확정됐다",
+    "what_happened": "소비자물가 상승률이 전월보다 낮아졌다는 통계가 발표됐습니다.",
+    "why_important": "물가 지표만으로 중앙은행이 금리를 반드시 내린다고 단정할 근거는 기사에 없습니다.",
+    "watch_next": "의사록과 이후 기자회견 발언을 확인해야 합니다.",
+    "one_liner": "물가 둔화 소식에 금리 인하 확정 해석이 나왔습니다.",
+    "source_name": "통계",
+    "source_url": "https://example.com/cpi",
+    "_unsupported_claim": true
+  },
+  "sources": [
+    {
+      "title": "소비자물가 상승률 둔화",
+      "link": "https://example.com/cpi",
+      "snippet": "전월 대비 상승률이 낮아졌다. 금리 결정은 언급되지 않았다."
+    }
+  ]
+}
