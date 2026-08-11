@@ -15,3 +15,10 @@ Confirm whether any schedule/webhook still calls this project from external n8n 
 - [ ] Live n8n → map nodes → Python replacement → regression → disable → remove (§38).
 
 Do not delete n8n first.
+
+## Status log
+
+| Date | Check | Result |
+|------|-------|--------|
+| 2026-08-11 | Repo audit | No production n8n workflow in repo |
+| 2026-08-11 | Live machine checkbox | **operator pending** |

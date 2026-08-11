@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from editorial.config import max_revision_count
 from editorial.editor import editor_decide
+from editorial.report import write_editorial_report
 from editorial.reviewer import review_briefing
 from editorial.validator import quality_gate_briefing
 
@@ -95,8 +96,11 @@ def run_editorial_loop(
         "briefing": out_briefing,
     }
     if run_dir is not None:
-        (Path(run_dir) / "editorial_result.json").write_text(
+        out = Path(run_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "editorial_result.json").write_text(
             json.dumps(result, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        write_editorial_report(result, out, run_id=out.name)
     return result
