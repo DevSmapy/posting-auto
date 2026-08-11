@@ -9,3 +9,4 @@
 | LangGraph | [`langgraph-decision.md`](langgraph-decision.md) | Deferred until draft_run complexity warrants |
 | Runtime | [`runtime-preflight.md`](runtime-preflight.md), `scripts/runtime/preflight.py` | Bounded checks |
 | Rollout | [`phase8-rollout.md`](phase8-rollout.md) | Autonomous staged enablement |
+| Editorial report | [`editorial-report.md`](editorial-report.md) | `editorial_report.md` + JSON (no UI) |

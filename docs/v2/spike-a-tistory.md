@@ -31,7 +31,9 @@ uv run python scripts/spikes/tistory_draft.py --publish-draft
 | published/draft URL | pending | |
 | selector stability | pending | |
 
-**2026-08-10:** Live browser spike not executed in this environment (no storage state / playwright session). Target A **not** promoted.
+**2026-08-10:** Live browser spike not executed (no storage state / playwright session). Target A **not** promoted.
+
+**2026-08-11:** Still pending operator live run. Production `TistoryPublisher` remains stub — checklist fill ≠ production promotion.
 
 ## Decision rule
 

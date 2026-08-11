@@ -12,6 +12,13 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(ROOT / ".env")
+except ImportError:
+    pass
+
 
 def _env(name: str, default: str = "") -> str:
     return os.getenv(name, default).strip()

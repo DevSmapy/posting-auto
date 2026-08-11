@@ -23,6 +23,6 @@ Operator checklist on the reference MacBook Air M2. **Not** Shutdown/Boot/FileVa
 
 | Date | Lid | Adapter | Wake OK | Ollama | Python | Locked headless | Notes |
 |------|-----|---------|---------|--------|--------|-----------------|-------|
-| | | | | | | | |
+| 2026-08-11 | | | | | | | **operator pending** — checklist only; no live sleep/wake run in agent session |
 
 Shutdown → Boot automation is out of scope (Human Exception).

@@ -27,8 +27,24 @@ REVIEW_SPIKE_LIVE=1 uv run python scripts/spikes/review_bench.py
 2. Strengthen deterministic validator
 3. Model change
 
-## Results (2026-08-10)
+Do **not** switch to Cloud LLM.
 
-| Fixture suite | 6/6 deterministic decisions matched |
-| Live Ollama | not run (daemon unavailable in agent environment) |
-| Next | `REVIEW_SPIKE_LIVE=1 uv run python scripts/spikes/review_bench.py` on M2 with model loaded |
+## Results
+
+| Date | Fixture suite | Live Ollama | Notes |
+|------|---------------|-------------|-------|
+| 2026-08-10 | 6/6 deterministic OK | not run | agent env |
+| 2026-08-11 | — | **deferred** | Ollama daemon down (`:11434` refused) during rollout agent session |
+
+### Operator — Wave 1 (run locally when Ollama is up)
+
+```bash
+# fixture bench with LLM
+REVIEW_SPIKE_LIVE=1 uv run python scripts/spikes/review_bench.py
+
+# autonomous dry + LLM reviewer; then open editorial_report.md
+MVP_MODE=autonomous AUTO_PUBLISH=false NOTIFY_CHANNEL=auto \
+  EDITORIAL_LLM_REVIEWER=1 \
+  uv run python scripts/mvp_pipeline.py
+# → output/<run>/attempts/content-01/editorial_report.md
+```
