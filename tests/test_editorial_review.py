@@ -66,6 +66,16 @@ class QualityGateTest(unittest.TestCase):
 
 
 class ReviewerFixtureTest(unittest.TestCase):
+    def test_llm_failure_fails_closed(self) -> None:
+        story = _good_story(1)
+        with patch(
+            "editorial.reviewer._llm_review",
+            side_effect=RuntimeError("ollama down"),
+        ):
+            review = review_story(story, use_llm=True)
+        self.assertEqual(review.get("decision"), "reject")
+        self.assertIn("llm_error", review)
+
     def test_fixtures_match_expected_decision(self) -> None:
         self.assertTrue(FIXTURES.is_dir(), FIXTURES)
         for path in sorted(FIXTURES.glob("*.json")):
