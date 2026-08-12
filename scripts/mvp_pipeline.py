@@ -74,6 +74,7 @@ from editorial import (  # noqa: E402
 )
 from editorial.validator import quality_gate_briefing  # noqa: E402
 from publish.guard import assert_publish_ready, write_publish_guard  # noqa: E402
+from runtime.preflight import run_preflight  # noqa: E402
 from runtime.run_lock import autonomous_run_lock  # noqa: E402
 
 TZ = ZoneInfo(os.getenv("NEWS_TIMEZONE", "Asia/Seoul"))
