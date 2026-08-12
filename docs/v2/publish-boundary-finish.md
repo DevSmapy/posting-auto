@@ -29,7 +29,7 @@ Instagram 풀 자동화 전에 dry-run `seen_urls` 오염, Story 단위 reject, 
 
 ### Notes
 
-#### Todos
+#### 구현 Todos
 
 - [x] `run_publish` `persist_seen` 분리
 - [x] `editor_decide` cascade 제거 + exclude reasons + caption/html 재조립
@@ -37,18 +37,25 @@ Instagram 풀 자동화 전에 dry-run `seen_urls` 오염, Story 단위 reject, 
 - [x] Final Publish Guard + fail-closed live
 - [x] autonomous single-run lock
 - [x] 회귀 테스트 (run_publish, language_gate, publish_guard, run_lock, editorial)
-- [ ] Wave 1 dry-run — operator pending
-- [ ] Wave 2 IG live 1회 — operator pending
+
+#### 운영 검증 Todos (병합 전 — operator)
+
+구현은 완료. 아래 운영 검증이 끝나기 전까지 PR은 열어 둔다.
+
+- [x] **Wave 1a — reject 경로** (`20260812_203746`)
+  - 명령: `MVP_MODE=autonomous AUTO_PUBLISH=false EDITORIAL_LLM_REVIEWER=1 NOTIFY_CHANNEL=auto uv run python scripts/mvp_pipeline.py`
+  - 확인: editorial `reject` (`minimum_story_count:2<3`), run 루트에 `briefing.md`/`cards/` 없음, `ACTION REQUIRED` 알림
+- [ ] **Wave 1b — 성공 dry-run**
+  - 동일 명령 재실행 (Ollama 안정 상태에서)
+  - 확인: `editorial decision=publish`, `briefing.md`·`briefing.html`·`cards/`·caption 생성, `seen_urls` 미변경 (`persist_seen=never`)
+- [ ] **Wave 2 — Instagram 실게시 1회** (Wave 1b 통과 후)
+  - 명령: `MVP_MODE=autonomous AUTO_PUBLISH=true EDITORIAL_LLM_REVIEWER=1 NOTIFY_CHANNEL=auto uv run python scripts/mvp_pipeline.py`
+  - 확인: `publish_guard.json` 통과, IG 게시 성공, `seen_urls` 기록 (`persist_seen=after_ig`), 알림 정상
 
 #### 운영자 결정
 
 - **A1:** autonomous live는 `EDITORIAL_LLM_REVIEWER=1` 필수
 - **A2:** 언어 hard_fail revision 초과 → Story 제외, min 충족 시 게시 + 알림
-
-#### 운영 검증
-
-1. Wave 1 — `MVP_MODE=autonomous AUTO_PUBLISH=false EDITORIAL_LLM_REVIEWER=1`
-2. Wave 2 — Instagram 실게시 1회 (Wave 1 정상 후)
 
 #### 테스트 실행
 
