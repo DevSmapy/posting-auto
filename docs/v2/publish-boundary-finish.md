@@ -15,43 +15,47 @@ Instagram 풀 자동화(`MVP_MODE=autonomous`)를 안전하게 켜기 위한 기
 
 ### Summary
 
-Instagram 풀 자동화 전에 dry-run의 `seen_urls` 오염, Story 단위 reject 미동작, 한국어 language hard gate, Final Publish Guard, 단일 실행 lock, fail-closed 정책을 고정한다. 목적은 정상 실행은 무인 게시하고, 품질·언어·런타임·외부 게시 실패 시에는 게시를 막고 산출물을 보존한 뒤 운영자에게 알리는 게시 경계를 완성하는 것이다. 이 문서는 구현 착수 전 계획이며, 코드 변경은 아직 없다.
+Instagram 풀 자동화 전에 dry-run `seen_urls` 오염, Story 단위 reject, 한국어 language hard gate, Final Publish Guard, 단일 실행 lock, fail-closed 정책을 고정한다. autonomous live는 `EDITORIAL_LLM_REVIEWER=1` 필수이며, 언어 실패 Story는 제외 후 최소 개수면 게시하고 운영자에게 알린다.
 
 ### Changes
 
-_(구현 착수 전 — 변경 없음)_
+- `run_publish(persist_seen=after_export|never|after_ig)` — dry는 seen 미기록, live는 IG 성공 후만 기록
+- `editor_decide` — per-story 제외 + `excluded_reasons`, cascade 제거
+- `story_quality` — `assess_korean_text` / `language_hard_fail_issues` 다층 gate
+- `publish/guard.py` — `assert_publish_ready` + `publish_guard.json` (live 전용 blocker)
+- `runtime/run_lock.py` — autonomous single-run lock
+- `reviewer.py` — LLM 실패 fail-closed (reject)
+- `run_autonomous` — lock, rebuild surfaces, exclusion notify, guard 연동
 
 ### Notes
 
 #### Todos
 
-- [ ] `run_publish` `persist_seen` 분리: dry `never` / live `after_ig` / draft `after_export`
-- [ ] `editor_decide` cascade 제거 + exclude reasons + caption/html 재조립
-- [ ] 한국어 language hard gate + rewrite/exclude 루프
-- [ ] Final Publish Guard + `publish_guard.json` + fail-closed
-- [ ] `run_status.json` 전이 + autonomous single-run lock
-- [ ] 요구 시나리오 1–15 unittest + mock publisher
-- [ ] 10항목 완료 보고 (미실행 검증은 `not executed`)
+- [x] `run_publish` `persist_seen` 분리
+- [x] `editor_decide` cascade 제거 + exclude reasons + caption/html 재조립
+- [x] 한국어 language hard gate + rewrite/exclude + 최종 surface 재검사
+- [x] Final Publish Guard + fail-closed live
+- [x] autonomous single-run lock
+- [x] 회귀 테스트 (run_publish, language_gate, publish_guard, run_lock, editorial)
+- [ ] Wave 1 dry-run — operator pending
+- [ ] Wave 2 IG live 1회 — operator pending
+
+#### 운영자 결정
+
+- **A1:** autonomous live는 `EDITORIAL_LLM_REVIEWER=1` 필수
+- **A2:** 언어 hard_fail revision 초과 → Story 제외, min 충족 시 게시 + 알림
+
+#### 운영 검증
+
+1. Wave 1 — `MVP_MODE=autonomous AUTO_PUBLISH=false EDITORIAL_LLM_REVIEWER=1`
+2. Wave 2 — Instagram 실게시 1회 (Wave 1 정상 후)
+
+#### 테스트 실행
+
+```bash
+uv run python -m unittest discover -s tests -v
+```
 
 #### 범위에서 제외
 
-- Tistory 실게시 승격
-- macOS Sleep/Wake 자동화
-- LangGraph 도입
-- n8n 제거
-- 별도 대시보드/UI
-- Cloud LLM 전환
-
-#### 기본 결정
-
-- Dry-run(`AUTO_PUBLISH=false`): `record_published` / `seen_urls` 미기록. 상태는 run 산출물만.
-- Draft Approve: 기존처럼 export 직후 `record_published` 유지.
-- Autonomous live: Instagram `media_id` 성공 시에만 `record_published`.
-
-#### 운영 검증 (구현 후)
-
-1. Wave 1 — dry-run (`AUTO_PUBLISH=false`, `EDITORIAL_LLM_REVIEWER=1`)
-2. Wave 2 — Instagram 실게시 1회 (Wave 1 정상 후, 운영자 승인)
-3. 스케줄러 연결은 Wave 2 이후
-
-상세 설계·파일 단위 작업은 이 PR의 후속 커밋으로 반영한다.
+Tistory 승격, Sleep/Wake, LangGraph, n8n, 대시보드, Cloud LLM
