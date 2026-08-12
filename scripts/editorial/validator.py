@@ -84,6 +84,7 @@ def quality_gate_briefing(briefing: dict[str, Any]) -> dict[str, Any]:
             or x.endswith(":too_shallow")
             or x == "headline:equals_what_happened"
             or x == "source_url:missing"
+            or ":language:hard_fail" in x
         ]
         if hard:
             hard_fail_ids.append(i)
