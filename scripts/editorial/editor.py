@@ -23,7 +23,9 @@ def editor_decide(
     review: dict[str, Any] | None,
     revision_count: int = 0,
 ) -> dict[str, Any]:
-    stories = [s for s in (briefing.get("stories") or []) if isinstance(s, dict)]
+    # Keep validator/reviewer indices aligned with the original stories list
+    # (including non-dict slots), then compact only valid remaining dicts.
+    raw_stories = list(briefing.get("stories") or [])
     excluded: list[int] = []
     excluded_reasons: list[dict[str, Any]] = []
     risk: list[str] = []
@@ -60,7 +62,11 @@ def editor_decide(
                 risk.append(f"story_{item.get('index')}_llm_failed")
 
     excluded = sorted({i for i in excluded if i >= 0})
-    remaining = [s for i, s in enumerate(stories) if i not in excluded]
+    remaining = [
+        s
+        for i, s in enumerate(raw_stories)
+        if isinstance(s, dict) and i not in excluded
+    ]
     min_n = minimum_story_count()
     if len(remaining) < min_n:
         return {

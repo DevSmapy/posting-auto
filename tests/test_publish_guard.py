@@ -34,7 +34,11 @@ def _briefing() -> dict:
 
 class PublishGuardTest(unittest.TestCase):
     def test_live_requires_llm_reviewer(self) -> None:
-        with patch.dict(os.environ, {"EDITORIAL_LLM_REVIEWER": "0"}, clear=False):
+        with patch.dict(
+            os.environ,
+            {"EDITORIAL_LLM_REVIEWER": "0", "TARGET_LANGUAGE": "ko"},
+            clear=False,
+        ):
             result = assert_publish_ready(
                 _briefing(),
                 png_paths=[],
@@ -48,7 +52,11 @@ class PublishGuardTest(unittest.TestCase):
     def test_chinese_caption_blocks_live(self) -> None:
         briefing = _briefing()
         briefing["instagram_post"] = "中国市场今天上涨。"
-        with patch.dict(os.environ, {"EDITORIAL_LLM_REVIEWER": "1"}, clear=False):
+        with patch.dict(
+            os.environ,
+            {"EDITORIAL_LLM_REVIEWER": "1", "TARGET_LANGUAGE": "ko"},
+            clear=False,
+        ):
             with tempfile.TemporaryDirectory() as tmp:
                 png1 = Path(tmp) / "1.png"
                 png2 = Path(tmp) / "2.png"

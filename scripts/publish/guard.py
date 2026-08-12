@@ -14,7 +14,12 @@ from story_quality import assess_korean_text, language_hard_fail_issues, target_
 
 
 def editorial_llm_reviewer_enabled() -> bool:
-    return os.getenv("EDITORIAL_LLM_REVIEWER", "0").lower() in {"1", "true", "yes"}
+    """Fail-closed: unset/empty/unknown → disabled (live requires explicit 1)."""
+    return os.getenv("EDITORIAL_LLM_REVIEWER", "0").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
 
 
 def assert_publish_ready(

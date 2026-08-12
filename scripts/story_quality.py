@@ -23,10 +23,13 @@ _KATAKANA_RE = re.compile(r"[\u30a0-\u30ff]")
 _HAN_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 _LATIN_RE = re.compile(r"[A-Za-z]")
 _URL_RE = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
-_CN_PUNCT = set("。！？、《》【】""''：；")
-_SIMPLIFIED_HINT = set("这这们为国会时经发现说对过还个将没")
+_CN_PUNCT = set("。！？、《》【】""''：；")  # noqa: RUF001
+_SIMPLIFIED_HINT = set("这们为国会时经发现说对过还个将没")
+# Match particles/endings only at word or sentence boundaries (not bare syllables inside words).
 _KO_PARTICLE = re.compile(
-    r"(은|는|이|가|을|를|에|에서|으로|과|와|습니다|입니다|였습니다|했습니다|것입니다|다\.|요\.|니다|하는|했다|된다|했다\.|습니다\.)"
+    r"(?:은|는|이|가|을|를|에|에서|으로|과|와|습니다|입니다|였습니다|했습니다|것입니다|"
+    r"다\.|요\.|니다|하는|했다|된다|했다\.|습니다\.)"
+    r"(?=\s|$|[.。!?？,，、\"'」』）)\]】])"
 )
 
 
@@ -165,8 +168,8 @@ def assess_korean_text(text: str) -> tuple[LanguageVerdict, list[str]]:
     if any(ch in _CN_PUNCT for ch in cleaned):
         signals.append("chinese_punctuation")
 
-    han_chars = [ch for ch in cleaned if _HAN_RE.fullmatch(ch)]
-    hangul_count = sum(1 for ch in cleaned if _HANGUL_RE.fullmatch(ch))
+    han_chars = [ch for ch in sample if _HAN_RE.fullmatch(ch)]
+    hangul_count = sum(1 for ch in sample if _HANGUL_RE.fullmatch(ch))
     han_count = len(han_chars)
     if han_chars:
         simplified = sum(1 for ch in han_chars if ch in _SIMPLIFIED_HINT)
@@ -175,7 +178,7 @@ def assess_korean_text(text: str) -> tuple[LanguageVerdict, list[str]]:
         elif simplified >= 1 and hangul_count < 4:
             signals.append("simplified_chinese")
 
-    has_ko_signal = bool(_KO_PARTICLE.search(cleaned)) or hangul_count >= 6
+    has_ko_signal = bool(_KO_PARTICLE.search(sample)) or hangul_count >= 6
 
     if hangul_count == 0 and han_count >= 4:
         return "hard_fail", signals + ["no_hangul_han_dominant"]

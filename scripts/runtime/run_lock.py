@@ -26,6 +26,10 @@ def _pid_alive(pid: int) -> bool:
         return False
     try:
         os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
     except OSError:
         return False
     return True
@@ -45,29 +49,49 @@ class RunLock:
             "started_at": now,
             "run_id": self.run_id,
         }
-        if self.path.is_file():
+        encoded = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+
+        for _ in range(3):
             try:
-                existing = json.loads(self.path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                existing = {}
-            pid = int(existing.get("pid") or 0)
-            started = str(existing.get("started_at") or "")
-            stale = False
-            if started:
+                fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
                 try:
-                    started_dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
-                    age = (datetime.now(timezone.utc) - started_dt).total_seconds()
-                    stale = age > _lock_timeout_sec()
-                except ValueError:
-                    stale = True
-            if _pid_alive(pid) and not stale:
-                return (
-                    False,
-                    f"active lock pid={pid} run_id={existing.get('run_id')} started={started}",
-                )
-        self.path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        self._held = True
-        return True, ""
+                    raw = self.path.read_text(encoding="utf-8")
+                    existing = json.loads(raw) if raw.strip() else {}
+                except (OSError, json.JSONDecodeError):
+                    existing = {}
+                pid = int(existing.get("pid") or 0)
+                started = str(existing.get("started_at") or "")
+                # Incomplete write from a concurrent creator — do not steal.
+                if not existing or pid <= 0:
+                    return False, "active lock (incomplete)"
+                stale = False
+                if started:
+                    try:
+                        started_dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
+                        age = (datetime.now(timezone.utc) - started_dt).total_seconds()
+                        stale = age > _lock_timeout_sec()
+                    except ValueError:
+                        stale = True
+                if _pid_alive(pid) and not stale:
+                    return (
+                        False,
+                        f"active lock pid={pid} run_id={existing.get('run_id')} started={started}",
+                    )
+                try:
+                    self.path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                continue
+
+            try:
+                os.write(fd, encoded)
+            finally:
+                os.close(fd)
+            self._held = True
+            return True, ""
+
+        return False, "lock acquire failed after retries"
 
     def release(self) -> None:
         if not self._held or not self.path.is_file():

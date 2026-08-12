@@ -50,6 +50,9 @@ class _FakeStore:
     def __init__(self) -> None:
         self.calls: list[dict] = []
 
+    def reopen(self) -> None:
+        return None
+
     def record_published(self, picked, tistory_post_id=None, ig_media_id=None):  # noqa: ANN001
         self.calls.append(
             {
@@ -344,11 +347,15 @@ class RunPublishTest(unittest.TestCase):
                 patch("mvp_pipeline.assemble_blog_html", return_value="<p>x</p>"),
                 patch("mvp_pipeline.PublishConfig.from_env", return_value=cfg),
                 patch("mvp_pipeline.PublishCardsPipeline") as pipe_cls,
-                patch.dict("os.environ", {"EDITORIAL_LLM_REVIEWER": "1"}, clear=False),
+                patch.dict(
+                    "os.environ",
+                    {"EDITORIAL_LLM_REVIEWER": "1", "TARGET_LANGUAGE": "ko"},
+                    clear=False,
+                ),
             ):
                 pipe = MagicMock()
                 pipe_cls.return_value = pipe
-                run_publish(
+                outcome = run_publish(
                     briefing,
                     _picked(),
                     now,
@@ -362,6 +369,8 @@ class RunPublishTest(unittest.TestCase):
                     preflight=preflight,
                 )
                 pipe.run.assert_not_called()
+        self.assertFalse(outcome.get("ok"))
+        self.assertEqual(outcome.get("reason"), "publish_guard")
         self.assertEqual(len(store.calls), 0)
 
 

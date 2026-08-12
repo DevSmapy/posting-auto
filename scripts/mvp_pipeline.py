@@ -21,6 +21,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
 import feedparser
@@ -73,7 +74,11 @@ from editorial import (  # noqa: E402
     run_editorial_loop,
 )
 from editorial.validator import quality_gate_briefing  # noqa: E402
-from publish.guard import assert_publish_ready, write_publish_guard  # noqa: E402
+from publish.guard import (  # noqa: E402
+    assert_publish_ready,
+    editorial_llm_reviewer_enabled,
+    write_publish_guard,
+)
 from runtime.preflight import run_preflight  # noqa: E402
 from runtime.run_lock import autonomous_run_lock  # noqa: E402
 
@@ -1345,7 +1350,43 @@ def rebuild_briefing_surfaces(briefing: dict[str, Any], now: datetime) -> dict[s
     stories = [s for s in (briefing.get("stories") or []) if isinstance(s, dict)]
     fresh = assemble_briefing_from_stories(stories, now)
     fresh["blog_html"] = assemble_blog_html(fresh)
-    return fresh
+    # Keep non-surface keys from the original briefing; rebuilt surfaces win.
+    out = dict(briefing)
+    out.update(fresh)
+    return out
+
+
+_TRACKING_QUERY_KEYS = {
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "utm_term",
+    "utm_content",
+    "fbclid",
+    "gclid",
+}
+
+
+def _normalize_article_url(url: str) -> str:
+    """Normalize feed/source URLs for equality (slash + tracking params)."""
+    raw = (url or "").strip()
+    if not raw:
+        return ""
+    try:
+        parts = urlsplit(raw)
+    except ValueError:
+        return raw.rstrip("/").casefold()
+    path = parts.path.rstrip("/")
+    query = urlencode(
+        [
+            (k, v)
+            for k, v in parse_qsl(parts.query, keep_blank_values=True)
+            if k.casefold() not in _TRACKING_QUERY_KEYS
+        ]
+    )
+    return urlunsplit(
+        (parts.scheme.casefold(), parts.netloc.casefold(), path, query, "")
+    )
 
 
 def _picked_for_briefing(
@@ -1353,18 +1394,25 @@ def _picked_for_briefing(
     briefing: dict[str, Any],
 ) -> list[dict[str, Any]]:
     urls = {
-        str(s.get("source_url") or "").strip()
+        _normalize_article_url(str(s.get("source_url") or ""))
         for s in (briefing.get("stories") or [])
         if isinstance(s, dict) and s.get("source_url")
     }
+    urls.discard("")
     if not urls:
-        return list(picked)
+        print("   !! briefing has no source_url; recording zero picked rows")
+        return []
     filtered = [
         a
         for a in picked
-        if str(a.get("link") or a.get("url") or "").strip() in urls
+        if _normalize_article_url(str(a.get("link") or a.get("url") or "")) in urls
     ]
-    return filtered or list(picked)
+    if not filtered:
+        print(
+            "   !! no picked URLs matched briefing source_url; "
+            "recording zero picked rows"
+        )
+    return filtered
 
 
 def _notify_excluded_stories(notifier: Any, decision: dict[str, Any]) -> None:
@@ -1443,13 +1491,16 @@ def run_publish(
     live_publish: bool = False,
     editorial_decision: dict[str, Any] | None = None,
     preflight: dict[str, Any] | None = None,
-) -> None:
+) -> dict[str, Any]:
     """Write package artifacts, optionally publish to Instagram, record seen_urls.
 
     persist_seen:
       after_export — draft default; record after markdown export
       never        — autonomous dry-run; do not touch seen_urls
       after_ig     — autonomous live; record only after ig_media_id
+
+    Returns ``{"ok": bool, "reason": str, ...}`` so autonomous can suppress a
+    false "completed" message when publish is blocked.
     """
     picked_rows = _picked_for_briefing(picked, briefing)
     print("==> Write briefing markdown (manual paste)")
@@ -1472,15 +1523,18 @@ def run_publish(
     ig_media_id: str | None = _existing_ig_media_id(run_dir)
     publish_cfg = PublishConfig.from_env()
     paths = list(card_png_paths or [])
-    guard_result = assert_publish_ready(
-        briefing,
-        png_paths=paths,
-        live=live_publish and publish_cfg.publish_cards and not publish_cfg.package_only,
-        editorial_decision=editorial_decision,
-        preflight=preflight,
-        markdown_text=md,
-    )
-    write_publish_guard(run_dir, guard_result)
+
+    def _eval_guard(png_paths: list[Path], *, live: bool) -> dict[str, Any]:
+        result = assert_publish_ready(
+            briefing,
+            png_paths=png_paths,
+            live=live,
+            editorial_decision=editorial_decision,
+            preflight=preflight,
+            markdown_text=md,
+        )
+        write_publish_guard(run_dir, result)
+        return result
 
     if publish_cfg.publish_cards:
         if not paths:
@@ -1497,21 +1551,16 @@ def run_publish(
                         "ACTION REQUIRED\n" + msg + "\nPublish blocked.",
                     )
                     print("Done (publish blocked: card render failed).")
-                    return
+                    return {"ok": False, "reason": "card_render_failed", "error": str(exc)}
                 _notify_stage(notifier, msg)
                 paths = []
         else:
             print(f"==> Reuse Approve-preview cards ({len(paths)} png)")
 
-        guard_result = assert_publish_ready(
-            briefing,
-            png_paths=paths,
+        guard_result = _eval_guard(
+            paths,
             live=live_publish and not publish_cfg.package_only,
-            editorial_decision=editorial_decision,
-            preflight=preflight,
-            markdown_text=md,
         )
-        write_publish_guard(run_dir, guard_result)
 
         if not guard_result.get("ok") and live_publish:
             blockers = guard_result.get("blockers") or []
@@ -1521,7 +1570,11 @@ def run_publish(
                 + "\n".join(f"- {b}" for b in blockers[:12]),
             )
             print("Done (publish blocked by guard).")
-            return
+            return {
+                "ok": False,
+                "reason": "publish_guard",
+                "blockers": blockers,
+            }
 
         if ig_media_id:
             print(f"==> Skip Instagram — already published media_id={ig_media_id}")
@@ -1545,7 +1598,11 @@ def run_publish(
                             "ACTION REQUIRED\n" + msg + "\nPublish blocked.",
                         )
                         print("Done (publish blocked: pipeline skip).")
-                        return
+                        return {
+                            "ok": False,
+                            "reason": "pipeline_skip",
+                            "skipped_reason": result.skipped_reason,
+                        }
                     _notify_stage(notifier, msg)
                 elif ig_media_id:
                     (run_dir / "publish_result.json").write_text(
@@ -1561,8 +1618,13 @@ def run_publish(
                         "ACTION REQUIRED\n" + msg + "\nPublish blocked.",
                     )
                     print("Done (publish blocked: pipeline error).")
-                    return
+                    return {"ok": False, "reason": "pipeline_error", "error": str(exc)}
                 _notify_stage(notifier, msg)
+    else:
+        _eval_guard(
+            paths,
+            live=live_publish and not publish_cfg.package_only,
+        )
 
     if ig_media_id and persist_seen in {"after_export", "after_ig"}:
         try:
@@ -1572,7 +1634,10 @@ def run_publish(
             if persist_seen == "after_ig":
                 print(f"==> seen_urls recorded after IG: media_id={ig_media_id}")
         except Exception as exc:  # noqa: BLE001
+            print(f"   !! seen_urls record failed: {exc}; retrying after reopen")
+            time.sleep(0.2)
             try:
+                store.reopen()
                 store.record_published(
                     picked_rows, tistory_post_id=export_ref, ig_media_id=ig_media_id
                 )
@@ -1581,7 +1646,7 @@ def run_publish(
                     notifier,
                     "ACTION REQUIRED\n"
                     f"[seen_urls 부분실패] 인스타는 게시됨 media_id={ig_media_id}; "
-                    f"중복 게시 위험 — ig_media_id 미기록: {exc2}",
+                    f"첫 실패: {exc}; 재시도 실패: {exc2}",
                 )
 
     mode_label = _generation_mode_label(generation_mode)
@@ -1604,7 +1669,11 @@ def run_publish(
     except Exception as exc:  # noqa: BLE001
         print(f"   !! publish notify failed: {exc}")
     print("Done (markdown export).")
-
+    return {
+        "ok": True,
+        "reason": "published" if ig_media_id else "exported",
+        "ig_media_id": ig_media_id,
+    }
 
 def content_retry_max() -> int:
     raw = env("CONTENT_RETRY_MAX", "3") or "3"
@@ -1636,11 +1705,7 @@ def apply_editorial_pass(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Validator → Reviewer → bounded revise → editor decision."""
     if use_llm_reviewer is None:
-        use_llm_reviewer = env("EDITORIAL_LLM_REVIEWER", "0").lower() in {
-            "1",
-            "true",
-            "yes",
-        }
+        use_llm_reviewer = editorial_llm_reviewer_enabled()
 
     def _rewrite(story: dict[str, Any], instr: dict[str, Any]) -> dict[str, Any]:
         issues = [str(x) for x in (instr.get("risk_flags") or [])]
@@ -2341,11 +2406,7 @@ def _run_autonomous_body(
         render_max=render_retry_max(),
     )
     draft_store.init_layout()
-    use_llm_reviewer = env("EDITORIAL_LLM_REVIEWER", "1").lower() in {
-        "1",
-        "true",
-        "yes",
-    }
+    use_llm_reviewer = editorial_llm_reviewer_enabled()
     try:
         picked, briefing, generation_mode, attempt_dir = produce_content_attempt(
             draft_store, candidates, now
@@ -2405,7 +2466,7 @@ def _run_autonomous_body(
             prev_publish_mode = os.environ.get("PUBLISH_MODE")
             os.environ["PUBLISH_MODE"] = "package"
             try:
-                run_publish(
+                outcome = run_publish(
                     briefing,
                     picked,
                     now,
@@ -2424,6 +2485,15 @@ def _run_autonomous_body(
                     os.environ.pop("PUBLISH_MODE", None)
                 else:
                     os.environ["PUBLISH_MODE"] = prev_publish_mode
+            if not outcome.get("ok"):
+                reason = outcome.get("reason") or "publish_failed"
+                notifier.send_text(
+                    "ACTION REQUIRED\n"
+                    f"Publish unsuccessful ({reason}).\n"
+                    f"Run: {run_dir.name}"
+                )
+                print(f"Done (publish unsuccessful: {reason}).")
+                return 1
             notifier.send_text(
                 "Posting Auto completed (AUTO_PUBLISH=false).\n"
                 f"Stories: {len(briefing.get('stories') or [])}\n"
@@ -2436,7 +2506,7 @@ def _run_autonomous_body(
         ensure_aux_before_publish()
         store.reopen()
         card_pngs = render_cards_for_approve(briefing, run_dir, now)
-        run_publish(
+        outcome = run_publish(
             briefing,
             picked,
             now,
@@ -2450,6 +2520,10 @@ def _run_autonomous_body(
             editorial_decision=decision,
             preflight=pre,
         )
+        if not outcome.get("ok"):
+            reason = outcome.get("reason") or "publish_failed"
+            print(f"Done (publish unsuccessful: {reason}).")
+            return 1
         excluded_note = ""
         if decision.get("excluded_story_ids"):
             excluded_note = (

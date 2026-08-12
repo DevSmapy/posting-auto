@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-import os
+import multiprocessing as mp
 import sys
 import tempfile
 import unittest
@@ -13,7 +13,23 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from runtime.run_lock import RunLock, autonomous_run_lock  # noqa: E402
+from runtime.run_lock import RunLock, _pid_alive, autonomous_run_lock  # noqa: E402
+
+
+def _race_acquire(path_str: str, run_id: str, barrier: mp.Barrier, queue: mp.Queue) -> None:
+    barrier.wait(timeout=5)
+    lock = RunLock(Path(path_str), run_id=run_id)
+    ok, reason = lock.acquire()
+    queue.put((run_id, ok, reason))
+    if ok:
+        # Hold briefly so losers observe the active lock.
+        barrier.wait(timeout=5)
+        lock.release()
+    else:
+        try:
+            barrier.wait(timeout=5)
+        except Exception:  # noqa: BLE001
+            pass
 
 
 class RunLockTest(unittest.TestCase):
@@ -38,6 +54,37 @@ class RunLockTest(unittest.TestCase):
             self.assertFalse(ok2)
             self.assertIn("active lock", reason)
             first.release()
+
+    def test_concurrent_acquire_only_one_wins(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "autonomous.lock"
+            ctx = mp.get_context("spawn")
+            barrier = ctx.Barrier(2)
+            queue: mp.Queue = ctx.Queue()
+            procs = [
+                ctx.Process(
+                    target=_race_acquire,
+                    args=(str(path), f"run-{i}", barrier, queue),
+                )
+                for i in range(2)
+            ]
+            for p in procs:
+                p.start()
+            results = [queue.get(timeout=10) for _ in procs]
+            for p in procs:
+                p.join(timeout=10)
+                self.assertEqual(p.exitcode, 0)
+            wins = [r for r in results if r[1]]
+            losses = [r for r in results if not r[1]]
+            self.assertEqual(len(wins), 1, results)
+            self.assertEqual(len(losses), 1, results)
+            self.assertIn("active lock", losses[0][2])
+
+    def test_pid_alive_permission_error_means_alive(self) -> None:
+        with patch("runtime.run_lock.os.kill", side_effect=PermissionError):
+            self.assertTrue(_pid_alive(12345))
+        with patch("runtime.run_lock.os.kill", side_effect=ProcessLookupError):
+            self.assertFalse(_pid_alive(12345))
 
     def test_stale_lock_reclaimed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
