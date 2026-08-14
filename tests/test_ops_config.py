@@ -32,7 +32,7 @@ class OpsConfigTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "ops.json"
             data = load_ops_config(path)
-            self.assertEqual(data["schedule"]["run_at"], "07:00")
+            self.assertEqual(data["schedule"]["run_at"], "06:00")
             self.assertEqual(data["cards"]["bundle_id"], "daily_briefing")
             self.assertGreaterEqual(len(data["feeds"]), 2)
 

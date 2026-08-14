@@ -2,8 +2,8 @@
   "timezone": "Asia/Seoul",
   "schedule": {
     "weekdays": [1, 2, 3, 4, 5],
-    "run_at": "07:00",
-    "notify_at": "07:50"
+    "run_at": "06:00",
+    "notify_at": "07:00"
   },
   "feeds": [
     {

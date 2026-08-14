@@ -257,8 +257,10 @@ uv run streamlit run apps/ops_console/app.py
 `NOTIFY_SEND_AT`·`CARD_BUNDLE_ID`·`GNEWS_*` env가 있으면 해당 항목만 env가 우선합니다.
 
 ```cron
-*/5 * * * 1-5 "/ABSOLUTE/PATH/TO/REPO/scripts/cron_run_draft.sh" >>"/ABSOLUTE/PATH/TO/REPO/output/cron.log" 2>&1
+0 6 * * 1-5 "/ABSOLUTE/PATH/TO/REPO/scripts/cron_run_draft.sh" >>"/ABSOLUTE/PATH/TO/REPO/output/cron.log" 2>&1
 ```
+
+`cron_run_draft.sh`는 `MVP_MODE=autonomous AUTO_PUBLISH=false` (Wave 1)만 돌린다. 예전 draft Approve 아침 경로는 타지 않는다.
 
 `./scripts/run_draft.sh` 수명주기:
 

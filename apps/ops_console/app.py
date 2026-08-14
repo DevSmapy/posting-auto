@@ -78,10 +78,10 @@ def _schedule_tab() -> None:
             default=current_days,
             format_func=lambda d: f"{d} ({WEEKDAY_LABELS[d]})",
         )
-        run_at = st.text_input("run_at (HH:MM)", value=str(schedule.get("run_at") or "07:00"))
+        run_at = st.text_input("run_at (HH:MM)", value=str(schedule.get("run_at") or "06:00"))
         notify_at = st.text_input(
             "notify_at (HH:MM)",
-            value=str(schedule.get("notify_at") or "07:50"),
+            value=str(schedule.get("notify_at") or "07:00"),
             help="Discord 등 Approve 초안 발송 시각. NOTIFY_SEND_AT env가 있으면 env가 우선합니다.",
         )
         submitted = st.form_submit_button("Save schedule")
@@ -107,7 +107,7 @@ def _schedule_tab() -> None:
 
     st.info(
         "crontab은 UI에서 바꾸지 않습니다. 예:\n"
-        '`*/5 * * * 1-5 "/ABS/scripts/cron_run_draft.sh" >>"/ABS/output/cron.log" 2>&1`'
+        '`0 6 * * 1-5 "/ABS/scripts/cron_run_draft.sh" >>"/ABS/output/cron.log" 2>&1`'
     )
 
 
