@@ -137,7 +137,24 @@ def wait_until_notify_send_at(now: datetime | None = None) -> None:
         if remaining <= 0:
             break
         time.sleep(min(remaining, 30.0))
-    print(f"==> NOTIFY_SEND_AT reached — sending Approve preview")
+    print("==> NOTIFY_SEND_AT reached — sending notification")
+
+
+class _NotifyAfterDeadline:
+    """Wait until ops notify_at once, then pass send_text through."""
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+        self._waited = False
+
+    def send_text(self, message: str, *args: Any, **kwargs: Any) -> Any:
+        if not self._waited:
+            wait_until_notify_send_at()
+            self._waited = True
+        return self._inner.send_text(message, *args, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
 
 
 def ollama_base() -> str:
@@ -2384,6 +2401,7 @@ def run_autonomous(
     notifier: Any,
 ) -> int:
     """Editorial loop without human gates; AUTO_PUBLISH controls live publish."""
+    notifier = _NotifyAfterDeadline(notifier)
     with autonomous_run_lock(run_dir.name) as (acquired, lock_reason):
         if not acquired:
             notifier.send_text(

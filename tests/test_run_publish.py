@@ -648,5 +648,30 @@ class RunPublishTest(unittest.TestCase):
         self.assertEqual(store.calls[0]["picked"], [])
 
 
+class NotifyAfterDeadlineTest(unittest.TestCase):
+    def test_waits_once_then_forwards(self) -> None:
+        from mvp_pipeline import _NotifyAfterDeadline
+
+        calls: list[object] = []
+
+        class Fake:
+            def send_text(self, message: str) -> str:
+                calls.append(message)
+                return "ok"
+
+            def other(self) -> str:
+                return "passthrough"
+
+        wrapped = _NotifyAfterDeadline(Fake())
+        with patch(
+            "mvp_pipeline.wait_until_notify_send_at",
+            side_effect=lambda: calls.append("wait"),
+        ):
+            wrapped.send_text("one")
+            wrapped.send_text("two")
+        self.assertEqual(calls, ["wait", "one", "two"])
+        self.assertEqual(wrapped.other(), "passthrough")
+
+
 if __name__ == "__main__":
     unittest.main()

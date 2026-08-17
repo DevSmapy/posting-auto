@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Pipeline wrapper: start ollama/aux, warm model, run mvp_pipeline, stop on exit.
 #
-# Morning cron (cron_run_draft.sh): Wave 1 autonomous at 06:00 weekdays.
+# Morning cron (cron_run_draft.sh): Wave 1 autonomous; 5-min poller + ops.json schedule.
 # Manual draft gates: ./scripts/run_draft.sh  (default MVP_MODE=draft)
 set -euo pipefail
 

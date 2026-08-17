@@ -47,6 +47,9 @@ DEFAULT_OPS: dict[str, Any] = {
     "cards": {"bundle_id": "daily_briefing"},
 }
 
+# Recommended crontab: Python gate evaluates timezone/run_at/weekdays.
+POLLER_CRONTAB = "*/5 * * * *"
+
 
 def ops_path() -> Path:
     raw = (os.getenv("OPS_CONFIG_PATH") or "").strip()
@@ -178,10 +181,10 @@ def ensure_ops_config(path: Path | None = None) -> dict[str, Any]:
 
 
 def crontab_expr(schedule: dict[str, Any] | None = None) -> str:
-    """Minute/hour/dow for a machine-local crontab line.
+    """Minute/hour/dow for a one-shot machine-local crontab line.
 
-    Cron Sunday is 0; ISO weekday 7 maps to 0. The Python gate still uses
-    ops.json timezone independently — regenerate crontab when run_at changes.
+    Cron Sunday is 0; ISO weekday 7 maps to 0. Prefer POLLER_CRONTAB so
+    ops.json timezone/run_at/weekdays take effect without regenerating cron.
     """
     sched = schedule or {}
     hour, minute = _parse_hhmm(str(sched.get("run_at") or "06:00"), field="run_at")

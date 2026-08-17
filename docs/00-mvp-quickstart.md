@@ -253,13 +253,13 @@ uv sync
 uv run streamlit run apps/ops_console/app.py
 ```
 
-`config/ops.json`의 `timezone` / `schedule.run_at` / `weekdays` / `feeds` / `cards.bundle_id`를 저장하면 파이프라인이 읽습니다.  
-crontab 시각은 ops.json을 자동으로 바꾸지 않습니다. 저장한 timezone·`run_at`·weekdays와 crontab을 맞춘 뒤, `cron_run_draft.sh`가 **5분 창**으로 게이트합니다.  
-`notify_at`은 draft Approve 경로(`NOTIFY_SEND_AT` env가 있으면 env 우선)용입니다. Wave 1 autonomous 알림은 실행 완료 시점입니다.  
+`config/ops.json`의 `timezone` / `schedule.run_at` / `weekdays` / `schedule.notify_at` / `feeds` / `cards.bundle_id`를 저장하면 파이프라인이 읽습니다.  
+`cron_run_draft.sh`는 **5분 폴러**입니다. 실제 실행 시각·요일·타임존은 ops.json이 5분 창으로 게이트하므로, 스케줄을 바꿔도 crontab을 다시 넣을 필요 없습니다.  
+`notify_at`은 draft Approve와 Wave 1 autonomous 알림에 공통입니다 (`NOTIFY_SEND_AT` env가 있으면 env 우선). 이미 지났으면 기다리지 않고 바로 보냅니다.  
 `CARD_BUNDLE_ID`·`GNEWS_*` env가 있으면 해당 항목만 env가 우선합니다.
 
 ```cron
-0 6 * * 1-5 "/ABSOLUTE/PATH/TO/REPO/scripts/cron_run_draft.sh" >>"/ABSOLUTE/PATH/TO/REPO/output/cron.log" 2>&1
+*/5 * * * * "/ABSOLUTE/PATH/TO/REPO/scripts/cron_run_draft.sh" >>"/ABSOLUTE/PATH/TO/REPO/output/cron.log" 2>&1
 ```
 
 `cron_run_draft.sh`는 `MVP_MODE=autonomous AUTO_PUBLISH=false` (Wave 1)만 돌린다. 예전 draft Approve 아침 경로는 타지 않는다.
@@ -279,7 +279,7 @@ crontab 시각은 ops.json을 자동으로 바꾸지 않습니다. 저장한 tim
 1. `ollama` **start** → 모델 warm
 2. editorial validate/review/decide (**Approve 게이트 없음**)
 3. `AUTO_PUBLISH=false`이면 `briefing.md`·카드 패키지만 생성, **인스타 실게시 없음**
-4. 종료 시 컨테이너 stop. 알림은 실행 완료 시점 (`notify_at` 미사용)
+4. 종료 시 컨테이너 stop. 알림은 `notify_at`까지 기다린 뒤 발송 (`NOTIFY_SEND_AT` env 우선)
 
 | `MVP_MODE` | 동작 |
 |------------|------|
