@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,6 +12,9 @@ from typing import Iterator
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_LOCK_PATH = ROOT / "data" / "locks" / "autonomous.lock"
+# ponytail: mtime grace so a concurrent mid-write is not stolen; leftover
+# empty/corrupt files unblock the next run. Upgrade: flock.
+_INCOMPLETE_GRACE_SEC = 5
 
 
 def _lock_timeout_sec() -> int:
@@ -35,6 +39,13 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
+def _lock_age_sec(path: Path) -> float:
+    try:
+        return max(0.0, time.time() - path.stat().st_mtime)
+    except OSError:
+        return float("inf")
+
+
 class RunLock:
     def __init__(self, path: Path, *, run_id: str) -> None:
         self.path = path
@@ -51,7 +62,7 @@ class RunLock:
         }
         encoded = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
 
-        for _ in range(3):
+        for attempt in range(3):
             try:
                 fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             except FileExistsError:
@@ -60,11 +71,22 @@ class RunLock:
                     existing = json.loads(raw) if raw.strip() else {}
                 except (OSError, json.JSONDecodeError):
                     existing = {}
-                pid = int(existing.get("pid") or 0)
+                try:
+                    pid = int(existing.get("pid") or 0)
+                except (TypeError, ValueError):
+                    pid = 0
                 started = str(existing.get("started_at") or "")
-                # Incomplete write from a concurrent creator — do not steal.
                 if not existing or pid <= 0:
-                    return False, "active lock (incomplete)"
+                    if _lock_age_sec(self.path) > _INCOMPLETE_GRACE_SEC:
+                        try:
+                            self.path.unlink(missing_ok=True)
+                        except OSError:
+                            pass
+                        continue
+                    if attempt == 2:
+                        return False, "active lock (incomplete)"
+                    time.sleep(0.1)
+                    continue
                 stale = False
                 if started:
                     try:

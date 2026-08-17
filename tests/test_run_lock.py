@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import multiprocessing as mp
+import os
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -99,6 +101,39 @@ class RunLockTest(unittest.TestCase):
             ok, _ = lock.acquire()
             self.assertTrue(ok)
             lock.release()
+
+    def test_corrupt_lock_reclaimed_after_grace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "autonomous.lock"
+            path.write_text("{not json", encoding="utf-8")
+            past = time.time() - 60
+            os.utime(path, (past, past))
+            lock = RunLock(path, run_id="new")
+            ok, reason = lock.acquire()
+            self.assertTrue(ok, reason)
+            lock.release()
+
+    def test_empty_lock_reclaimed_after_grace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "autonomous.lock"
+            path.write_text("", encoding="utf-8")
+            past = time.time() - 60
+            os.utime(path, (past, past))
+            lock = RunLock(path, run_id="new")
+            ok, reason = lock.acquire()
+            self.assertTrue(ok, reason)
+            lock.release()
+
+    def test_young_incomplete_lock_not_stolen(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "autonomous.lock"
+            path.write_text("", encoding="utf-8")
+            lock = RunLock(path, run_id="new")
+            with patch("runtime.run_lock.time.sleep"):
+                ok, reason = lock.acquire()
+            self.assertFalse(ok)
+            self.assertIn("incomplete", reason)
+            self.assertTrue(path.is_file())
 
     def test_context_manager_releases(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
