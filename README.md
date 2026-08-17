@@ -12,7 +12,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| 스케줄 | 평일 07:00 실행 → `NOTIFY_SEND_AT`(기본 07:50) Discord/Telegram/Slack (cron `1-5`) |
+| 스케줄 | 평일 06:00 Wave 1 (`autonomous`, 인스타 실게시 없음) → 08:00 전 패키지 (cron `1-5`) |
 | 뉴스 소스 (MVP) | Google News KR 토픽 RSS — `BUSINESS` + `NATION` |
 | 날짜 | `pubDate` ∈ **전일 15:00 ~ 실행시각** (Asia/Seoul) |
 | 중요도 | 피드 순서 + 클러스터 + **Ollama 스니펫 점수** |

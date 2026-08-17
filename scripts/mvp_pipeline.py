@@ -21,6 +21,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
 import feedparser
@@ -73,7 +74,13 @@ from editorial import (  # noqa: E402
     run_editorial_loop,
 )
 from editorial.validator import quality_gate_briefing  # noqa: E402
+from publish.guard import (  # noqa: E402
+    assert_publish_ready,
+    editorial_llm_reviewer_enabled,
+    write_publish_guard,
+)
 from runtime.preflight import run_preflight  # noqa: E402
+from runtime.run_lock import autonomous_run_lock  # noqa: E402
 
 TZ = ZoneInfo(os.getenv("NEWS_TIMEZONE", "Asia/Seoul"))
 PROMPTS = ROOT / "prompts"
@@ -130,7 +137,24 @@ def wait_until_notify_send_at(now: datetime | None = None) -> None:
         if remaining <= 0:
             break
         time.sleep(min(remaining, 30.0))
-    print(f"==> NOTIFY_SEND_AT reached — sending Approve preview")
+    print("==> NOTIFY_SEND_AT reached — sending notification")
+
+
+class _NotifyAfterDeadline:
+    """Wait until ops notify_at once, then pass send_text through."""
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+        self._waited = False
+
+    def send_text(self, message: str, *args: Any, **kwargs: Any) -> Any:
+        if not self._waited:
+            wait_until_notify_send_at()
+            self._waited = True
+        return self._inner.send_text(message, *args, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
 
 
 def ollama_base() -> str:
@@ -1311,6 +1335,139 @@ def preview_text(
     return "\n".join(lines)
 
 
+def polish_story_korean_llm(
+    story: dict[str, Any],
+    article: dict[str, Any],
+    now: datetime,
+) -> tuple[dict[str, Any], str]:
+    """Full Korean rewrite from source — not partial translation of Chinese."""
+    user = (
+        read_prompt("story_polish_user.md")
+        .replace("{{date}}", now.strftime("%Y-%m-%d"))
+        .replace("{{target_language}}", target_language())
+        .replace("{{target_locale}}", target_locale())
+        .replace(
+            "{{issues}}",
+            "- Rewrite ALL title and description fields in natural Korean from source facts.\n"
+            "- Do NOT partially fix or translate existing Chinese text; rewrite every field.\n"
+            "- Keep company/place proper nouns; everything else must be Korean.",
+        )
+        .replace("{{story_json}}", json.dumps(story, ensure_ascii=False, indent=2))
+    )
+    return _story_llm_call(
+        system_prompt=read_prompt("story_polish_system.md"),
+        user_prompt=user,
+        article=article,
+        error_label="korean rewritten story",
+    )
+
+
+def rebuild_briefing_surfaces(briefing: dict[str, Any], now: datetime) -> dict[str, Any]:
+    """Rebuild caption/slides/core from final stories after editorial exclusions."""
+    stories = [s for s in (briefing.get("stories") or []) if isinstance(s, dict)]
+    fresh = assemble_briefing_from_stories(stories, now)
+    fresh["blog_html"] = assemble_blog_html(fresh)
+    # Keep non-surface keys from the original briefing; rebuilt surfaces win.
+    out = dict(briefing)
+    out.update(fresh)
+    return out
+
+
+_TRACKING_QUERY_KEYS = {
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "utm_term",
+    "utm_content",
+    "fbclid",
+    "gclid",
+}
+
+
+def _normalize_article_url(url: str) -> str:
+    """Normalize feed/source URLs for equality (slash + tracking params)."""
+    raw = (url or "").strip()
+    if not raw:
+        return ""
+    try:
+        parts = urlsplit(raw)
+    except ValueError:
+        return raw.rstrip("/").casefold()
+    path = parts.path.rstrip("/")
+    query = urlencode(
+        [
+            (k, v)
+            for k, v in parse_qsl(parts.query, keep_blank_values=True)
+            if k.casefold() not in _TRACKING_QUERY_KEYS
+        ]
+    )
+    return urlunsplit(
+        (parts.scheme.casefold(), parts.netloc.casefold(), path, query, "")
+    )
+
+
+def _picked_for_briefing(
+    picked: list[dict[str, Any]],
+    briefing: dict[str, Any],
+) -> list[dict[str, Any]]:
+    urls = {
+        _normalize_article_url(str(s.get("source_url") or ""))
+        for s in (briefing.get("stories") or [])
+        if isinstance(s, dict) and s.get("source_url")
+    }
+    urls.discard("")
+    if not urls:
+        print("   !! briefing has no source_url; recording zero picked rows")
+        return []
+    filtered = [
+        a
+        for a in picked
+        if _normalize_article_url(str(a.get("link") or a.get("url") or "")) in urls
+    ]
+    if not filtered:
+        print(
+            "   !! no picked URLs matched briefing source_url; "
+            "recording zero picked rows"
+        )
+    return filtered
+
+
+def _notify_excluded_stories(notifier: Any, decision: dict[str, Any]) -> None:
+    excluded = decision.get("excluded_story_ids") or []
+    if not excluded:
+        return
+    reasons = decision.get("excluded_reasons") or []
+    lines = [
+        "Story excluded from publish package:",
+        f"- excluded ids: {excluded}",
+        f"- remaining: {decision.get('story_count', '?')}",
+    ]
+    for row in reasons[:8]:
+        lines.append(
+            f"  - story {row.get('index')}: {row.get('reason')} "
+            f"{row.get('details') or ''}"[:200]
+        )
+    try:
+        notifier.send_text("\n".join(lines))
+    except Exception as exc:  # noqa: BLE001
+        print(f"   !! exclusion notify failed: {exc}")
+
+
+def _existing_ig_media_id(run_dir: Path) -> str | None:
+    for name in ("publish_result.json", "creation_id.json"):
+        path = run_dir / name
+        if not path.is_file():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        mid = data.get("ig_media_id") or data.get("media_id")
+        if mid:
+            return str(mid)
+    return None
+
+
 def render_cards_for_approve(
     briefing: dict[str, Any],
     run_dir: Path,
@@ -1346,14 +1503,23 @@ def run_publish(
     notifier: Any,
     generation_mode: str = "llm",
     card_png_paths: list[Path] | None = None,
-) -> None:
-    """Approve 후: 마크다운 저장 → seen_urls → (선택 R2/인스타) → 알림.
+    *,
+    persist_seen: str = "after_export",
+    live_publish: bool = False,
+    editorial_decision: dict[str, Any] | None = None,
+    preflight: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Write package artifacts, optionally publish to Instagram, record seen_urls.
 
-    ``briefing.md`` 성공 직후 ``seen_urls``를 남겨, 이후 알림/인스타 실패가
-    기록을 막거나 지우지 못하게 한다.
+    persist_seen:
+      after_export — draft default; record after markdown export
+      never        — autonomous dry-run; do not touch seen_urls
+      after_ig     — autonomous live; record only after ig_media_id
 
-    ``card_png_paths`` — draft 게이트에서 이미 렌더한 PNG. 있으면 재렌더하지 않음.
+    Returns ``{"ok": bool, "reason": str, ...}`` so autonomous can suppress a
+    false "completed" message when publish is blocked.
     """
+    picked_rows = _picked_for_briefing(picked, briefing)
     print("==> Write briefing markdown (manual paste)")
     md = assemble_blog_markdown(briefing)
     md_path = run_dir / "briefing.md"
@@ -1361,16 +1527,32 @@ def run_publish(
     export_ref = str(md_path.resolve())
     print(f"   wrote {md_path}")
 
-    n = store.record_published(picked, tistory_post_id=export_ref, ig_media_id=None)
-    print(f"==> seen_urls recorded: {n} (backend={store.backend})")
-
     (run_dir / "briefing.html").write_text(
         briefing.get("blog_html") or assemble_blog_html(briefing), encoding="utf-8"
     )
 
-    ig_media_id: str | None = None
+    if persist_seen == "after_export":
+        n = store.record_published(
+            picked_rows, tistory_post_id=export_ref, ig_media_id=None
+        )
+        print(f"==> seen_urls recorded: {n} (backend={store.backend})")
+
+    ig_media_id: str | None = _existing_ig_media_id(run_dir)
     publish_cfg = PublishConfig.from_env()
     paths = list(card_png_paths or [])
+
+    def _eval_guard(png_paths: list[Path], *, live: bool) -> dict[str, Any]:
+        result = assert_publish_ready(
+            briefing,
+            png_paths=png_paths,
+            live=live,
+            editorial_decision=editorial_decision,
+            preflight=preflight,
+            markdown_text=md,
+        )
+        write_publish_guard(run_dir, result)
+        return result
+
     if publish_cfg.publish_cards:
         if not paths:
             print("==> Render cards (HTML/PNG + Instagram caption)")
@@ -1379,49 +1561,131 @@ def run_publish(
             try:
                 paths = render_cards(briefing, cards_dir, now)
             except Exception as exc:  # noqa: BLE001
-                _notify_stage(notifier, f"[카드렌더 실패] {exc}")
+                msg = f"[카드렌더 실패] {exc}"
+                if live_publish:
+                    _notify_stage(
+                        notifier,
+                        "ACTION REQUIRED\n" + msg + "\nPublish blocked.",
+                    )
+                    print("Done (publish blocked: card render failed).")
+                    return {"ok": False, "reason": "card_render_failed", "error": str(exc)}
+                _notify_stage(notifier, msg)
                 paths = []
         else:
             print(f"==> Reuse Approve-preview cards ({len(paths)} png)")
 
-        try:
-            result = PublishCardsPipeline(
-                publish_cfg,
-                log=lambda msg: print(f"==> {msg}"),
-            ).run(
-                png_paths=paths,
-                briefing=briefing,
-                r2_prefix=f"briefs/{now.strftime('%Y-%m-%d')}",
-                run_dir=run_dir,
-            )
-            ig_media_id = result.ig_media_id
-            if result.skipped_reason:
-                _notify_stage(
-                    notifier,
-                    f"[카드발행 부분스킵] {result.skipped_reason}",
-                )
-            elif ig_media_id:
-                _notify_stage(notifier, f"[인스타 게시됨] media_id={ig_media_id}")
-        except Exception as exc:  # noqa: BLE001
-            _notify_stage(notifier, f"[R2/인스타 실패] {exc}")
+    guard_result = _eval_guard(
+        paths,
+        live=live_publish and not publish_cfg.package_only,
+    )
+    if not guard_result.get("ok") and live_publish:
+        blockers = guard_result.get("blockers") or []
+        _notify_stage(
+            notifier,
+            "ACTION REQUIRED\nPublish guard failed.\n"
+            + "\n".join(f"- {b}" for b in blockers[:12]),
+        )
+        print("Done (publish blocked by guard).")
+        return {
+            "ok": False,
+            "reason": "publish_guard",
+            "blockers": blockers,
+        }
 
-    if ig_media_id:
+    if publish_cfg.publish_cards:
+        if ig_media_id:
+            print(f"==> Skip Instagram — already published media_id={ig_media_id}")
+        elif not publish_cfg.package_only:
+            try:
+                result = PublishCardsPipeline(
+                    publish_cfg,
+                    log=lambda msg: print(f"==> {msg}"),
+                ).run(
+                    png_paths=paths,
+                    briefing=briefing,
+                    r2_prefix=f"briefs/{now.strftime('%Y-%m-%d')}",
+                    run_dir=run_dir,
+                )
+                ig_media_id = result.ig_media_id
+                if result.skipped_reason:
+                    msg = f"[카드발행 부분스킵] {result.skipped_reason}"
+                    if live_publish:
+                        _notify_stage(
+                            notifier,
+                            "ACTION REQUIRED\n" + msg + "\nPublish blocked.",
+                        )
+                        print("Done (publish blocked: pipeline skip).")
+                        return {
+                            "ok": False,
+                            "reason": "pipeline_skip",
+                            "skipped_reason": result.skipped_reason,
+                        }
+                    _notify_stage(notifier, msg)
+                elif ig_media_id:
+                    (run_dir / "publish_result.json").write_text(
+                        json.dumps({"ig_media_id": ig_media_id}, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+                    _notify_stage(notifier, f"[인스타 게시됨] media_id={ig_media_id}")
+            except Exception as exc:  # noqa: BLE001
+                msg = f"[R2/인스타 실패] {exc}"
+                if live_publish:
+                    _notify_stage(
+                        notifier,
+                        "ACTION REQUIRED\n" + msg + "\nPublish blocked.",
+                    )
+                    print("Done (publish blocked: pipeline error).")
+                    return {"ok": False, "reason": "pipeline_error", "error": str(exc)}
+                _notify_stage(notifier, msg)
+
+    if live_publish and not publish_cfg.package_only and not ig_media_id:
+        _notify_stage(
+            notifier,
+            "ACTION REQUIRED\nLive publish produced no Instagram media_id.\n"
+            "Publish blocked.",
+        )
+        print("Done (publish blocked: missing ig_media_id).")
+        return {"ok": False, "reason": "missing_ig_media_id"}
+
+    if ig_media_id and persist_seen in {"after_export", "after_ig"}:
+        recorded = 0
+        record_error: Exception | None = None
         try:
-            store.record_published(
-                picked, tistory_post_id=export_ref, ig_media_id=ig_media_id
+            recorded = store.record_published(
+                picked_rows, tistory_post_id=export_ref, ig_media_id=ig_media_id
             )
         except Exception as exc:  # noqa: BLE001
-            # ponytail: one retry then report; IG already succeeded externally
+            print(f"   !! seen_urls record failed: {exc}; retrying after reopen")
+            time.sleep(0.2)
             try:
-                store.record_published(
-                    picked, tistory_post_id=export_ref, ig_media_id=ig_media_id
+                store.reopen()
+                recorded = store.record_published(
+                    picked_rows, tistory_post_id=export_ref, ig_media_id=ig_media_id
                 )
             except Exception as exc2:  # noqa: BLE001
+                record_error = exc2
                 _notify_stage(
                     notifier,
+                    "ACTION REQUIRED\n"
                     f"[seen_urls 부분실패] 인스타는 게시됨 media_id={ig_media_id}; "
-                    f"ig_media_id 미기록: {exc2}",
+                    f"첫 실패: {exc}; 재시도 실패: {exc2}",
                 )
+        if persist_seen == "after_ig" and (record_error is not None or recorded <= 0):
+            if record_error is None:
+                _notify_stage(
+                    notifier,
+                    "ACTION REQUIRED\n"
+                    f"[seen_urls 미기록] 인스타는 게시됨 media_id={ig_media_id}; "
+                    "picked rows were empty or record returned 0.",
+                )
+            print("Done (publish blocked: seen_urls unrecorded).")
+            return {
+                "ok": False,
+                "reason": "seen_urls_unrecorded",
+                "ig_media_id": ig_media_id,
+            }
+        if persist_seen == "after_ig" and recorded > 0:
+            print(f"==> seen_urls recorded after IG: media_id={ig_media_id}")
 
     mode_label = _generation_mode_label(generation_mode)
     caption = (
@@ -1441,9 +1705,13 @@ def run_publish(
         else:
             notifier.send_text(f"{caption}\n\n---\n{md[:1500]}")
     except Exception as exc:  # noqa: BLE001
-        print(f"   !! publish notify failed (seen_urls already recorded): {exc}")
+        print(f"   !! publish notify failed: {exc}")
     print("Done (markdown export).")
-
+    return {
+        "ok": True,
+        "reason": "published" if ig_media_id else "exported",
+        "ig_media_id": ig_media_id,
+    }
 
 def content_retry_max() -> int:
     raw = env("CONTENT_RETRY_MAX", "3") or "3"
@@ -1475,11 +1743,7 @@ def apply_editorial_pass(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Validator → Reviewer → bounded revise → editor decision."""
     if use_llm_reviewer is None:
-        use_llm_reviewer = env("EDITORIAL_LLM_REVIEWER", "0").lower() in {
-            "1",
-            "true",
-            "yes",
-        }
+        use_llm_reviewer = editorial_llm_reviewer_enabled()
 
     def _rewrite(story: dict[str, Any], instr: dict[str, Any]) -> dict[str, Any]:
         issues = [str(x) for x in (instr.get("risk_flags") or [])]
@@ -1493,7 +1757,14 @@ def apply_editorial_pass(
             "snippet": story.get("what_happened") or "",
             "id": story.get("source_url") or story.get("headline") or "",
         }
-        polished, _raw = polish_story_llm(story, issues, article, now)
+        lang_rewrite = any(
+            ":language:hard_fail" in i or i.endswith(":language:disallowed_han_dominant")
+            for i in issues
+        )
+        if lang_rewrite:
+            polished, _raw = polish_story_korean_llm(story, article, now)
+        else:
+            polished, _raw = polish_story_llm(story, issues, article, now)
         out = _with_story_source(deterministic_story_repair(polished), article)
         out.pop("_fallback", None)
         return out
@@ -1506,12 +1777,17 @@ def apply_editorial_pass(
         run_dir=run_dir,
     )
     decision = result.get("editor_decision") or {}
+    out_briefing = result.get("briefing") or briefing
+    if decision.get("decision") == "publish":
+        out_briefing = rebuild_briefing_surfaces(out_briefing, now)
+        result = dict(result)
+        result["briefing"] = out_briefing
     print(
         f"   editorial decision={decision.get('decision')} "
         f"revisions={result.get('revision_count')} "
         f"stories={decision.get('story_count')}"
     )
-    return result.get("briefing") or briefing, result
+    return out_briefing, result
 
 
 def produce_content_attempt(
@@ -2125,6 +2401,32 @@ def run_autonomous(
     notifier: Any,
 ) -> int:
     """Editorial loop without human gates; AUTO_PUBLISH controls live publish."""
+    notifier = _NotifyAfterDeadline(notifier)
+    with autonomous_run_lock(run_dir.name) as (acquired, lock_reason):
+        if not acquired:
+            notifier.send_text(
+                "ACTION REQUIRED\nDuplicate autonomous run blocked.\n"
+                f"{lock_reason}"
+            )
+            print(f"Done (lock blocked: {lock_reason}).")
+            return 1
+        return _run_autonomous_body(
+            candidates=candidates,
+            now=now,
+            run_dir=run_dir,
+            store=store,
+            notifier=notifier,
+        )
+
+
+def _run_autonomous_body(
+    *,
+    candidates: list[dict[str, Any]],
+    now: datetime,
+    run_dir: Path,
+    store: SeenUrlsStore,
+    notifier: Any,
+) -> int:
     pre = run_preflight(require_ollama=env("BRIEFING_MODE", "llm").lower() != "heuristic")
     (run_dir / "preflight.json").write_text(
         json.dumps(pre, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -2143,17 +2445,20 @@ def run_autonomous(
         render_max=render_retry_max(),
     )
     draft_store.init_layout()
+    use_llm_reviewer = editorial_llm_reviewer_enabled()
     try:
         picked, briefing, generation_mode, attempt_dir = produce_content_attempt(
             draft_store, candidates, now
         )
-        # Always run editorial for autonomous (even if EDITORIAL_LOOP=0)
         if env("EDITORIAL_LOOP", "0").lower() not in {"1", "true", "yes"}:
             print("==> Editorial quality loop (autonomous)")
             briefing, editorial = apply_editorial_pass(
-                briefing, picked, now, attempt_dir
+                briefing,
+                picked,
+                now,
+                attempt_dir,
+                use_llm_reviewer=use_llm_reviewer,
             )
-            briefing["blog_html"] = assemble_blog_html(briefing)
             (attempt_dir / "briefing.json").write_text(
                 json.dumps(briefing, ensure_ascii=False, indent=2),
                 encoding="utf-8",
@@ -2167,7 +2472,6 @@ def run_autonomous(
             )
 
         decision = (editorial.get("editor_decision") if editorial else None) or {}
-        # Re-read if produce already ran editorial
         if not decision and (attempt_dir / "editorial_result.json").is_file():
             editorial = json.loads(
                 (attempt_dir / "editorial_result.json").read_text(encoding="utf-8")
@@ -2175,7 +2479,7 @@ def run_autonomous(
             decision = editorial.get("editor_decision") or {}
             if editorial.get("briefing"):
                 briefing = editorial["briefing"]
-                briefing["blog_html"] = assemble_blog_html(briefing)
+                briefing = rebuild_briefing_surfaces(briefing, now)
 
         draft_store.set_selected_content()
         if decision.get("decision") != "publish":
@@ -2189,15 +2493,19 @@ def run_autonomous(
             print(f"Done (editorial reject: {reason}).")
             return 0
 
-        if not auto_publish_enabled():
-            # Decision-only dry run: write markdown package, skip IG live publish.
+        _notify_excluded_stories(notifier, decision)
+        picked = _picked_for_briefing(picked, briefing)
+        live = auto_publish_enabled()
+        persist = "after_ig" if live else "never"
+
+        if not live:
             ensure_aux_before_publish()
             store.reopen()
             card_pngs = render_cards_for_approve(briefing, run_dir, now)
             prev_publish_mode = os.environ.get("PUBLISH_MODE")
             os.environ["PUBLISH_MODE"] = "package"
             try:
-                run_publish(
+                outcome = run_publish(
                     briefing,
                     picked,
                     now,
@@ -2206,12 +2514,25 @@ def run_autonomous(
                     notifier,
                     generation_mode=generation_mode,
                     card_png_paths=card_pngs,
+                    persist_seen=persist,
+                    live_publish=False,
+                    editorial_decision=decision,
+                    preflight=pre,
                 )
             finally:
                 if prev_publish_mode is None:
                     os.environ.pop("PUBLISH_MODE", None)
                 else:
                     os.environ["PUBLISH_MODE"] = prev_publish_mode
+            if not outcome.get("ok"):
+                reason = outcome.get("reason") or "publish_failed"
+                notifier.send_text(
+                    "ACTION REQUIRED\n"
+                    f"Publish unsuccessful ({reason}).\n"
+                    f"Run: {run_dir.name}"
+                )
+                print(f"Done (publish unsuccessful: {reason}).")
+                return 1
             notifier.send_text(
                 "Posting Auto completed (AUTO_PUBLISH=false).\n"
                 f"Stories: {len(briefing.get('stories') or [])}\n"
@@ -2224,7 +2545,7 @@ def run_autonomous(
         ensure_aux_before_publish()
         store.reopen()
         card_pngs = render_cards_for_approve(briefing, run_dir, now)
-        run_publish(
+        outcome = run_publish(
             briefing,
             picked,
             now,
@@ -2233,12 +2554,25 @@ def run_autonomous(
             notifier,
             generation_mode=generation_mode,
             card_png_paths=card_pngs,
+            persist_seen=persist,
+            live_publish=True,
+            editorial_decision=decision,
+            preflight=pre,
         )
+        if not outcome.get("ok"):
+            reason = outcome.get("reason") or "publish_failed"
+            print(f"Done (publish unsuccessful: {reason}).")
+            return 1
+        excluded_note = ""
+        if decision.get("excluded_story_ids"):
+            excluded_note = (
+                f"\nExcluded stories: {decision.get('excluded_story_ids')}"
+            )
         notifier.send_text(
             "Posting Auto completed.\n"
             f"Stories: {len(briefing.get('stories') or [])}\n"
             f"Revisions: {editorial.get('revision_count', 0) if editorial else 0}\n"
-            f"Run: {run_dir.name}"
+            f"Run: {run_dir.name}{excluded_note}"
         )
         print("Done (autonomous AUTO_PUBLISH=true).")
         return 0

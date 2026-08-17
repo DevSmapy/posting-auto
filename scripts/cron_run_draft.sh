@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # cron용: 로그인 셸(.zshrc) 없이 docker/PATH 보장
-# Ops console: config/ops.json 의 run_at/weekdays 와 맞을 때만 draft 실행.
-# crontab 예: */5 * * * 1-5 "/ABS/scripts/cron_run_draft.sh" >>"/ABS/output/cron.log" 2>&1
+# 5분 폴러. timezone/run_at/weekdays는 ops.json이 5분 창으로 게이트한다.
+# crontab 시각을 ops.json과 맞출 필요 없음 (저장 후 다음 폴링부터 반영).
+# 알림은 schedule.notify_at까지 기다린 뒤 보낸다 (NOTIFY_SEND_AT env 우선).
+# draft Approve 경로는 타지 않는다 (AUTO_PUBLISH=false, 인스타 실게시 없음).
+# crontab 예: */5 * * * * "/ABS/scripts/cron_run_draft.sh" >>"/ABS/output/cron.log" 2>&1
 # macOS /etc/newsyslog.d/posting-auto.conf 예 (1MB, 압축본 5개 보관):
 # /ABS/output/cron.log  640  5  1024  *  J
 set -euo pipefail
@@ -33,6 +36,12 @@ if ! scheduled_day="$(run_py "$ROOT/scripts/ops_config.py" --scheduled-day)"; th
   exit 0
 fi
 echo "==> ops schedule: run (scheduled date ${scheduled_day})"
+
+# Force Wave 1 so .env MVP_MODE=draft/dry_run cannot resurrect the old morning path.
+export MVP_MODE=autonomous
+export AUTO_PUBLISH=false
+export EDITORIAL_LLM_REVIEWER=1
+export NOTIFY_CHANNEL=auto
 
 ./scripts/run_draft.sh
 status=$?

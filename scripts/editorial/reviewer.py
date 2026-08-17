@@ -68,14 +68,25 @@ def review_story(
         llm = _llm_review(story, sources or [], base)
         if isinstance(llm, dict) and llm.get("decision") in {"pass", "revise", "reject"}:
             llm.setdefault("reviewer", "ollama")
-            # Never override deterministic hard reject on generic fallback
             if base.get("generic_fallback_detected") and llm["decision"] == "pass":
                 llm["decision"] = "revise"
                 llm.setdefault("risk_flags", []).append("deterministic_override:generic_fallback")
             return llm
+        return {
+            **base,
+            "decision": "reject",
+            "reviewer": "ollama_invalid",
+            "llm_error": "invalid or missing decision in LLM response",
+            "risk_flags": list(base.get("risk_flags") or []) + ["llm_invalid_response"],
+        }
     except Exception as exc:  # noqa: BLE001
-        base["llm_error"] = str(exc)
-    return base
+        return {
+            **base,
+            "decision": "reject",
+            "reviewer": "ollama_failed",
+            "llm_error": str(exc),
+            "risk_flags": list(base.get("risk_flags") or []) + ["llm_error"],
+        }
 
 
 def _llm_review(

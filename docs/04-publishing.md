@@ -82,7 +82,7 @@ Rerank는 이번 run의 이전 content attempt URL을 제외한 뒤 재랭킹한
 
 공통 타임아웃: `APPROVE_TIMEOUT_SEC` (기본 **3600초**). 만료 N분 전 재알림(`APPROVE_REMINDER_SEC`, 기본 600).
 
-첫 content 게이트 전에만 `NOTIFY_SEND_AT`(예: `07:50`, Asia/Seoul)까지 대기합니다.
+첫 알림 전에 `NOTIFY_SEND_AT`(없으면 `config/ops.json` `schedule.notify_at`)까지 대기합니다. draft는 content 게이트, autonomous는 완료/`ACTION REQUIRED` 알림. 이미 지났으면 바로 보냅니다.
 
 ### 미리보기에 포함
 

@@ -96,7 +96,14 @@ def test_notify_send_at() -> None:
     mvp.wait_until_notify_send_at(late)
 
     os.environ.pop("NOTIFY_SEND_AT", None)
-    assert mvp.notify_send_at_target(now) is None
+    from ops_config import resolve_notify_at
+
+    hhmm = mvp.parse_notify_send_at(resolve_notify_at())
+    assert hhmm is not None
+    hour, minute = hhmm
+    assert mvp.notify_send_at_target(now) == datetime(
+        2026, 7, 20, hour, minute, tzinfo=TZ
+    )
     print("OK notify_send_at")
 
 

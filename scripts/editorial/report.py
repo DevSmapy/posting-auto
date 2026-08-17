@@ -28,6 +28,7 @@ def render_editorial_report(
         f"- **Story count:** {decision.get('story_count', 'n/a')}",
         f"- **Revision count:** {result.get('revision_count', 0)}",
         f"- **Excluded story ids:** {decision.get('excluded_story_ids') or []}",
+        f"- **Excluded reasons:** {decision.get('excluded_reasons') or []}",
         f"- **Risk flags:** {decision.get('risk_flags') or []}",
         "",
         "## Pipeline roles",

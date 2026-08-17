@@ -40,12 +40,15 @@ DEFAULT_OPS: dict[str, Any] = {
     "timezone": "Asia/Seoul",
     "schedule": {
         "weekdays": [1, 2, 3, 4, 5],
-        "run_at": "07:00",
-        "notify_at": "07:50",
+        "run_at": "06:00",
+        "notify_at": "07:00",
     },
     "feeds": deepcopy(DEFAULT_FEEDS),
     "cards": {"bundle_id": "daily_briefing"},
 }
+
+# Recommended crontab: Python gate evaluates timezone/run_at/weekdays.
+POLLER_CRONTAB = "*/5 * * * *"
 
 
 def ops_path() -> Path:
@@ -177,13 +180,30 @@ def ensure_ops_config(path: Path | None = None) -> dict[str, Any]:
     return data
 
 
+def crontab_expr(schedule: dict[str, Any] | None = None) -> str:
+    """Minute/hour/dow for a one-shot machine-local crontab line.
+
+    Cron Sunday is 0; ISO weekday 7 maps to 0. Prefer POLLER_CRONTAB so
+    ops.json timezone/run_at/weekdays take effect without regenerating cron.
+    """
+    sched = schedule or {}
+    hour, minute = _parse_hhmm(str(sched.get("run_at") or "06:00"), field="run_at")
+    weekdays = sched.get("weekdays") or [1, 2, 3, 4, 5]
+    dows: list[str] = []
+    for d in weekdays:
+        n = int(d)
+        dows.append("0" if n == 7 else str(n))
+    dow = "1-5" if dows == ["1", "2", "3", "4", "5"] else ",".join(dows)
+    return f"{minute} {hour} * * {dow}"
+
+
 def resolve_notify_at(ops: dict[str, Any] | None = None) -> str:
     """NOTIFY_SEND_AT env wins; else ops schedule.notify_at."""
     env_val = (os.getenv("NOTIFY_SEND_AT") or "").strip()
     if env_val:
         return env_val
     cfg = ops if ops is not None else load_ops_config()
-    return str(cfg.get("schedule", {}).get("notify_at") or "07:50")
+    return str(cfg.get("schedule", {}).get("notify_at") or "07:00")
 
 
 def resolve_feeds(ops: dict[str, Any] | None = None) -> list[tuple[str, str]]:
@@ -288,7 +308,7 @@ def _should_run_details(
     except (TypeError, ValueError):
         days = {1, 2, 3, 4, 5}
     try:
-        hour, minute = _parse_hhmm(str(schedule.get("run_at") or "07:00"), field="run_at")
+        hour, minute = _parse_hhmm(str(schedule.get("run_at") or "06:00"), field="run_at")
     except ValueError as exc:
         return False, str(exc), None
 

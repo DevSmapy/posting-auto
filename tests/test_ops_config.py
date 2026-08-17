@@ -15,7 +15,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from ops_config import (  # noqa: E402
+    POLLER_CRONTAB,
     _should_run_details,
+    crontab_expr,
     load_ops_config,
     normalize_ops,
     resolve_bundle_id,
@@ -32,9 +34,21 @@ class OpsConfigTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "ops.json"
             data = load_ops_config(path)
-            self.assertEqual(data["schedule"]["run_at"], "07:00")
+            self.assertEqual(data["schedule"]["run_at"], "06:00")
+            self.assertEqual(data["schedule"]["notify_at"], "07:00")
             self.assertEqual(data["cards"]["bundle_id"], "daily_briefing")
             self.assertGreaterEqual(len(data["feeds"]), 2)
+
+    def test_crontab_expr_weekdays_and_sunday(self) -> None:
+        self.assertEqual(POLLER_CRONTAB, "*/5 * * * *")
+        self.assertEqual(
+            crontab_expr({"run_at": "06:00", "weekdays": [1, 2, 3, 4, 5]}),
+            "0 6 * * 1-5",
+        )
+        self.assertEqual(
+            crontab_expr({"run_at": "7:30", "weekdays": [7]}),
+            "30 7 * * 0",
+        )
 
     def test_save_and_load_roundtrip(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

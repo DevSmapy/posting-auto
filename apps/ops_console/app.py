@@ -20,6 +20,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 from cards.bundles import list_bundles  # noqa: E402
 from ops_config import (  # noqa: E402
+    POLLER_CRONTAB,
     ensure_ops_config,
     load_ops_config,
     ops_path,
@@ -78,11 +79,14 @@ def _schedule_tab() -> None:
             default=current_days,
             format_func=lambda d: f"{d} ({WEEKDAY_LABELS[d]})",
         )
-        run_at = st.text_input("run_at (HH:MM)", value=str(schedule.get("run_at") or "07:00"))
+        run_at = st.text_input("run_at (HH:MM)", value=str(schedule.get("run_at") or "06:00"))
         notify_at = st.text_input(
             "notify_at (HH:MM)",
-            value=str(schedule.get("notify_at") or "07:50"),
-            help="Discord 등 Approve 초안 발송 시각. NOTIFY_SEND_AT env가 있으면 env가 우선합니다.",
+            value=str(schedule.get("notify_at") or "07:00"),
+            help=(
+                "알림 시각 (NOTIFY_SEND_AT env가 있으면 env 우선). "
+                "draft Approve와 Wave 1 autonomous 모두 이 시각까지 기다린 뒤 보냅니다."
+            ),
         )
         submitted = st.form_submit_button("Save schedule")
         if submitted:
@@ -105,9 +109,15 @@ def _schedule_tab() -> None:
                 except ValueError as exc:
                     st.error(str(exc))
 
+    tz_name = str(ops.get("timezone") or "Asia/Seoul")
     st.info(
-        "crontab은 UI에서 바꾸지 않습니다. 예:\n"
-        '`*/5 * * * 1-5 "/ABS/scripts/cron_run_draft.sh" >>"/ABS/output/cron.log" 2>&1`'
+        f"저장된 스케줄: `{tz_name}` / run_at `{schedule.get('run_at')}` / "
+        f"weekdays `{schedule.get('weekdays')}` / notify_at `{schedule.get('notify_at')}`.\n\n"
+        "`cron_run_draft.sh`는 5분마다 폴링하고, timezone·run_at·weekdays 5분 창과 맞을 때만 실행합니다. "
+        "시각·요일·타임존을 바꿔도 crontab을 다시 넣을 필요 없습니다. "
+        "알림은 notify_at까지 기다립니다.\n\n"
+        f'예: `{POLLER_CRONTAB} "/ABS/scripts/cron_run_draft.sh" '
+        '>>"/ABS/output/cron.log" 2>&1`'
     )
 
 

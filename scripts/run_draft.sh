@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
-# Weekday morning draft run (Approve → briefing.md).
-# Cron: 0 7 * * 1-5  (NOTIFY_SEND_AT controls Discord send time, default 07:50)
-# Usage: ./scripts/run_draft.sh
+# Pipeline wrapper: start ollama/aux, warm model, run mvp_pipeline, stop on exit.
 #
-# Starts postgres (+ browserless if cards) and ollama, warms the model, runs the
-# pipeline. Content gate keeps ollama loaded for Rerank/Rewrite; ollama stops after
-# content Approve. Browserless starts for the render gate only.
+# Morning cron (cron_run_draft.sh): Wave 1 autonomous; 5-min poller + ops.json schedule.
+# Manual draft gates: ./scripts/run_draft.sh  (default MVP_MODE=draft)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -28,6 +25,8 @@ fi
 _caller_mvp_mode="${MVP_MODE-}"
 _caller_rank_mode="${RANK_MODE-}"
 _caller_briefing_mode="${BRIEFING_MODE-}"
+_caller_auto_publish="${AUTO_PUBLISH-}"
+_caller_editorial_llm="${EDITORIAL_LLM_REVIEWER-}"
 _caller_auto_container="${OLLAMA_AUTO_CONTAINER-}"
 _caller_auto_aux="${DRAFT_AUTO_AUX-}"
 _caller_notify_from_cli=0
@@ -43,10 +42,18 @@ if [[ -f .env ]]; then
   set +a
 fi
 
-# Morning path: Approve draft + one LLM briefing (ranking heuristic).
-export MVP_MODE="${_caller_mvp_mode:-draft}"
-export RANK_MODE="${_caller_rank_mode:-heuristic}"
+# Match mvp_pipeline.py (.lower()) so AUTONOMOUS selects the same branch.
+MVP_MODE="$(printf '%s' "${_caller_mvp_mode:-draft}" | tr '[:upper:]' '[:lower:]')"
+export MVP_MODE
 export BRIEFING_MODE="${_caller_briefing_mode:-llm}"
+if [ "$MVP_MODE" = "autonomous" ]; then
+  # Wave 1: no Approve gates, no Instagram live.
+  export AUTO_PUBLISH="${_caller_auto_publish:-false}"
+  export EDITORIAL_LLM_REVIEWER="${_caller_editorial_llm:-1}"
+  export RANK_MODE="${_caller_rank_mode:-${RANK_MODE:-llm}}"
+else
+  export RANK_MODE="${_caller_rank_mode:-heuristic}"
+fi
 # Prefer Discord when configured; otherwise factory falls back.
 if [ "$_caller_notify_from_cli" = 1 ]; then
   export NOTIFY_CHANNEL="$_caller_notify_channel"

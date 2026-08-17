@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Any
+from typing import Any, Literal
 
 FIELD_ORDER = (
     "headline",
@@ -14,12 +14,23 @@ FIELD_ORDER = (
     "one_liner",
 )
 
+LanguageVerdict = Literal["pass", "warn", "hard_fail"]
+
 _WS_RE = re.compile(r"\s+")
 _HANGUL_RE = re.compile(r"[\uac00-\ud7a3]")
 _HIRAGANA_RE = re.compile(r"[\u3040-\u309f]")
 _KATAKANA_RE = re.compile(r"[\u30a0-\u30ff]")
 _HAN_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 _LATIN_RE = re.compile(r"[A-Za-z]")
+_URL_RE = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
+_CN_PUNCT = set("。！？、《》【】""''：；")  # noqa: RUF001
+_SIMPLIFIED_HINT = set("这们为国会时经发现说对过还个将没")
+# Match particles/endings only at word or sentence boundaries (not bare syllables inside words).
+_KO_PARTICLE = re.compile(
+    r"(?:은|는|이|가|을|를|에|에서|으로|과|와|습니다|입니다|였습니다|했습니다|것입니다|"
+    r"다\.|요\.|니다|하는|했다|된다|했다\.|습니다\.)"
+    r"(?=\s|$|[.。!?？,，、\"'」』）)\]】])"
+)
 
 
 def _env(name: str, default: str = "") -> str:
@@ -125,6 +136,8 @@ def validate_story_fields(story: dict[str, Any]) -> list[str]:
             seen[dedupe_key] = key
 
     issues.extend(_language_issues(norm))
+    if target_language() == "ko":
+        issues.extend(language_hard_fail_issues(story))
     if norm["one_liner"] and len(norm["one_liner"]) < 8:
         issues.append("one_liner:too_short")
     if norm["headline"] and norm["headline"].endswith(("。", "，")):
@@ -136,6 +149,103 @@ def issues_summary(issues: list[str]) -> str:
     if not issues:
         return "- none"
     return "\n".join(f"- {item}" for item in issues)
+
+
+def _strip_urls_for_stats(text: str) -> str:
+    return _URL_RE.sub(" ", text)
+
+
+def assess_korean_text(text: str) -> tuple[LanguageVerdict, list[str]]:
+    """Deterministic pass/warn/hard_fail for Korean target output."""
+    cleaned = _normalize_text(text)
+    if not cleaned:
+        return "pass", []
+
+    signals: list[str] = []
+    sample = _strip_urls_for_stats(cleaned)
+    stats = _char_stats(sample)
+
+    if any(ch in _CN_PUNCT for ch in cleaned):
+        signals.append("chinese_punctuation")
+
+    han_chars = [ch for ch in sample if _HAN_RE.fullmatch(ch)]
+    hangul_count = sum(1 for ch in sample if _HANGUL_RE.fullmatch(ch))
+    han_count = len(han_chars)
+    if han_chars:
+        simplified = sum(1 for ch in han_chars if ch in _SIMPLIFIED_HINT)
+        if simplified >= 2:
+            signals.append("simplified_chinese")
+        elif simplified >= 1 and hangul_count < 4:
+            signals.append("simplified_chinese")
+
+    has_ko_signal = bool(_KO_PARTICLE.search(sample)) or hangul_count >= 6
+
+    if hangul_count == 0 and han_count >= 4:
+        return "hard_fail", signals + ["no_hangul_han_dominant"]
+
+    if stats["han_ratio"] > 0.35 and stats["hangul_ratio"] < 0.25:
+        return "hard_fail", signals + ["han_dominant_low_hangul"]
+
+    if stats["hangul_ratio"] < 0.20 and han_count >= 3 and not has_ko_signal:
+        return "hard_fail", signals + ["likely_non_korean"]
+
+    if "chinese_punctuation" in signals and stats["hangul_ratio"] < 0.40:
+        return "hard_fail", signals + ["chinese_punctuation_low_hangul"]
+
+    if stats["han_ratio"] > 0.20:
+        if hangul_count >= 8 and has_ko_signal:
+            return "warn", signals + ["han_in_proper_noun"]
+        if stats["hangul_ratio"] < 0.35:
+            return "hard_fail", signals + ["han_dominant"]
+
+    if stats["hangul_ratio"] < 0.45:
+        if hangul_count >= 4 and has_ko_signal and han_count <= 2:
+            return "warn", signals + ["low_hangul_ratio"]
+        if han_count >= 2 and not has_ko_signal:
+            return "hard_fail", signals + ["low_hangul_non_korean"]
+        if stats["hangul_ratio"] < 0.30:
+            return "warn", signals + ["low_hangul_ratio"]
+
+    return "pass", signals
+
+
+def assess_story_language(story: dict[str, Any]) -> dict[str, Any]:
+    if target_language() != "ko":
+        return {"overall": "pass", "fields": {}}
+    fields: dict[str, Any] = {}
+    overall: LanguageVerdict = "pass"
+    for key in FIELD_ORDER:
+        text = _normalize_text(story.get(key))
+        verdict, signals = assess_korean_text(text)
+        fields[key] = {"verdict": verdict, "signals": signals}
+        if verdict == "hard_fail":
+            overall = "hard_fail"
+        elif verdict == "warn" and overall == "pass":
+            overall = "warn"
+
+    headline_v = fields.get("headline", {}).get("verdict")
+    body_keys = ("what_happened", "why_important", "watch_next", "one_liner")
+    if headline_v == "pass":
+        for key in body_keys:
+            if fields.get(key, {}).get("verdict") == "hard_fail":
+                overall = "hard_fail"
+                fields[key]["signals"] = list(fields[key].get("signals") or []) + [
+                    "mixed_ko_headline_non_ko_body"
+                ]
+                break
+    return {"overall": overall, "fields": fields}
+
+
+def language_hard_fail_issues(story: dict[str, Any]) -> list[str]:
+    if target_language() != "ko":
+        return []
+    assessment = assess_story_language(story)
+    issues: list[str] = []
+    for key, meta in (assessment.get("fields") or {}).items():
+        if meta.get("verdict") == "hard_fail":
+            sig = ",".join((meta.get("signals") or [])[:4]) or "unknown"
+            issues.append(f"{key}:language:hard_fail:{sig}")
+    return sorted(set(issues))
 
 
 def _language_issues(fields: dict[str, str]) -> list[str]:

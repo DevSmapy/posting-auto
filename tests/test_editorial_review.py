@@ -66,6 +66,24 @@ class QualityGateTest(unittest.TestCase):
 
 
 class ReviewerFixtureTest(unittest.TestCase):
+    def test_llm_failure_fails_closed(self) -> None:
+        story = _good_story(1)
+        with patch(
+            "editorial.reviewer._llm_review",
+            side_effect=RuntimeError("ollama down"),
+        ):
+            review = review_story(story, use_llm=True)
+        self.assertEqual(review.get("decision"), "reject")
+        self.assertIn("llm_error", review)
+
+    def test_llm_invalid_response_fails_closed(self) -> None:
+        story = _good_story(1)
+        with patch("editorial.reviewer._llm_review", return_value={}):
+            review = review_story(story, use_llm=True)
+        self.assertEqual(review.get("decision"), "reject")
+        self.assertEqual(review.get("reviewer"), "ollama_invalid")
+        self.assertIn("llm_invalid_response", review.get("risk_flags") or [])
+
     def test_fixtures_match_expected_decision(self) -> None:
         self.assertTrue(FIXTURES.is_dir(), FIXTURES)
         for path in sorted(FIXTURES.glob("*.json")):
@@ -95,6 +113,42 @@ class EditorLoopTest(unittest.TestCase):
         self.assertEqual(decision["decision"], "reject")
         self.assertIn("minimum_story_count", decision["reason"])
 
+    def test_editor_preserves_original_indices_with_non_dict(self) -> None:
+        stories = [
+            "not-a-story",
+            _good_story(1),
+            _good_story(2),
+            _good_story(3),
+        ]
+        with patch.dict(os.environ, {"QUALITY_MINIMUM_STORY_COUNT": "2"}, clear=False):
+            decision = editor_decide(
+                briefing={"stories": stories},
+                validation={
+                    "ok": False,
+                    "hard_fail_indices": [1],
+                    "story_results": [
+                        {"index": 1, "issues": ["heuristic_fallback"]},
+                    ],
+                },
+                review={
+                    "overall": "pass",
+                    "stories": [
+                        {"index": 0, "decision": "reject", "risk_flags": ["invalid_story"]},
+                        {"index": 1, "decision": "pass"},
+                        {"index": 2, "decision": "pass"},
+                        {"index": 3, "decision": "pass"},
+                    ],
+                },
+            )
+        self.assertEqual(decision["decision"], "publish")
+        self.assertEqual(decision["excluded_story_ids"], [0, 1])
+        self.assertEqual(decision["story_count"], 2)
+        remaining = decision["briefing"]["stories"]
+        self.assertEqual(remaining[0]["headline"], _good_story(2)["headline"])
+        by_index = {r["index"]: r for r in decision["excluded_reasons"]}
+        self.assertEqual(by_index[1]["details"], ["heuristic_fallback"])
+        self.assertEqual(by_index[0]["details"], ["invalid_story"])
+
     def test_loop_stops_without_rewrite(self) -> None:
         bad = {
             "stories": [
@@ -117,12 +171,18 @@ class EditorLoopTest(unittest.TestCase):
     def test_first_pass_success_reviews_once(self) -> None:
         briefing = {"stories": [_good_story(i) for i in range(1, 4)]}
         with patch.dict(os.environ, {"QUALITY_MINIMUM_STORY_COUNT": "3"}, clear=False):
-            with patch(
-                "editorial.loop.review_briefing",
-                wraps=__import__(
-                    "editorial.reviewer", fromlist=["review_briefing"]
-                ).review_briefing,
-            ) as mocked:
+            with (
+                patch(
+                    "editorial.reviewer._llm_review",
+                    return_value={"decision": "pass", "risk_flags": []},
+                ),
+                patch(
+                    "editorial.loop.review_briefing",
+                    wraps=__import__(
+                        "editorial.reviewer", fromlist=["review_briefing"]
+                    ).review_briefing,
+                ) as mocked,
+            ):
                 result = run_editorial_loop(
                     briefing,
                     rewrite_story=None,
