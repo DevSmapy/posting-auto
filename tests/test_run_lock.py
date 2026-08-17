@@ -113,6 +113,18 @@ class RunLockTest(unittest.TestCase):
             self.assertTrue(ok, reason)
             lock.release()
 
+            naive = {
+                "pid": os.getpid(),
+                "started_at": "2026-08-17T06:00:00",
+                "run_id": "old",
+            }
+            path.write_text(json.dumps(naive), encoding="utf-8")
+            os.utime(path, (past, past))
+            lock = RunLock(path, run_id="new-naive")
+            ok, reason = lock.acquire()
+            self.assertTrue(ok, reason)
+            lock.release()
+
     def test_empty_lock_reclaimed_after_grace(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "autonomous.lock"

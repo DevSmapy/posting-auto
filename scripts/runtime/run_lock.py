@@ -93,7 +93,7 @@ class RunLock:
                         started_dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
                         age = (datetime.now(timezone.utc) - started_dt).total_seconds()
                         stale = age > _lock_timeout_sec()
-                    except ValueError:
+                    except (TypeError, ValueError):
                         stale = True
                 if _pid_alive(pid) and not stale:
                     return (
