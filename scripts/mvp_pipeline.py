@@ -1557,25 +1557,25 @@ def run_publish(
         else:
             print(f"==> Reuse Approve-preview cards ({len(paths)} png)")
 
-        guard_result = _eval_guard(
-            paths,
-            live=live_publish and not publish_cfg.package_only,
+    guard_result = _eval_guard(
+        paths,
+        live=live_publish and not publish_cfg.package_only,
+    )
+    if not guard_result.get("ok") and live_publish:
+        blockers = guard_result.get("blockers") or []
+        _notify_stage(
+            notifier,
+            "ACTION REQUIRED\nPublish guard failed.\n"
+            + "\n".join(f"- {b}" for b in blockers[:12]),
         )
+        print("Done (publish blocked by guard).")
+        return {
+            "ok": False,
+            "reason": "publish_guard",
+            "blockers": blockers,
+        }
 
-        if not guard_result.get("ok") and live_publish:
-            blockers = guard_result.get("blockers") or []
-            _notify_stage(
-                notifier,
-                "ACTION REQUIRED\nPublish guard failed.\n"
-                + "\n".join(f"- {b}" for b in blockers[:12]),
-            )
-            print("Done (publish blocked by guard).")
-            return {
-                "ok": False,
-                "reason": "publish_guard",
-                "blockers": blockers,
-            }
-
+    if publish_cfg.publish_cards:
         if ig_media_id:
             print(f"==> Skip Instagram — already published media_id={ig_media_id}")
         elif not publish_cfg.package_only:
@@ -1620,11 +1620,15 @@ def run_publish(
                     print("Done (publish blocked: pipeline error).")
                     return {"ok": False, "reason": "pipeline_error", "error": str(exc)}
                 _notify_stage(notifier, msg)
-    else:
-        _eval_guard(
-            paths,
-            live=live_publish and not publish_cfg.package_only,
+
+    if live_publish and not publish_cfg.package_only and not ig_media_id:
+        _notify_stage(
+            notifier,
+            "ACTION REQUIRED\nLive publish produced no Instagram media_id.\n"
+            "Publish blocked.",
         )
+        print("Done (publish blocked: missing ig_media_id).")
+        return {"ok": False, "reason": "missing_ig_media_id"}
 
     if ig_media_id and persist_seen in {"after_export", "after_ig"}:
         try:

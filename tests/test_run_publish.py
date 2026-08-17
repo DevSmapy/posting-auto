@@ -373,6 +373,162 @@ class RunPublishTest(unittest.TestCase):
         self.assertEqual(outcome.get("reason"), "publish_guard")
         self.assertEqual(len(store.calls), 0)
 
+    def test_live_reviewer_disabled_does_not_call_pipeline(self) -> None:
+        notifier = _FakeNotifier()
+        store = _FakeStore()
+        now = datetime(2026, 7, 28, tzinfo=timezone.utc)
+        cfg = PublishConfig(
+            publish_cards=True,
+            ig_user_id="ig",
+            meta_access_token="tok",
+            r2_endpoint="https://r2",
+            r2_access_key_id="ak",
+            r2_secret_access_key="sk",
+            r2_bucket="b",
+            r2_public_base_url="https://cdn",
+        )
+        decision = {"decision": "publish", "story_count": 3}
+        preflight = {"ok": True, "checks": []}
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            png1 = run_dir / "a.png"
+            png2 = run_dir / "b.png"
+            png1.write_bytes(b"x")
+            png2.write_bytes(b"y")
+            with (
+                patch("mvp_pipeline.assemble_blog_markdown", return_value="# md"),
+                patch("mvp_pipeline.assemble_blog_html", return_value="<p>x</p>"),
+                patch("mvp_pipeline.PublishConfig.from_env", return_value=cfg),
+                patch("mvp_pipeline.PublishCardsPipeline") as pipe_cls,
+                patch.dict(
+                    "os.environ",
+                    {"AUTO_PUBLISH": "true", "EDITORIAL_LLM_REVIEWER": "0"},
+                    clear=False,
+                ),
+            ):
+                pipe = MagicMock()
+                pipe_cls.return_value = pipe
+                outcome = run_publish(
+                    _briefing(),
+                    _picked(),
+                    now,
+                    run_dir,
+                    store,  # type: ignore[arg-type]
+                    notifier,
+                    card_png_paths=[png1, png2],
+                    persist_seen="after_ig",
+                    live_publish=True,
+                    editorial_decision=decision,
+                    preflight=preflight,
+                )
+                pipe.run.assert_not_called()
+        self.assertFalse(outcome.get("ok"))
+        self.assertEqual(outcome.get("reason"), "publish_guard")
+        self.assertEqual(len(store.calls), 0)
+
+    def test_live_without_ig_media_id_fails(self) -> None:
+        notifier = _FakeNotifier()
+        store = _FakeStore()
+        now = datetime(2026, 7, 28, tzinfo=timezone.utc)
+        cfg = PublishConfig(
+            publish_cards=True,
+            ig_user_id="ig",
+            meta_access_token="tok",
+            r2_endpoint="https://r2",
+            r2_access_key_id="ak",
+            r2_secret_access_key="sk",
+            r2_bucket="b",
+            r2_public_base_url="https://cdn",
+        )
+        decision = {"decision": "publish", "story_count": 3}
+        preflight = {"ok": True, "checks": []}
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            png1 = run_dir / "a.png"
+            png2 = run_dir / "b.png"
+            png1.write_bytes(b"x")
+            png2.write_bytes(b"y")
+            with (
+                patch("mvp_pipeline.assemble_blog_markdown", return_value="# md"),
+                patch("mvp_pipeline.assemble_blog_html", return_value="<p>x</p>"),
+                patch("mvp_pipeline.PublishConfig.from_env", return_value=cfg),
+                patch("mvp_pipeline.PublishCardsPipeline") as pipe_cls,
+                patch.dict("os.environ", {"EDITORIAL_LLM_REVIEWER": "1"}, clear=False),
+            ):
+                pipe = MagicMock()
+                pipe.run.return_value = PublishCardsResult(
+                    attempted=True,
+                    image_urls=["https://cdn/a.png"],
+                    ig_media_id=None,
+                    skipped_reason=None,
+                )
+                pipe_cls.return_value = pipe
+                outcome = run_publish(
+                    _briefing(),
+                    _picked(),
+                    now,
+                    run_dir,
+                    store,  # type: ignore[arg-type]
+                    notifier,
+                    card_png_paths=[png1, png2],
+                    persist_seen="after_ig",
+                    live_publish=True,
+                    editorial_decision=decision,
+                    preflight=preflight,
+                )
+                pipe.run.assert_called_once()
+        self.assertFalse(outcome.get("ok"))
+        self.assertEqual(outcome.get("reason"), "missing_ig_media_id")
+        self.assertEqual(len(store.calls), 0)
+        self.assertTrue(any("ACTION REQUIRED" in t for t in notifier.texts))
+
+    def test_live_package_only_exports_without_media(self) -> None:
+        notifier = _FakeNotifier()
+        store = _FakeStore()
+        now = datetime(2026, 7, 28, tzinfo=timezone.utc)
+        cfg = PublishConfig(
+            publish_cards=True,
+            publish_mode="package",
+            ig_user_id="ig",
+            meta_access_token="tok",
+            r2_endpoint="https://r2",
+            r2_access_key_id="ak",
+            r2_secret_access_key="sk",
+            r2_bucket="b",
+            r2_public_base_url="https://cdn",
+        )
+        decision = {"decision": "publish", "story_count": 3}
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            png1 = run_dir / "a.png"
+            png2 = run_dir / "b.png"
+            png1.write_bytes(b"x")
+            png2.write_bytes(b"y")
+            with (
+                patch("mvp_pipeline.assemble_blog_markdown", return_value="# md"),
+                patch("mvp_pipeline.assemble_blog_html", return_value="<p>x</p>"),
+                patch("mvp_pipeline.PublishConfig.from_env", return_value=cfg),
+                patch("mvp_pipeline.PublishCardsPipeline") as pipe_cls,
+            ):
+                pipe = MagicMock()
+                pipe_cls.return_value = pipe
+                outcome = run_publish(
+                    _briefing(),
+                    _picked(),
+                    now,
+                    run_dir,
+                    store,  # type: ignore[arg-type]
+                    notifier,
+                    card_png_paths=[png1, png2],
+                    persist_seen="never",
+                    live_publish=True,
+                    editorial_decision=decision,
+                )
+                pipe.run.assert_not_called()
+        self.assertTrue(outcome.get("ok"))
+        self.assertEqual(outcome.get("reason"), "exported")
+        self.assertEqual(len(store.calls), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
