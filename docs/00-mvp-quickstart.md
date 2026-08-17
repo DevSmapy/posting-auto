@@ -253,8 +253,10 @@ uv sync
 uv run streamlit run apps/ops_console/app.py
 ```
 
-`config/ops.json`의 `schedule.run_at` / `notify_at` / `feeds` / `cards.bundle_id`를 저장하면 파이프라인·cron이 읽습니다.  
-`NOTIFY_SEND_AT`·`CARD_BUNDLE_ID`·`GNEWS_*` env가 있으면 해당 항목만 env가 우선합니다.
+`config/ops.json`의 `timezone` / `schedule.run_at` / `weekdays` / `feeds` / `cards.bundle_id`를 저장하면 파이프라인이 읽습니다.  
+crontab 시각은 ops.json을 자동으로 바꾸지 않습니다. 저장한 timezone·`run_at`·weekdays와 crontab을 맞춘 뒤, `cron_run_draft.sh`가 **5분 창**으로 게이트합니다.  
+`notify_at`은 draft Approve 경로(`NOTIFY_SEND_AT` env가 있으면 env 우선)용입니다. Wave 1 autonomous 알림은 실행 완료 시점입니다.  
+`CARD_BUNDLE_ID`·`GNEWS_*` env가 있으면 해당 항목만 env가 우선합니다.
 
 ```cron
 0 6 * * 1-5 "/ABSOLUTE/PATH/TO/REPO/scripts/cron_run_draft.sh" >>"/ABSOLUTE/PATH/TO/REPO/output/cron.log" 2>&1
@@ -264,17 +266,27 @@ uv run streamlit run apps/ops_console/app.py
 
 `./scripts/run_draft.sh` 수명주기:
 
+**draft** (기본, 사람 승인):
+
 1. `ollama` **start** → 모델 warm (기본 600초; 실패해도 draft 계속)
 2. 랭킹·스토리 건당 LLM (① 내용 게이트 동안 Rerank/Rewrite 시 **ollama 유지**)
 3. 내용 **Approve** 후 **ollama stop**
 4. `postgres` (+ `browserless` if cards) **start** → 카드 렌더
 5. 렌더 종료 후 aux **stop** → publish 직전 aux **재기동** → publish → 종료 시 stop
 
+**autonomous** (Wave 1 cron):
+
+1. `ollama` **start** → 모델 warm
+2. editorial validate/review/decide (**Approve 게이트 없음**)
+3. `AUTO_PUBLISH=false`이면 `briefing.md`·카드 패키지만 생성, **인스타 실게시 없음**
+4. 종료 시 컨테이너 stop. 알림은 실행 완료 시점 (`notify_at` 미사용)
+
 | `MVP_MODE` | 동작 |
 |------------|------|
 | `dry_run` | 수집·LLM만, JSON 저장 |
 | `draft` | 내용 게이트 → 렌더 게이트 Approve 후 `briefing.md` |
 | `publish` | 채널 Approve **우회**, 바로 `briefing.md` |
+| `autonomous` | 승인 게이트 없음. Wave 1은 패키지만 생성, 인스타 실게시 없음 |
 
 CPU가 높거나 스토리 타임아웃이면 `.env`에서:
 

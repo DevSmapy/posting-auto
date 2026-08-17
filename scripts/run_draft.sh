@@ -42,7 +42,9 @@ if [[ -f .env ]]; then
   set +a
 fi
 
-export MVP_MODE="${_caller_mvp_mode:-draft}"
+# Match mvp_pipeline.py (.lower()) so AUTONOMOUS selects the same branch.
+MVP_MODE="$(printf '%s' "${_caller_mvp_mode:-draft}" | tr '[:upper:]' '[:lower:]')"
+export MVP_MODE
 export BRIEFING_MODE="${_caller_briefing_mode:-llm}"
 if [ "$MVP_MODE" = "autonomous" ]; then
   # Wave 1: no Approve gates, no Instagram live.

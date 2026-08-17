@@ -177,6 +177,23 @@ def ensure_ops_config(path: Path | None = None) -> dict[str, Any]:
     return data
 
 
+def crontab_expr(schedule: dict[str, Any] | None = None) -> str:
+    """Minute/hour/dow for a machine-local crontab line.
+
+    Cron Sunday is 0; ISO weekday 7 maps to 0. The Python gate still uses
+    ops.json timezone independently — regenerate crontab when run_at changes.
+    """
+    sched = schedule or {}
+    hour, minute = _parse_hhmm(str(sched.get("run_at") or "06:00"), field="run_at")
+    weekdays = sched.get("weekdays") or [1, 2, 3, 4, 5]
+    dows: list[str] = []
+    for d in weekdays:
+        n = int(d)
+        dows.append("0" if n == 7 else str(n))
+    dow = "1-5" if dows == ["1", "2", "3", "4", "5"] else ",".join(dows)
+    return f"{minute} {hour} * * {dow}"
+
+
 def resolve_notify_at(ops: dict[str, Any] | None = None) -> str:
     """NOTIFY_SEND_AT env wins; else ops schedule.notify_at."""
     env_val = (os.getenv("NOTIFY_SEND_AT") or "").strip()

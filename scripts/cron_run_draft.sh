@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # cron용: 로그인 셸(.zshrc) 없이 docker/PATH 보장
-# Ops: config/ops.json 의 run_at/weekdays 와 맞을 때만 Wave 1 (autonomous) 실행.
+# Ops: config/ops.json timezone/run_at/weekdays 5분 창과 맞을 때만 Wave 1 실행.
+# crontab 시각은 이 스크립트가 바꾸지 않는다 — 스케줄 변경 시 crontab을 수동으로 맞춘다.
+# notify_at은 draft Approve 경로용. Wave 1 알림은 실행 완료 시점.
 # draft Approve 경로는 타지 않는다 (AUTO_PUBLISH=false, 인스타 실게시 없음).
 # crontab 예: 0 6 * * 1-5 "/ABS/scripts/cron_run_draft.sh" >>"/ABS/output/cron.log" 2>&1
 # macOS /etc/newsyslog.d/posting-auto.conf 예 (1MB, 압축본 5개 보관):
