@@ -1631,27 +1631,44 @@ def run_publish(
         return {"ok": False, "reason": "missing_ig_media_id"}
 
     if ig_media_id and persist_seen in {"after_export", "after_ig"}:
+        recorded = 0
+        record_error: Exception | None = None
         try:
-            store.record_published(
+            recorded = store.record_published(
                 picked_rows, tistory_post_id=export_ref, ig_media_id=ig_media_id
             )
-            if persist_seen == "after_ig":
-                print(f"==> seen_urls recorded after IG: media_id={ig_media_id}")
         except Exception as exc:  # noqa: BLE001
             print(f"   !! seen_urls record failed: {exc}; retrying after reopen")
             time.sleep(0.2)
             try:
                 store.reopen()
-                store.record_published(
+                recorded = store.record_published(
                     picked_rows, tistory_post_id=export_ref, ig_media_id=ig_media_id
                 )
             except Exception as exc2:  # noqa: BLE001
+                record_error = exc2
                 _notify_stage(
                     notifier,
                     "ACTION REQUIRED\n"
                     f"[seen_urls 부분실패] 인스타는 게시됨 media_id={ig_media_id}; "
                     f"첫 실패: {exc}; 재시도 실패: {exc2}",
                 )
+        if persist_seen == "after_ig" and (record_error is not None or recorded <= 0):
+            if record_error is None:
+                _notify_stage(
+                    notifier,
+                    "ACTION REQUIRED\n"
+                    f"[seen_urls 미기록] 인스타는 게시됨 media_id={ig_media_id}; "
+                    "picked rows were empty or record returned 0.",
+                )
+            print("Done (publish blocked: seen_urls unrecorded).")
+            return {
+                "ok": False,
+                "reason": "seen_urls_unrecorded",
+                "ig_media_id": ig_media_id,
+            }
+        if persist_seen == "after_ig" and recorded > 0:
+            print(f"==> seen_urls recorded after IG: media_id={ig_media_id}")
 
     mode_label = _generation_mode_label(generation_mode)
     caption = (
