@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -186,9 +187,30 @@ class MonitorStateTest(unittest.TestCase):
         set_run_dir(None)
 
     def test_emit_never_raises(self) -> None:
-        set_run_dir("/no/such/path/that/cannot/exist")
-        emit(stage="COLLECT")
-        set_run_dir(None)
+        with tempfile.TemporaryDirectory() as tmp:
+            blocker = Path(tmp) / "not-a-dir"
+            blocker.write_text("x", encoding="utf-8")
+            self.addCleanup(set_run_dir, None)
+            set_run_dir(blocker)
+            emit(stage="COLLECT")
+
+    def test_editor_snapshot_keeps_original_indexes(self) -> None:
+        from editorial.loop import _story_snapshot
+
+        rows = _story_snapshot(
+            {"stories": [{"headline": "keep-me"}, {"headline": "drop-me"}]},
+            {
+                "stories": [
+                    {"index": 0, "decision": "pass"},
+                    {"index": 1, "decision": "reject"},
+                ]
+            },
+            excluded_ids=[1],
+        )
+        self.assertEqual([row["index"] for row in rows], [0, 1])
+        self.assertEqual(rows[0]["headline"], "keep-me")
+        self.assertEqual(rows[1]["headline"], "drop-me")
+        self.assertEqual(rows[1]["status"], "reject")
 
 
 if __name__ == "__main__":

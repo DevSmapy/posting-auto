@@ -212,8 +212,8 @@ Option B — Textual TUI
 │                           │                                  │
 │ ● Network      healthy    │ ✓ Collect      43 articles      │
 │ ● Ollama       healthy    │ ✓ Filter       12 candidates    │
-│ ● PostgreSQL   healthy    │ ✓ Select        5 stories       │
-│ ● Renderer     healthy    │ ✓ Write         5 stories       │
+│ · PostgreSQL   unknown    │ ✓ Select        5 stories       │
+│ · Renderer     unknown    │ ✓ Write         5 stories       │
 │                           │ → Review        3 / 5            │
 │                           │ · Editor        pending          │
 │                           │ · Render        pending          │
@@ -249,20 +249,19 @@ Option B — Textual TUI
 
 다음 상태를 가능한 범위에서 표시한다.
 
+V1 활성 체크:
+
 ```text
 Network
 Ollama
-PostgreSQL
-Docker / required container
-Renderer
 ```
+
+V1에서는 해당 프로브가 없으므로 PostgreSQL, Docker / required container, Renderer는 표시하지 않거나 `unknown`으로 둔다. 프로브와 state 필드가 생기면 그때 추가한다.
 
 상태 예:
 
 ```text
 healthy
-starting
-degraded
 unavailable
 unknown
 ```
@@ -759,9 +758,7 @@ Terminal UI는 정보를 많이 보여주는 것이 목표가 아니다.
 다음 세 질문에 즉시 답할 수 있어야 한다.
 
 > 시스템은 정상인가?
-
 > 지금 무엇을 하고 있는가?
-
 > 내가 개입해야 하는가?
 
 모든 정보는 이 질문 중 하나에 기여해야 한다.
@@ -818,7 +815,7 @@ Ollama status unavailable
 → show UNKNOWN
 ```
 
-이지:
+반대로:
 
 ```text
 Dashboard crash
@@ -972,11 +969,8 @@ Terminal Operations Dashboard
 Dashboard는 다음 질문을 한 화면에서 답할 수 있어야 한다.
 
 > **지금 Posting Auto는 살아 있는가?**
-
 > **현재 무엇을 하고 있는가?**
-
 > **정상적으로 끝날 가능성이 높은가?**
-
 > **사람이 개입해야 하는 문제가 발생했는가?**
 
 이 네 가지를 명확하게 보여주는 것이 Terminal Dashboard V1의 성공 기준이다.

@@ -468,8 +468,9 @@ def ollama_chat(
             resp = requests.post(url, json=payload, timeout=timeout)
             resp.raise_for_status()
             content = resp.json()["message"]["content"]
+            parsed = extract_json(content)
             llm_end(ok=True)
-            return extract_json(content), content
+            return parsed, content
         except Exception as exc:  # noqa: BLE001
             last_err = exc
             time.sleep(1.5)
@@ -547,6 +548,7 @@ def rank_articles(
     now: datetime,
     run_dir: Path | None = None,
 ) -> list[dict[str, Any]]:
+    emit(stage="RANK", event="rank started")
     pick = int(env("NEWS_PICK_COUNT", "5"))
     llm_limit = int(env("NEWS_LLM_CANDIDATES", "10"))
     min_score = int(env("HEURISTIC_MIN_SCORE", "8"))
@@ -1166,6 +1168,7 @@ def build_briefing(
     now: datetime,
     run_dir: Path | None = None,
 ) -> tuple[dict[str, Any], str]:
+    emit(stage="WRITE", event="write started")
     if env("BRIEFING_MODE", "llm").lower() == "heuristic":
         print("   briefing mode=heuristic")
         return build_briefing_heuristic(articles, now), "heuristic"
@@ -1523,6 +1526,7 @@ def run_publish(
     Returns ``{"ok": bool, "reason": str, ...}`` so autonomous can suppress a
     false "completed" message when publish is blocked.
     """
+    emit(stage="PUBLISH", event="publish started")
     picked_rows = _picked_for_briefing(picked, briefing)
     print("==> Write briefing markdown (manual paste)")
     md = assemble_blog_markdown(briefing)
@@ -2599,25 +2603,24 @@ def main() -> int:
         event=f"run started mode={mode}",
         llm={"model": env("OLLAMA_MODEL", ""), "calls": 0, "failures": 0},
     )
-
-    ensure_runtime_before_llm(mode)
-
-    notifier = get_notifier()
-    channel = resolve_channel()
-    store = SeenUrlsStore()
     result = 1
-    print(
-        f"==> mode={mode} date={now.date()} tz={TZ} "
-        f"seen_urls={store.backend} notify={channel} "
-        f"human_gates={human_gates_enabled()} auto_publish={auto_publish_enabled()}"
-    )
-    print(
-        f"==> ollama threads={env('OLLAMA_NUM_THREAD', '4')} "
-        f"rank_mode={env('RANK_MODE', 'llm')} "
-        f"heuristic_min={env('HEURISTIC_MIN_SCORE', '8')} "
-        f"llm_candidates={env('NEWS_LLM_CANDIDATES', '10')}"
-    )
+    store = None
     try:
+        ensure_runtime_before_llm(mode)
+        notifier = get_notifier()
+        channel = resolve_channel()
+        store = SeenUrlsStore()
+        print(
+            f"==> mode={mode} date={now.date()} tz={TZ} "
+            f"seen_urls={store.backend} notify={channel} "
+            f"human_gates={human_gates_enabled()} auto_publish={auto_publish_enabled()}"
+        )
+        print(
+            f"==> ollama threads={env('OLLAMA_NUM_THREAD', '4')} "
+            f"rank_mode={env('RANK_MODE', 'llm')} "
+            f"heuristic_min={env('HEURISTIC_MIN_SCORE', '8')} "
+            f"llm_candidates={env('NEWS_LLM_CANDIDATES', '10')}"
+        )
         print("==> fetching Google News RSS")
         candidates = fetch_candidates(now)
         candidates = store.filter_new(candidates)
@@ -2752,9 +2755,11 @@ def main() -> int:
             ok=result == 0,
             stage="COMPLETE" if result == 0 else "FAILED",
             llm={"in_flight": False, "role": None, "started_at": None},
+            event=f"run ended ok={result == 0} stage={'COMPLETE' if result == 0 else 'FAILED'}",
         )
         set_run_dir(None)
-        store.close()
+        if store is not None:
+            store.close()
         release_ollama_after_llm()
 
 

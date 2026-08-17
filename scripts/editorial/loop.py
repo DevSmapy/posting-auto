@@ -16,7 +16,12 @@ from monitor import emit
 RewriteFn = Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]
 
 
-def _story_snapshot(briefing: dict[str, Any], review: dict[str, Any]) -> list[dict[str, Any]]:
+def _story_snapshot(
+    briefing: dict[str, Any],
+    review: dict[str, Any],
+    *,
+    excluded_ids: list[Any] | None = None,
+) -> list[dict[str, Any]]:
     review_map: dict[int, str] = {}
     for item in review.get("stories") or []:
         if isinstance(item, dict) and "index" in item:
@@ -24,10 +29,19 @@ def _story_snapshot(briefing: dict[str, Any], review: dict[str, Any]) -> list[di
                 review_map[int(item["index"])] = str(item.get("decision") or "")
             except (TypeError, ValueError):
                 continue
+    excluded: set[int] = set()
+    for idx in excluded_ids or []:
+        try:
+            excluded.add(int(idx))
+        except (TypeError, ValueError):
+            continue
     rows: list[dict[str, Any]] = []
     for i, story in enumerate(briefing.get("stories") or []):
         headline = str(story.get("headline") or "") if isinstance(story, dict) else ""
-        rows.append({"index": i, "headline": headline, "status": review_map.get(i, "")})
+        status = review_map.get(i, "")
+        if i in excluded and status not in {"reject", "revise"}:
+            status = status or "excluded"
+        rows.append({"index": i, "headline": headline, "status": status})
     return rows
 
 
@@ -125,7 +139,11 @@ def run_editorial_loop(
         stage="EDITOR",
         review_overall=review.get("overall"),
         revision_count=revision_count,
-        stories=_story_snapshot(out_briefing, review),
+        stories=_story_snapshot(
+            current,
+            review,
+            excluded_ids=decision.get("excluded_story_ids"),
+        ),
         event=f"editor {decision.get('decision')}",
     )
     result = {
