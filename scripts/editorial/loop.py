@@ -11,8 +11,24 @@ from editorial.editor import editor_decide
 from editorial.report import write_editorial_report
 from editorial.reviewer import review_briefing
 from editorial.validator import quality_gate_briefing
+from monitor import emit
 
 RewriteFn = Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]
+
+
+def _story_snapshot(briefing: dict[str, Any], review: dict[str, Any]) -> list[dict[str, Any]]:
+    review_map: dict[int, str] = {}
+    for item in review.get("stories") or []:
+        if isinstance(item, dict) and "index" in item:
+            try:
+                review_map[int(item["index"])] = str(item.get("decision") or "")
+            except (TypeError, ValueError):
+                continue
+    rows: list[dict[str, Any]] = []
+    for i, story in enumerate(briefing.get("stories") or []):
+        headline = str(story.get("headline") or "") if isinstance(story, dict) else ""
+        rows.append({"index": i, "headline": headline, "status": review_map.get(i, "")})
+    return rows
 
 
 def run_editorial_loop(
@@ -29,6 +45,7 @@ def run_editorial_loop(
     max_rev = max_revision_count()
     validation: dict[str, Any] = {"ok": True, "hard_fail_indices": [], "story_results": []}
     review: dict[str, Any] = {"overall": "pass", "stories": []}
+    emit(run_dir=run_dir, stage="REVIEW", event="review started")
 
     while True:
         validation = quality_gate_briefing(current)
@@ -40,6 +57,14 @@ def run_editorial_loop(
                 "review_overall": review.get("overall"),
                 "hard_fail_indices": list(validation.get("hard_fail_indices") or []),
             }
+        )
+        emit(
+            run_dir=run_dir,
+            stage="REVIEW",
+            review_overall=review.get("overall"),
+            revision_count=revision_count,
+            stories=_story_snapshot(current, review),
+            event=f"review overall={review.get('overall')} revision={revision_count}",
         )
 
         ok = bool(validation.get("ok")) and review.get("overall") == "pass"
@@ -63,6 +88,14 @@ def run_editorial_loop(
         if not fail_idx:
             break
 
+        emit(
+            run_dir=run_dir,
+            stage="REVISE",
+            review_overall=review.get("overall"),
+            revision_count=revision_count,
+            stories=_story_snapshot(current, review),
+            event=f"revision requested stories={sorted(fail_idx)}",
+        )
         new_stories: list[Any] = []
         for i, story in enumerate(stories):
             if i not in fail_idx or not isinstance(story, dict):
@@ -87,6 +120,14 @@ def run_editorial_loop(
         revision_count=revision_count,
     )
     out_briefing = decision.pop("briefing", current)
+    emit(
+        run_dir=run_dir,
+        stage="EDITOR",
+        review_overall=review.get("overall"),
+        revision_count=revision_count,
+        stories=_story_snapshot(out_briefing, review),
+        event=f"editor {decision.get('decision')}",
+    )
     result = {
         "validation": validation,
         "review": review,
