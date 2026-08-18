@@ -81,6 +81,7 @@ from publish.guard import (  # noqa: E402
 )
 from runtime.preflight import run_preflight  # noqa: E402
 from runtime.run_lock import autonomous_run_lock  # noqa: E402
+from monitor import emit, llm_begin, llm_end, set_run_dir  # noqa: E402
 
 TZ = ZoneInfo(os.getenv("NEWS_TIMEZONE", "Asia/Seoul"))
 PROMPTS = ROOT / "prompts"
@@ -460,16 +461,20 @@ def ollama_chat(
     keep_alive = env("OLLAMA_KEEP_ALIVE", "30m")
     if keep_alive:
         payload["keep_alive"] = keep_alive
+    llm_begin("llm")
     last_err: Exception | None = None
     for _attempt in range(2):
         try:
             resp = requests.post(url, json=payload, timeout=timeout)
             resp.raise_for_status()
             content = resp.json()["message"]["content"]
-            return extract_json(content), content
+            parsed = extract_json(content)
+            llm_end(ok=True)
+            return parsed, content
         except Exception as exc:  # noqa: BLE001
             last_err = exc
             time.sleep(1.5)
+    llm_end(ok=False)
     raise RuntimeError(f"Ollama failed after retry: {last_err}")
 
 
@@ -543,6 +548,7 @@ def rank_articles(
     now: datetime,
     run_dir: Path | None = None,
 ) -> list[dict[str, Any]]:
+    emit(stage="RANK", event="rank started")
     pick = int(env("NEWS_PICK_COUNT", "5"))
     llm_limit = int(env("NEWS_LLM_CANDIDATES", "10"))
     min_score = int(env("HEURISTIC_MIN_SCORE", "8"))
@@ -1162,6 +1168,7 @@ def build_briefing(
     now: datetime,
     run_dir: Path | None = None,
 ) -> tuple[dict[str, Any], str]:
+    emit(stage="WRITE", event="write started")
     if env("BRIEFING_MODE", "llm").lower() == "heuristic":
         print("   briefing mode=heuristic")
         return build_briefing_heuristic(articles, now), "heuristic"
@@ -1519,6 +1526,7 @@ def run_publish(
     Returns ``{"ok": bool, "reason": str, ...}`` so autonomous can suppress a
     false "completed" message when publish is blocked.
     """
+    emit(stage="PUBLISH", event="publish started")
     picked_rows = _picked_for_briefing(picked, briefing)
     print("==> Write briefing markdown (manual paste)")
     md = assemble_blog_markdown(briefing)
@@ -2586,24 +2594,33 @@ def main() -> int:
     OUTPUT.mkdir(parents=True, exist_ok=True)
     run_dir = OUTPUT / now.strftime("%Y%m%d_%H%M%S")
     run_dir.mkdir(parents=True, exist_ok=True)
-
-    ensure_runtime_before_llm(mode)
-
-    notifier = get_notifier()
-    channel = resolve_channel()
-    store = SeenUrlsStore()
-    print(
-        f"==> mode={mode} date={now.date()} tz={TZ} "
-        f"seen_urls={store.backend} notify={channel} "
-        f"human_gates={human_gates_enabled()} auto_publish={auto_publish_enabled()}"
+    set_run_dir(run_dir)
+    emit(
+        run_id=run_dir.name,
+        mode=mode,
+        stage="COLLECT",
+        started_at=datetime.now(timezone.utc).isoformat(),
+        event=f"run started mode={mode}",
+        llm={"model": env("OLLAMA_MODEL", ""), "calls": 0, "failures": 0},
     )
-    print(
-        f"==> ollama threads={env('OLLAMA_NUM_THREAD', '4')} "
-        f"rank_mode={env('RANK_MODE', 'llm')} "
-        f"heuristic_min={env('HEURISTIC_MIN_SCORE', '8')} "
-        f"llm_candidates={env('NEWS_LLM_CANDIDATES', '10')}"
-    )
+    result = 1
+    store = None
     try:
+        ensure_runtime_before_llm(mode)
+        notifier = get_notifier()
+        channel = resolve_channel()
+        store = SeenUrlsStore()
+        print(
+            f"==> mode={mode} date={now.date()} tz={TZ} "
+            f"seen_urls={store.backend} notify={channel} "
+            f"human_gates={human_gates_enabled()} auto_publish={auto_publish_enabled()}"
+        )
+        print(
+            f"==> ollama threads={env('OLLAMA_NUM_THREAD', '4')} "
+            f"rank_mode={env('RANK_MODE', 'llm')} "
+            f"heuristic_min={env('HEURISTIC_MIN_SCORE', '8')} "
+            f"llm_candidates={env('NEWS_LLM_CANDIDATES', '10')}"
+        )
         print("==> fetching Google News RSS")
         candidates = fetch_candidates(now)
         candidates = store.filter_new(candidates)
@@ -2620,10 +2637,11 @@ def main() -> int:
             print("No candidates in news window. Exit.")
             if mode in {"draft", "publish", "autonomous"}:
                 notifier.send_text(f"[경제브리핑] {now.date()} 창 내 후보 0건 — 스킵")
-            return 0
+            result = 0
+            return result
 
         if mode == "draft":
-            return run_draft_two_stage(
+            result = run_draft_two_stage(
                 candidates=candidates,
                 now=now,
                 run_dir=run_dir,
@@ -2631,15 +2649,17 @@ def main() -> int:
                 notifier=notifier,
                 channel=channel,
             )
+            return result
 
         if mode == "autonomous":
-            return run_autonomous(
+            result = run_autonomous(
                 candidates=candidates,
                 now=now,
                 run_dir=run_dir,
                 store=store,
                 notifier=notifier,
             )
+            return result
 
         briefing: dict[str, Any] | None = None
         generation_mode = "heuristic"
@@ -2658,7 +2678,8 @@ def main() -> int:
             )
             if not picked:
                 print("No articles after ranking. Exit.")
-                return 1
+                result = 1
+                return result
 
             print("==> Ollama briefing")
             briefing, generation_mode = build_briefing(picked, now, run_dir=run_dir)
@@ -2676,7 +2697,8 @@ def main() -> int:
             release_ollama_after_llm()
 
         if briefing is None:
-            return 1
+            result = 1
+            return result
 
         if mode == "dry_run":
             # Also mirror one content attempt for debugging layout compatibility.
@@ -2704,7 +2726,8 @@ def main() -> int:
                 "Done (dry_run). Set MVP_MODE=draft for Approve→markdown, "
                 "publish to export.md, or autonomous for editorial auto path."
             )
-            return 0
+            result = 0
+            return result
 
         if mode == "publish":
             ensure_aux_before_publish()
@@ -2720,12 +2743,23 @@ def main() -> int:
                 generation_mode=generation_mode,
                 card_png_paths=card_pngs,
             )
-            return 0
+            result = 0
+            return result
 
         print(f"Unknown MVP_MODE={mode}", file=sys.stderr)
-        return 1
+        result = 1
+        return result
     finally:
-        store.close()
+        emit(
+            ended=True,
+            ok=result == 0,
+            stage="COMPLETE" if result == 0 else "FAILED",
+            llm={"in_flight": False, "role": None, "started_at": None},
+            event=f"run ended ok={result == 0} stage={'COMPLETE' if result == 0 else 'FAILED'}",
+        )
+        set_run_dir(None)
+        if store is not None:
+            store.close()
         release_ollama_after_llm()
 
 
