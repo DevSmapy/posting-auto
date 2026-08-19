@@ -37,10 +37,12 @@ class MonitorStateTest(unittest.TestCase):
     def setUp(self) -> None:
         os.environ.pop("POSTING_MONITOR_DIR", None)
         os.environ.pop("MVP_MODE", None)
+        os.environ.pop("DASHBOARD_STALE_SEC", None)
 
     def tearDown(self) -> None:
         os.environ.pop("POSTING_MONITOR_DIR", None)
         os.environ.pop("MVP_MODE", None)
+        os.environ.pop("DASHBOARD_STALE_SEC", None)
 
     def test_idle_empty_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -211,6 +213,132 @@ class MonitorStateTest(unittest.TestCase):
         self.assertEqual(rows[0]["headline"], "keep-me")
         self.assertEqual(rows[1]["headline"], "drop-me")
         self.assertEqual(rows[1]["status"], "reject")
+
+    def test_publish_hang_banner_and_steps(self) -> None:
+        kst = __import__("zoneinfo").ZoneInfo("Asia/Seoul")
+        now = datetime(2026, 8, 20, 7, 34, 0, tzinfo=kst)
+        event_at = datetime(2026, 8, 20, 6, 42, 0, tzinfo=kst)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            run = _run(out, "20260820_060022")
+            (run / "briefing.md").write_text("# md\n", encoding="utf-8")
+            _write(
+                run / "monitor.json",
+                {
+                    "run_id": run.name,
+                    "mode": "autonomous",
+                    "stage": "PUBLISH",
+                    "started_at": datetime(2026, 8, 20, 6, 0, 22, tzinfo=kst).isoformat(),
+                    "events": [{"timestamp": event_at.isoformat(), "message": "publish started"}],
+                },
+            )
+            stamp = event_at.timestamp()
+            os.utime(run / "briefing.md", (stamp, stamp))
+            os.utime(run / "monitor.json", (stamp, stamp))
+            lock = Path(tmp) / "lock.json"
+            _write(
+                lock,
+                {"pid": os.getpid(), "run_id": run.name, "started_at": datetime(2026, 8, 20, 6, 0, 22, tzinfo=kst).isoformat()},
+            )
+            state = read_state(output=out, lock_file=lock, probe=False, now=now)
+        self.assertEqual(state["status"], "RUNNING")
+        self.assertEqual(state["stale_level"], "hang")
+        names = {row["name"]: row["status"] for row in state["publish_steps"]}
+        self.assertEqual(names["MD"], "success")
+        self.assertEqual(names["Cards"], "running")
+        ig = [p for p in state["publish"] if p["channel"] == "Instagram"][0]
+        self.assertEqual(ig["status"], "pending")
+        text = render_text(state)
+        self.assertIn("SUSPECT HANG", text)
+        self.assertIn("52m since last event", text)
+        self.assertIn("MD ✓", text)
+        self.assertIn("now: Cards", text)
+
+    def test_zombie_dead_pid_is_failed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            run = _run(out)
+            _write(
+                run / "monitor.json",
+                {
+                    "run_id": run.name,
+                    "mode": "autonomous",
+                    "stage": "PUBLISH",
+                    "events": [{"timestamp": datetime.now(timezone.utc).isoformat(), "message": "publish started"}],
+                },
+            )
+            lock = Path(tmp) / "lock.json"
+            _write(lock, {"pid": 999999, "run_id": run.name, "started_at": datetime.now(timezone.utc).isoformat()})
+            with patch("monitor._pid_alive", return_value=False):
+                state = read_state(output=out, lock_file=lock, probe=False)
+        self.assertEqual(state["status"], "FAILED")
+        self.assertIn("ended missing (pid dead)", state["failure_reason"])
+        text = render_text(state)
+        self.assertIn("FAILED", text)
+        self.assertIn("ended missing (pid dead)", text)
+        self.assertIn("dead", text)
+
+    def test_reject_leftover_without_ended_uses_fail_reason(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            run = _run(out)
+            _write(
+                run / "editorial_result.json",
+                {"editor_decision": {"decision": "reject", "reason": "minimum_story_count:0<3"}},
+            )
+            _write(run / "briefing.json", {"stories": []})
+            _write(run / "monitor.json", {"run_id": run.name, "stage": "REVIEW"})
+            lock = Path(tmp) / "lock.json"
+            _write(lock, {"pid": 999999, "run_id": run.name})
+            with patch("monitor._pid_alive", return_value=False):
+                state = read_state(output=out, lock_file=lock, probe=False)
+        self.assertEqual(state["status"], "FAILED")
+        self.assertIn("minimum_story_count", state["failure_reason"])
+
+    def test_publish_steps_progress(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            run = _run(out)
+            _write(run / "monitor.json", {"ended": True, "ok": True, "run_id": run.name})
+            (run / "briefing.md").write_text("# md\n", encoding="utf-8")
+            state = read_state(output=out, lock_file=Path(tmp) / "no.lock", probe=False)
+            names = {row["name"]: row["status"] for row in state["publish_steps"]}
+            self.assertEqual(names["MD"], "success")
+            self.assertEqual(names["Cards"], "pending")
+            cards = run / "cards"
+            cards.mkdir()
+            (cards / "01.png").write_bytes(b"png")
+            _write(run / "image_urls.json", ["https://example/1.png"])
+            _write(run / "creation_id.json", {"creation_id": "c1"})
+            _write(run / "publish_result.json", {"ig_media_id": "ig-1"})
+            state = read_state(output=out, lock_file=Path(tmp) / "no.lock", probe=False)
+            names = {row["name"]: row["status"] for row in state["publish_steps"]}
+        self.assertEqual(names["Cards"], "success")
+        self.assertEqual(names["R2"], "success")
+        self.assertEqual(names["IG"], "success")
+
+    def test_live_recent_activity_not_stale(self) -> None:
+        now = datetime.now(timezone.utc)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            run = _run(out)
+            _write(
+                run / "monitor.json",
+                {
+                    "run_id": run.name,
+                    "mode": "autonomous",
+                    "stage": "PUBLISH",
+                    "started_at": now.isoformat(),
+                    "events": [{"timestamp": now.isoformat(), "message": "publish started"}],
+                },
+            )
+            lock = Path(tmp) / "lock.json"
+            _write(lock, {"pid": os.getpid(), "run_id": run.name, "started_at": now.isoformat()})
+            state = read_state(output=out, lock_file=lock, probe=False, now=now)
+        self.assertEqual(state["status"], "RUNNING")
+        self.assertEqual(state["stale_level"], "")
+        self.assertNotIn("STALE", render_text(state))
+        self.assertNotIn("SUSPECT HANG", render_text(state))
 
 
 if __name__ == "__main__":

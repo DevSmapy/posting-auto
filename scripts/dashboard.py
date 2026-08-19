@@ -42,7 +42,7 @@ def _sym(status: str) -> str:
         return "↻"
     if key in {"failed", "fail", "reject", "excluded", "unavailable"}:
         return "✗"
-    if key in {"warning", "degraded"}:
+    if key in {"warning", "degraded", "stale", "hang"}:
         return "!"
     return "·"
 
@@ -109,7 +109,21 @@ def render(state: dict[str, Any], *, width: int = 80) -> Group:
         meta += f"    STAGE  {stage}"
     if elapsed and status == "RUNNING":
         meta += f"    ELAPSED  {elapsed}"
+    lock = dict(state.get("lock") or {})
+    pid = lock.get("pid")
+    if pid:
+        mark = "✓" if lock.get("pid_alive") else "dead"
+        meta += f"    pid={pid} {mark}"
     header.add_row(Text(meta), Text(""))
+    stale = str(state.get("stale_level") or "")
+    if status == "RUNNING" and stale:
+        age = state.get("last_event_age_sec")
+        label = "event" if age is not None else "artifact"
+        if age is None:
+            age = state.get("activity_age_sec") or 0
+        mins = int(float(age) // 60)
+        tag = "SUSPECT HANG" if stale == "hang" else "STALE?"
+        header.add_row(Text(f"! {tag}  {mins}m since last {label}"), Text(""))
     reason = str(state.get("failure_reason") or "")
     if status == "FAILED" and reason:
         header.add_row(Text(f"Reason: {_trunc(reason, inner)}"), Text(""))
@@ -203,6 +217,20 @@ def render(state: dict[str, Any], *, width: int = 80) -> Group:
     pub_tbl = Table(show_header=False, box=None, pad_edge=False, expand=True)
     pub_tbl.add_column("ch", width=12)
     pub_tbl.add_column("st", ratio=1)
+    steps = list(state.get("publish_steps") or [])
+    strip = ""
+    if steps:
+        bits: list[str] = []
+        now_step = ""
+        for row in steps:
+            name = str(row.get("name") or "")
+            st = str(row.get("status") or "pending")
+            bits.append(f"{name} {_sym('success' if st == 'success' else '')}")
+            if st == "running":
+                now_step = name
+        strip = "  ".join(bits)
+        if now_step and inner >= 56:
+            strip += f"     now: {now_step}"
     for row in state.get("publish") or []:
         ch = str(row.get("channel") or "")
         st = str(row.get("status") or "pending")
@@ -211,6 +239,7 @@ def render(state: dict[str, Any], *, width: int = 80) -> Group:
         pub_tbl.add_row(ch, f"{_sym(st)} {st}{extra}")
     if not state.get("publish"):
         pub_tbl.add_row("—", "")
+    pub_body: Any = Group(Text(strip), pub_tbl) if strip else pub_tbl
 
     ev_lines: list[str] = []
     for item in state.get("events") or []:
@@ -227,7 +256,7 @@ def render(state: dict[str, Any], *, width: int = 80) -> Group:
         mid,
         Panel(story_tbl, title=story_title, border_style="dim"),
         Panel(Text(llm_body), title="LLM", border_style="dim"),
-        Panel(pub_tbl, title="PUBLISH", border_style="dim"),
+        Panel(pub_body, title="PUBLISH", border_style="dim"),
         Panel(Text(ev_body), title="LAST EVENT", border_style="dim"),
     )
 
