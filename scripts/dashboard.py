@@ -117,11 +117,18 @@ def render(state: dict[str, Any], *, width: int = 80) -> Group:
     header.add_row(Text(meta), Text(""))
     stale = str(state.get("stale_level") or "")
     if status == "RUNNING" and stale:
-        age = state.get("last_event_age_sec")
-        label = "event" if age is not None else "artifact"
-        if age is None:
-            age = state.get("activity_age_sec") or 0
-        mins = int(float(age) // 60)
+        activity = state.get("activity_age_sec")
+        event_age = state.get("last_event_age_sec")
+        artifact_age = state.get("last_artifact_age_sec")
+        if activity is None:
+            ages = [a for a in (event_age, artifact_age) if a is not None]
+            activity = min(ages) if ages else 0
+        label = "event"
+        if event_age is None:
+            label = "artifact"
+        elif artifact_age is not None and float(artifact_age) < float(event_age):
+            label = "artifact"
+        mins = int(float(activity) // 60)
         tag = "SUSPECT HANG" if stale == "hang" else "STALE?"
         header.add_row(Text(f"! {tag}  {mins}m since last {label}"), Text(""))
     reason = str(state.get("failure_reason") or "")

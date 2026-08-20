@@ -254,6 +254,21 @@ class MonitorStateTest(unittest.TestCase):
         self.assertIn("MD ✓", text)
         self.assertIn("now: Cards", text)
 
+    def test_stale_banner_follows_fresher_artifact_age(self) -> None:
+        text = render_text(
+            {
+                "status": "RUNNING",
+                "stale_level": "stale",
+                "last_event_age_sec": 52 * 60,
+                "last_artifact_age_sec": 12 * 60,
+                "activity_age_sec": 12 * 60,
+                "clock": "07:34:00 KST",
+            }
+        )
+        self.assertIn("STALE?", text)
+        self.assertIn("12m since last artifact", text)
+        self.assertNotIn("52m", text)
+
     def test_zombie_dead_pid_is_failed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
