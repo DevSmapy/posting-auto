@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TUI V2 P0 — brainstorm</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --panel: #161b22;
+      --panel-2: #1c2330;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --dim: #8b949e;
+      --mute: #6e7681;
+      --ok: #3fb950;
+      --run: #58a6ff;
+      --warn: #d29922;
+      --hang: #e3b341;
+      --fail: #f85149;
+      --accent: #79c0ff;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      --sans: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.55 var(--sans);
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 80px; }
+    header.hero {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 20px;
+      margin-bottom: 28px;
+    }
+    header.hero p.kicker {
+      margin: 0 0 8px;
+      color: var(--warn);
+      font: 12px/1.2 var(--mono);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    h1 { font-size: 28px; margin: 0 0 10px; letter-spacing: -0.03em; }
+    .lede { color: var(--dim); margin: 0; max-width: 62ch; }
+    nav.toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+    }
+    nav.toc a {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      padding: 4px 10px;
+      border-radius: 999px;
+      font: 12px/1.4 var(--mono);
+    }
+    nav.toc a:hover { border-color: var(--accent); text-decoration: none; }
+    section { margin: 42px 0; }
+    h2 {
+      font-size: 18px;
+      margin: 0 0 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 { font-size: 14px; margin: 18px 0 8px; color: var(--accent); }
+    p, li { color: var(--text); }
+    .dim { color: var(--dim); }
+    .qs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    .qs article {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .qs strong { display: block; font-size: 13px; margin-bottom: 6px; }
+    .qs span { color: var(--dim); font-size: 13px; }
+    .term {
+      background: #0a0e14;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .term .bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 7px 12px;
+      background: var(--panel-2);
+      border-bottom: 1px solid var(--border);
+      color: var(--mute);
+      font: 11px/1 var(--mono);
+    }
+    .term .bar b { color: var(--dim); font-weight: 600; }
+    pre.tui {
+      margin: 0;
+      padding: 14px 16px 16px;
+      font: 12.5px/1.45 var(--mono);
+      color: var(--text);
+      overflow-x: auto;
+      white-space: pre;
+    }
+    .c-ok { color: var(--ok); }
+    .c-run { color: var(--run); }
+    .c-warn { color: var(--warn); }
+    .c-hang { color: var(--hang); }
+    .c-fail { color: var(--fail); }
+    .c-dim { color: var(--mute); }
+    .c-hi { background: #2a2108; color: var(--hang); }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .card.rec { border-color: #3d5a2a; box-shadow: inset 0 0 0 1px #3d5a2a; }
+    .badge {
+      display: inline-block;
+      font: 10px/1 var(--mono);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 3px 7px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--dim);
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    .badge.rec { color: var(--ok); border-color: #3d5a2a; }
+    .badge.warn { color: var(--warn); border-color: #5c4a1a; }
+    .badge.out { color: var(--mute); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      text-align: left;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    th { color: var(--dim); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+    td code, p code, li code {
+      font: 12px/1.3 var(--mono);
+      background: #21262d;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    .pills { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 14px; }
+    .pills button, .pills label {
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 8px;
+      font: 12px/1.3 var(--mono);
+    }
+    .pills button[aria-pressed="true"], .pills label:has(input:checked) {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #152033;
+    }
+    .pills input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    .pills label:has(input:focus-visible) {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    .tree {
+      font: 13px/1.7 var(--mono);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 18px;
+      overflow-x: auto;
+    }
+    .out {
+      opacity: 0.72;
+      border-style: dashed;
+    }
+    .lockin li { margin: 6px 0; }
+    .note {
+      font-size: 13px;
+      color: var(--dim);
+      margin-top: 8px;
+    }
+    @media (max-width: 820px) {
+      .qs, .grid-2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <p class="kicker">Posting Auto 2.0 · docs/plans · P0 only</p>
+      <h1>TUI V2 브레인스토밍</h1>
+      <p class="lede">
+        V1은 “한 화면 관찰”은 됩니다. 07:34처럼 Publish가 50분 조용하면
+        <strong>기다리면 되는지</strong>는 답하지 못합니다. 이 페이지는 구현 전에
+        헤더·Publish strip·좀비를 눈으로 고르는 용도입니다.
+      </p>
+      <nav class="toc">
+        <a href="#q">세 질문</a>
+        <a href="#v1">V1 07:34</a>
+        <a href="#ab">A / B STATUS</a>
+        <a href="#pub">Publish strip</a>
+        <a href="#lock">pid / lock</a>
+        <a href="#tree">기다려?</a>
+        <a href="#scenes">시나리오</a>
+        <a href="#lockin">플랜에 넣을 것</a>
+      </nav>
+    </header>
+
+    <section id="q">
+      <h2>운영자가 한 화면에 답해야 하는 것</h2>
+      <div class="qs">
+        <article>
+          <strong>1. 살아 있는가?</strong>
+          <span>pid alive vs lock만 남은 좀비. STATUS=RUNNING만으로는 부족합니다.</span>
+        </article>
+        <article>
+          <strong>2. 지금 무엇을 하는가?</strong>
+          <span>STAGE=Publish는 블랙박스. Markdown 다음이 cards / R2 / IG 중 어디인지.</span>
+        </article>
+        <article>
+          <strong>3. 개입해야 하는가?</strong>
+          <span>최근 이벤트·아티팩트 age. 10분이면 의심, 30분+이면 수동 확인.</span>
+        </article>
+      </div>
+    </section>
+
+    <section id="v1">
+      <h2>V1 — 07:34 KST에서 본 것</h2>
+      <p class="dim">관측값 재구성. Rich 레이아웃을 80컬럼 ASCII로 옮긴 것입니다. 파이프라인은 Collect~Review 완료, Publish 진행 중.</p>
+      <div class="term">
+        <div class="bar"><b>V1 dashboard.py</b><span>read-only · 1 Hz</span></div>
+        <pre class="tui">Posting Auto 2.0                                          07:34:00 KST
+STATUS  <span class="c-run">RUNNING</span>    RUN  20260820_060022    MODE  autonomous
+STAGE  Publish    ELAPSED  01:33:38
+
+RUNTIME              PIPELINE
+✓ Network  healthy   ✓ Collect
+✓ Ollama   healthy   ✓ Rank
+                     ✓ Write
+                     ✓ Review
+                     <span class="c-run">→ Publish</span>
+
+LLM
+model: qwen2.5:7b
+calls: 23
+
+PUBLISH
+Markdown     ✓ success
+Instagram    · pending
+Tistory      · skipped
+
+LAST EVENT
+06:42:21 publish started</pre>
+      </div>
+      <p class="note">
+        last event 이후 ~52분. lock pid는 살아 있을 수 있고, card render / R2 / IG API 중일 수도 있습니다.
+        화면은 둘을 구분하지 않습니다. <code>_classify</code>는 live lock이면 무조건 RUNNING.
+      </p>
+    </section>
+
+    <section id="ab">
+      <h2>STATUS를 어떻게 보일 것인가</h2>
+      <p class="dim">라이브 hang (pid ✓, 이벤트 정체)만 A/B입니다. 좀비(pid dead, ended 없음)는 아래 시나리오에서 따로 봅니다.</p>
+      <div class="pills" role="radiogroup" aria-label="STATUS 표현">
+        <label><input type="radio" name="ab" value="a" checked /> A · RUNNING + 배너 <span class="badge rec">recommended</span></label>
+        <label><input type="radio" name="ab" value="b" /> B · 새 STATUS 값</label>
+      </div>
+      <div class="term">
+        <div class="bar"><b id="ab-label">Option A — STATUS 유지</b><span>같은 07:34 데이터</span></div>
+        <pre class="tui" id="ab-pre"></pre>
+      </div>
+      <div class="grid-2" style="margin-top:14px">
+        <div class="card rec">
+          <h3>A — 배너 <span class="badge rec">recommended</span></h3>
+          <p>프로세스는 실제로 돌고 있으므로 STATUS는 진실(<code>RUNNING</code>)을 유지합니다. “기다려?”는 둘째 줄이 답합니다.</p>
+          <p class="dim"><code>_classify</code> 변경이 작고, 기존 RUNNING 테스트가 안 깨집니다. 색맹·무색 터미널에서도 <code>!</code> 로 읽힙니다.</p>
+        </div>
+        <div class="card">
+          <h3>B — <code>STALE</code> / <code>SUSPECT HANG</code></h3>
+          <p>헤더 한 단어가 더 선명합니다. 대신 status enum·테스트·IDLE/COMPLETE 분기(<code>running = status == "RUNNING"</code>)를 같이 고쳐야 합니다.</p>
+          <p class="dim">publish <code>pending</code> 로직이 <code>running</code>에 묶여 있어, STALE을 새 status로 두면 IG가 skipped로 떨어질 위험이 있습니다.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="pub">
+      <h2>Publish 블랙박스 → artifact strip</h2>
+      <p class="dim">emit 없이 디스크만 봅니다. 현재 스텝 = 아직 없는 첫 파일. 채널 행(Markdown / Instagram)은 V1 그대로 두고, 패널 타이틀에 strip을 얹습니다.</p>
+      <table>
+        <thead>
+          <tr><th>스텝</th><th>파일</th><th>의미</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>MD</code></td><td><code>briefing.md</code></td><td>markdown export</td></tr>
+          <tr><td><code>Cards</code></td><td><code>cards/*.png</code></td><td>렌더 진행/완료 (파일이 늘면 진행)</td></tr>
+          <tr><td><code>Guard</code></td><td><code>publish_guard.json</code></td><td>가드 평가</td></tr>
+          <tr><td><code>R2</code></td><td><code>image_urls.json</code></td><td>업로드 완료</td></tr>
+          <tr><td><code>IG</code></td><td><code>creation_id.json</code> → <code>publish_result.json</code></td><td>container → media_publish</td></tr>
+        </tbody>
+      </table>
+      <h3>07:34에 가깝게 — MD만 있고 IG 없음</h3>
+      <div class="term">
+        <div class="bar"><b>PUBLISH panel</b><span>strip + 기존 채널</span></div>
+        <pre class="tui">PUBLISH   <span class="c-ok">MD ✓</span>  Cards ·  Guard ·  R2 ·  IG ·     <span class="c-run">now: Cards</span>
+Markdown     ✓ success
+Instagram    · pending
+Tistory      · skipped</pre>
+      </div>
+      <p class="note">V1은 Markdown success만 보여서 “다음은 뭔가?”가 없습니다. strip은 그 한 줄을 위한 것입니다. 폭이 좁으면 <code>now:</code> 를 생략합니다.</p>
+    </section>
+
+    <section id="lock">
+      <h2>lock / pid를 헤더에</h2>
+      <p class="dim"><code>_read_lock()</code>은 pid dead면 lock을 버립니다. P0는 JSON을 항상 읽고 <code>pid_alive</code>를 따로 둡니다. 7200s reclaim은 다음 런용이라 STATUS에 안 씁니다.</p>
+      <div class="grid-2">
+        <div class="card">
+          <h3>live</h3>
+          <pre class="tui" style="padding:0;background:transparent;border:0">pid=18422 ✓    started 06:00:22</pre>
+          <p class="dim">프로세스는 살아 있음. hang 여부는 age로.</p>
+        </div>
+        <div class="card">
+          <h3>dead leftover</h3>
+          <pre class="tui" style="padding:0;background:transparent;border:0">pid=18422 dead</pre>
+          <p class="dim">lock 파일만 남음. 이건 RUNNING이 아닙니다.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="tree">
+      <h2>기다려야 하나?</h2>
+      <div class="tree">
+pid alive?<br>
+├─ yes → last event/artifact age?<br>
+│         ├─ &lt; stage threshold     → 대기. STATUS RUNNING. 배너 없음.<br>
+│         ├─ ≥ stale (Publish 10m) → 대기하되 의심. <span class="c-warn">! STALE?</span><br>
+│         └─ ≥ hang  (Publish 30m) → 수동 확인. <span class="c-hang">! SUSPECT HANG</span><br>
+└─ no  → monitor.ended?<br>
+          ├─ yes → COMPLETE / FAILED (오늘과 동일, reason 우선)<br>
+          ├─ lock 있고 pid dead → <span class="c-fail">FAILED</span> (draft 포함)<br>
+          ├─ draft &amp; lock 없음 → <span class="c-run">RUNNING</span> (Approve 대기)<br>
+          └─ no  → <span class="c-fail">FAILED</span>  Reason: ended missing (no live lock)
+      </div>
+      <p class="note">activity age = min(last_event_age, last_artifact_age). PNG가 늘어나면 event가 없어도 stale이 풀립니다.</p>
+    </section>
+
+    <section id="scenes">
+      <h2>시나리오 네 장</h2>
+      <div class="pills" id="scene-pills">
+        <button type="button" data-scene="hang" aria-pressed="true">1. 라이브 hang</button>
+        <button type="button" data-scene="ok">2. 정상 Publish</button>
+        <button type="button" data-scene="zombie">3. 좀비 RUNNING</button>
+        <button type="button" data-scene="reject">4. reject leftover</button>
+      </div>
+      <div class="term">
+        <div class="bar"><b id="scene-label">1. 라이브 hang — 스크린샷 케이스</b><span>권장안 렌더</span></div>
+        <pre class="tui" id="scene-pre"></pre>
+      </div>
+    </section>
+
+    <section>
+      <h2>임계값 (구현 기본)</h2>
+      <table>
+        <thead>
+          <tr><th>stage</th><th>STALE?</th><th>SUSPECT HANG</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Rank</td><td>5m</td><td>10m</td></tr>
+          <tr><td>Write</td><td>15m</td><td>30m</td></tr>
+          <tr><td>Review</td><td>20m</td><td>40m</td></tr>
+          <tr><td>Publish</td><td>10m</td><td>30m</td></tr>
+          <tr><td>기타</td><td>10m</td><td>20m</td></tr>
+        </tbody>
+      </table>
+      <p class="note"><code>DASHBOARD_STALE_SEC</code>가 있으면 stale 기본값을 덮어씁니다. hang은 2× (Publish는 30m 고정). 07:34의 52m는 hang 구간입니다.</p>
+    </section>
+
+    <section>
+      <h2>이번 브랜치에 안 넣음 <span class="badge out">P1 / P2</span></h2>
+      <div class="card out">
+        <ul>
+          <li>terminal emit <code>ok</code>를 editorial / publish_guard와 맞추기</li>
+          <li>reviewer LLM을 <code>ollama_chat</code>에 넣어 calls 정합</li>
+          <li>이벤트 5줄 → 스크롤, Runtime unknown 숨김, README 실행법</li>
+          <li>retry / kill 등 제어. 파이프라인 <code>emit()</code> heartbeat</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="lockin">
+      <h2>플랜에 고정할 문장</h2>
+      <p class="dim">구현 전에 이것만 확정하면 됩니다. HTML 기본 선택은 이미 채워 두었습니다.</p>
+      <div class="card rec">
+        <ol class="lockin">
+          <li><strong>라이브 hang:</strong> STATUS는 <code>RUNNING</code>. 둘째 줄 배너 <code>! STALE?</code> / <code>! SUSPECT HANG  {n}m since last event</code>.</li>
+          <li><strong>좀비:</strong> <code>ended</code> 없을 때 — lock 있고 pid dead면 <code>FAILED</code> (draft 포함). lock 없을 때만 draft는 <code>RUNNING</code>, non-draft는 <code>FAILED</code>. reason은 <code>_fail_reason</code> 우선, 없으면 <code>ended missing (pid dead)</code> / <code>ended missing (no live lock)</code>.</li>
+          <li><strong>pid:</strong> 헤더에 <code>pid=N ✓</code> 또는 <code>pid=N dead</code>. dead lock JSON은 버리지 않음.</li>
+          <li><strong>Publish strip:</strong> <code>MD Cards Guard R2 IG</code>. 채널 3행은 유지. emit 없음.</li>
+          <li><strong>stale 입력:</strong> event timestamp와 artifact mtime 중 더 최근. Publish hang 임계 30m.</li>
+        </ol>
+      </div>
+      <p class="note">A/B를 바꾸려면 위 1번만 고치면 됩니다. 채팅에서 “A로” 또는 “B로 STALE”이라고 하면 플랜을 그에 맞춰 다듬고 구현에 들어갑니다.</p>
+    </section>
+  </div>
+
+  <script>
+    const abPre = document.getElementById("ab-pre");
+    const abLabel = document.getElementById("ab-label");
+    const A = `Posting Auto 2.0                                          07:34:00 KST
+STATUS  RUNNING    RUN  20260820_060022    MODE  autonomous
+STAGE  Publish    ELAPSED  01:33:38    pid=18422 ✓
+<span class="c-hang">! SUSPECT HANG  52m since last event</span>
+
+PUBLISH   <span class="c-ok">MD ✓</span>  Cards ·  Guard ·  R2 ·  IG ·     <span class="c-run">now: Cards</span>
+Markdown     ✓ success
+Instagram    · pending`;
+    const B = `Posting Auto 2.0                                          07:34:00 KST
+STATUS  <span class="c-hang">SUSPECT HANG</span>    RUN  20260820_060022    MODE  autonomous
+STAGE  Publish    ELAPSED  01:33:38    pid=18422 ✓
+52m since last event
+
+PUBLISH   <span class="c-ok">MD ✓</span>  Cards ·  Guard ·  R2 ·  IG ·     <span class="c-run">now: Cards</span>
+Markdown     ✓ success
+Instagram    · pending`;
+
+    function setAb(which) {
+      abPre.innerHTML = which === "b" ? B : A;
+      abLabel.textContent = which === "b"
+        ? "Option B — 새 STATUS 값"
+        : "Option A — STATUS 유지 + 배너";
+    }
+    document.querySelectorAll('input[name="ab"]').forEach((el) => {
+      el.addEventListener("change", () => setAb(el.value));
+    });
+    setAb("a");
+
+    const scenes = {
+      hang: {
+        label: "1. 라이브 hang — 스크린샷 케이스",
+        body: `STATUS  RUNNING    RUN  20260820_060022    MODE  autonomous
+STAGE  Publish    ELAPSED  01:33:38    pid=18422 ✓
+<span class="c-hang">! SUSPECT HANG  52m since last event</span>
+
+PUBLISH   <span class="c-ok">MD ✓</span>  Cards ·  Guard ·  R2 ·  IG ·     <span class="c-run">now: Cards</span>
+LAST EVENT
+06:42:21 publish started
+
+→ 프로세스는 살아 있음. 카드 렌더/R2/IG 대기 가능. 52분이면 로그·디스크를 한 번 본다.`,
+      },
+      ok: {
+        label: "2. 정상 Publish — 방금 PNG가 생김",
+        body: `STATUS  RUNNING    RUN  20260820_060022    MODE  autonomous
+STAGE  Publish    ELAPSED  00:18:04    pid=18422 ✓
+
+PUBLISH   <span class="c-ok">MD ✓</span>  <span class="c-ok">Cards ✓</span>  Guard ·  R2 ·  IG ·     <span class="c-run">now: Guard</span>
+LAST EVENT
+06:42:21 publish started
+
+→ event는 오래돼도 cards/*.png mtime이 최근이면 배너 없음.`,
+      },
+      zombie: {
+        label: "3. 좀비 — pid dead, ended 없음",
+        body: `STATUS  <span class="c-fail">FAILED</span>    RUN  20260820_060022    MODE  autonomous
+pid=18422 dead
+<span class="c-fail">Reason: ended missing (pid dead)</span>
+
+PUBLISH   <span class="c-ok">MD ✓</span>  Cards ·  Guard ·  R2 ·  IG ·
+LAST EVENT
+06:42:21 publish started
+
+→ V1은 이걸 RUNNING으로 고정한다. P0에서 고친다.`,
+      },
+      reject: {
+        label: "4. reject leftover — ended 없음, fail artifact 있음",
+        body: `STATUS  <span class="c-fail">FAILED</span>    RUN  20260820_060022    MODE  autonomous
+pid=18422 dead
+<span class="c-fail">Reason: minimum_story_count:0&lt;3</span>
+
+→ live lock이 없으면 _fail_reason을 ended 여부보다 먼저.
+   “ended missing”은 reason이 비어 있을 때만.`,
+      },
+    };
+
+    const scenePre = document.getElementById("scene-pre");
+    const sceneLabel = document.getElementById("scene-label");
+    function setScene(id) {
+      const s = scenes[id];
+      scenePre.innerHTML = s.body;
+      sceneLabel.textContent = s.label;
+      document.querySelectorAll("#scene-pills button").forEach((b) => {
+        b.setAttribute("aria-pressed", b.dataset.scene === id ? "true" : "false");
+      });
+    }
+    document.querySelectorAll("#scene-pills button").forEach((b) => {
+      b.addEventListener("click", () => setScene(b.dataset.scene));
+    });
+    setScene("hang");
+  </script>
+</body>
+</html>

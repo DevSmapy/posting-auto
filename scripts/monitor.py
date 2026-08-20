@@ -18,6 +18,16 @@ MONITOR_NAME = "monitor.json"
 _RUN_DIR_RE = re.compile(r"^\d{8}_\d{6}$")
 _RUNTIME_TTL_SEC = 15.0
 _runtime_cache: tuple[float, list[dict[str, str]]] = (0.0, [])
+_STALE_SEC = {"RANK": 300, "WRITE": 900, "REVIEW": 1200, "PUBLISH": 600}
+_HANG_SEC = {"RANK": 600, "WRITE": 1800, "REVIEW": 2400, "PUBLISH": 1800}
+_PUBLISH_ARTIFACTS = (
+    "monitor.json",
+    "briefing.md",
+    "publish_guard.json",
+    "image_urls.json",
+    "creation_id.json",
+    "publish_result.json",
+)
 
 TZ = ZoneInfo(os.getenv("NEWS_TIMEZONE", "Asia/Seoul"))
 
@@ -157,10 +167,14 @@ def _read_lock(path: Path) -> dict[str, Any] | None:
     try:
         pid = int(data.get("pid") or 0)
     except (TypeError, ValueError):
-        return None
-    if not _pid_alive(pid):
-        return None
-    return data
+        pid = 0
+    return {
+        "present": True,
+        "pid": pid,
+        "pid_alive": _pid_alive(pid),
+        "started_at": data.get("started_at"),
+        "run_id": data.get("run_id"),
+    }
 
 
 def _run_dirs(out: Path) -> list[Path]:
@@ -255,6 +269,64 @@ def _elapsed_sec(started: datetime | None, now: datetime) -> float | None:
     return max(0.0, (now - started).total_seconds())
 
 
+def _mtime(path: Path) -> float | None:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return None
+
+
+def _last_artifact_mtime(run_dir: Path | None) -> float | None:
+    if run_dir is None:
+        return None
+    times: list[float] = []
+    for name in _PUBLISH_ARTIFACTS:
+        stamp = _mtime(run_dir / name)
+        if stamp is not None:
+            times.append(stamp)
+    cards = run_dir / "cards"
+    if cards.is_dir():
+        for png in cards.glob("*.png"):
+            stamp = _mtime(png)
+            if stamp is not None:
+                times.append(stamp)
+    return max(times) if times else None
+
+
+def _last_event_dt(events: list[Any]) -> datetime | None:
+    if not events:
+        return None
+    last = events[-1]
+    if isinstance(last, dict):
+        return _parse_dt(last.get("timestamp"))
+    return None
+
+
+def _stale_thresholds(stage: str) -> tuple[int, int]:
+    key = (stage or "").upper()
+    stale = _STALE_SEC.get(key, 600)
+    hang = _HANG_SEC.get(key, stale * 2)
+    raw = os.getenv("DASHBOARD_STALE_SEC", "").strip()
+    if raw and key not in _STALE_SEC:
+        try:
+            stale = max(60, int(raw))
+            hang = stale * 2
+        except ValueError:
+            pass
+    return stale, hang
+
+
+def _stale_level(age: float | None, stage: str) -> str:
+    if age is None:
+        return ""
+    stale, hang = _stale_thresholds(stage)
+    if age >= hang:
+        return "hang"
+    if age >= stale:
+        return "stale"
+    return ""
+
+
 def _ops_run_at() -> str:
     try:
         from ops_config import load_ops_config
@@ -342,6 +414,33 @@ def _publish_rows(run_dir: Path, *, running: bool) -> list[dict[str, Any]]:
     ]
 
 
+def _publish_steps(run_dir: Path, *, running: bool) -> list[dict[str, Any]]:
+    pngs = list((run_dir / "cards").glob("*.png")) if (run_dir / "cards").is_dir() else []
+    guard = _read_json(run_dir / "publish_guard.json")
+    guard_failed = isinstance(guard, dict) and guard.get("ok") is False
+    checks = [
+        ("MD", (run_dir / "briefing.md").is_file()),
+        ("Cards", bool(pngs)),
+        ("Guard", (run_dir / "publish_guard.json").is_file()),
+        ("R2", (run_dir / "image_urls.json").is_file()),
+        ("IG", (run_dir / "publish_result.json").is_file()),
+    ]
+    rows: list[dict[str, Any]] = []
+    saw_running = False
+    for name, done in checks:
+        status = "pending"
+        if name == "Guard" and guard_failed:
+            status = "failed"
+        elif done:
+            status = "success"
+        elif running and not saw_running:
+            status = "running"
+            saw_running = True
+        extra = len(pngs) if name == "Cards" and pngs else None
+        rows.append({"name": name, "status": status, "count": extra})
+    return rows
+
+
 def _pipeline(
     run_dir: Path | None,
     monitor: dict[str, Any] | None,
@@ -417,6 +516,11 @@ def _fail_reason(run_dir: Path | None, editorial: Any, monitor: dict[str, Any] |
     return ""
 
 
+def _draft_mode(monitor: dict[str, Any] | None) -> bool:
+    mode = str((monitor or {}).get("mode") or os.getenv("MVP_MODE") or "").strip().lower()
+    return mode == "draft"
+
+
 def _classify(
     *,
     lock: dict[str, Any] | None,
@@ -424,12 +528,22 @@ def _classify(
     monitor: dict[str, Any] | None,
     editorial: Any,
 ) -> str:
-    if lock:
-        return "RUNNING"
     reason = _fail_reason(run_dir, editorial, monitor)
-    ended = bool(isinstance(monitor, dict) and monitor.get("ended"))
-    if not ended and monitor:
+    live = bool(lock and lock.get("pid_alive"))
+    if live:
+        if reason:
+            return "FAILED"
         return "RUNNING"
+    ended = bool(isinstance(monitor, dict) and monitor.get("ended"))
+    dead = bool(lock and lock.get("present") and not lock.get("pid_alive"))
+    if dead and not ended:
+        return "FAILED"
+    if not ended and monitor:
+        if reason:
+            return "FAILED"
+        if _draft_mode(monitor):
+            return "RUNNING"
+        return "FAILED"
     if reason:
         return "FAILED"
     if isinstance(monitor, dict) and monitor.get("ended") and monitor.get("ok") is False:
@@ -497,7 +611,14 @@ def read_state(
 
     status = _classify(lock=lock, run_dir=run_dir, monitor=monitor, editorial=editorial)
     running = status == "RUNNING"
+    ended = bool(isinstance(monitor, dict) and monitor.get("ended"))
     fail_reason = _fail_reason(run_dir, editorial, monitor) if status == "FAILED" else ""
+    if status == "FAILED" and not fail_reason and not ended:
+        fail_reason = (
+            "ended missing (pid dead)"
+            if lock and not lock.get("pid_alive")
+            else "ended missing (no live lock)"
+        )
     started = _parse_dt((lock or {}).get("started_at") or (monitor or {}).get("started_at"))
     if started is None and run_dir is not None and run_dir.exists():
         started = datetime.fromtimestamp(run_dir.stat().st_ctime, tz=TZ)
@@ -520,6 +641,16 @@ def read_state(
     if revision_count is None and editorial:
         revision_count = editorial.get("revision_count")
 
+    event_age = _elapsed_sec(_last_event_dt(events), clock)
+    artifact_mtime = _last_artifact_mtime(run_dir)
+    artifact_age = (
+        max(0.0, clock.timestamp() - artifact_mtime) if artifact_mtime is not None else None
+    )
+    ages = [a for a in (event_age, artifact_age) if a is not None]
+    activity_age = min(ages) if ages else None
+    live_stage = str((monitor or {}).get("stage") or "")
+    stale_level = _stale_level(activity_age, live_stage) if running else ""
+
     runtime = probe_runtime() if probe else list(_runtime_cache[1])
 
     return {
@@ -534,6 +665,7 @@ def read_state(
         "stories": stories,
         "llm": llm,
         "publish": _publish_rows(run_dir, running=running) if run_dir else [],
+        "publish_steps": _publish_steps(run_dir, running=running) if run_dir else [],
         "events": events,
         "revision_count": revision_count,
         "review_overall": (monitor or {}).get("review_overall")
@@ -542,4 +674,9 @@ def read_state(
         "failure_reason": fail_reason,
         "run_dir": str(run_dir) if run_dir else "",
         "clock": clock.strftime("%H:%M:%S %Z"),
+        "lock": lock or {},
+        "last_event_age_sec": event_age,
+        "last_artifact_age_sec": artifact_age,
+        "activity_age_sec": activity_age,
+        "stale_level": stale_level,
     }
