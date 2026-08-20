@@ -232,7 +232,7 @@ def render(state: dict[str, Any], *, width: int = 80) -> Group:
         for row in steps:
             name = str(row.get("name") or "")
             st = str(row.get("status") or "pending")
-            bits.append(f"{name} {_sym('success' if st == 'success' else '')}")
+            bits.append(f"{name} {_sym(st)}")
             if st == "running":
                 now_step = name
         strip = "  ".join(bits)

@@ -269,6 +269,97 @@ class MonitorStateTest(unittest.TestCase):
         self.assertIn("12m since last artifact", text)
         self.assertNotIn("52m", text)
 
+    def test_stale_banner_newer_artifact_via_read_state(self) -> None:
+        kst = __import__("zoneinfo").ZoneInfo("Asia/Seoul")
+        now = datetime(2026, 8, 20, 7, 34, 0, tzinfo=kst)
+        event_at = datetime(2026, 8, 20, 6, 42, 0, tzinfo=kst)
+        artifact_at = datetime(2026, 8, 20, 7, 22, 0, tzinfo=kst)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            run = _run(out, "20260820_060022")
+            (run / "briefing.md").write_text("# md\n", encoding="utf-8")
+            _write(
+                run / "monitor.json",
+                {
+                    "run_id": run.name,
+                    "mode": "autonomous",
+                    "stage": "PUBLISH",
+                    "started_at": datetime(2026, 8, 20, 6, 0, 22, tzinfo=kst).isoformat(),
+                    "events": [{"timestamp": event_at.isoformat(), "message": "publish started"}],
+                },
+            )
+            os.utime(run / "briefing.md", (artifact_at.timestamp(), artifact_at.timestamp()))
+            os.utime(run / "monitor.json", (event_at.timestamp(), event_at.timestamp()))
+            lock = Path(tmp) / "lock.json"
+            _write(
+                lock,
+                {"pid": os.getpid(), "run_id": run.name, "started_at": datetime(2026, 8, 20, 6, 0, 22, tzinfo=kst).isoformat()},
+            )
+            state = read_state(output=out, lock_file=lock, probe=False, now=now)
+        text = render_text(state)
+        self.assertEqual(state["stale_level"], "stale")
+        self.assertIn("12m since last artifact", text)
+        self.assertNotIn("52m", text)
+
+    def test_autonomous_no_lock_no_ended_is_failed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            run = _run(out)
+            _write(
+                run / "monitor.json",
+                {
+                    "run_id": run.name,
+                    "mode": "autonomous",
+                    "stage": "PUBLISH",
+                    "events": [{"timestamp": datetime.now(timezone.utc).isoformat(), "message": "publish started"}],
+                },
+            )
+            lock = Path(tmp) / "missing.lock"
+            state = read_state(output=out, lock_file=lock, probe=False)
+        self.assertEqual(state["status"], "FAILED")
+        self.assertIn("ended missing (no live lock)", state["failure_reason"])
+
+    def test_draft_no_lock_no_ended_stays_running(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            run = _run(out)
+            _write(
+                run / "monitor.json",
+                {
+                    "run_id": run.name,
+                    "mode": "draft",
+                    "stage": "REVIEW",
+                    "events": [{"timestamp": datetime.now(timezone.utc).isoformat(), "message": "waiting approve"}],
+                },
+            )
+            lock = Path(tmp) / "missing.lock"
+            state = read_state(output=out, lock_file=lock, probe=False)
+        self.assertEqual(state["status"], "RUNNING")
+
+    def test_publish_guard_failed_step_and_strip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            run = _run(out)
+            (run / "briefing.md").write_text("# md\n", encoding="utf-8")
+            _write(run / "publish_guard.json", {"ok": False, "blockers": ["instagram_not_configured"]})
+            _write(
+                run / "monitor.json",
+                {
+                    "run_id": run.name,
+                    "mode": "autonomous",
+                    "stage": "PUBLISH",
+                    "events": [{"timestamp": datetime.now(timezone.utc).isoformat(), "message": "publish blocked"}],
+                },
+            )
+            lock = Path(tmp) / "lock.json"
+            _write(lock, {"pid": os.getpid(), "run_id": run.name, "started_at": datetime.now(timezone.utc).isoformat()})
+            state = read_state(output=out, lock_file=lock, probe=False)
+            names = {row["name"]: row["status"] for row in state["publish_steps"]}
+            text = render_text(state)
+        self.assertEqual(names["MD"], "success")
+        self.assertEqual(names["Guard"], "failed")
+        self.assertIn("Guard ✗", text)
+
     def test_zombie_dead_pid_is_failed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)

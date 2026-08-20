@@ -416,6 +416,8 @@ def _publish_rows(run_dir: Path, *, running: bool) -> list[dict[str, Any]]:
 
 def _publish_steps(run_dir: Path, *, running: bool) -> list[dict[str, Any]]:
     pngs = list((run_dir / "cards").glob("*.png")) if (run_dir / "cards").is_dir() else []
+    guard = _read_json(run_dir / "publish_guard.json")
+    guard_failed = isinstance(guard, dict) and guard.get("ok") is False
     checks = [
         ("MD", (run_dir / "briefing.md").is_file()),
         ("Cards", bool(pngs)),
@@ -427,7 +429,9 @@ def _publish_steps(run_dir: Path, *, running: bool) -> list[dict[str, Any]]:
     saw_running = False
     for name, done in checks:
         status = "pending"
-        if done:
+        if name == "Guard" and guard_failed:
+            status = "failed"
+        elif done:
             status = "success"
         elif running and not saw_running:
             status = "running"
@@ -512,6 +516,11 @@ def _fail_reason(run_dir: Path | None, editorial: Any, monitor: dict[str, Any] |
     return ""
 
 
+def _draft_mode(monitor: dict[str, Any] | None) -> bool:
+    mode = str((monitor or {}).get("mode") or os.getenv("MVP_MODE") or "").strip().lower()
+    return mode == "draft"
+
+
 def _classify(
     *,
     lock: dict[str, Any] | None,
@@ -530,7 +539,9 @@ def _classify(
     if not ended and monitor:
         if reason:
             return "FAILED"
-        return "RUNNING"
+        if _draft_mode(monitor):
+            return "RUNNING"
+        return "FAILED"
     if reason:
         return "FAILED"
     if isinstance(monitor, dict) and monitor.get("ended") and monitor.get("ok") is False:
