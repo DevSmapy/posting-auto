@@ -528,10 +528,12 @@ def _classify(
     monitor: dict[str, Any] | None,
     editorial: Any,
 ) -> str:
+    reason = _fail_reason(run_dir, editorial, monitor)
     live = bool(lock and lock.get("pid_alive"))
     if live:
+        if reason:
+            return "FAILED"
         return "RUNNING"
-    reason = _fail_reason(run_dir, editorial, monitor)
     ended = bool(isinstance(monitor, dict) and monitor.get("ended"))
     dead = bool(lock and lock.get("present") and not lock.get("pid_alive"))
     if dead and not ended:

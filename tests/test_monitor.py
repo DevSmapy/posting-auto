@@ -356,9 +356,13 @@ class MonitorStateTest(unittest.TestCase):
             state = read_state(output=out, lock_file=lock, probe=False)
             names = {row["name"]: row["status"] for row in state["publish_steps"]}
             text = render_text(state)
+        self.assertEqual(state["status"], "FAILED")
+        self.assertIn("publish_guard:", state["failure_reason"])
+        self.assertIn("instagram_not_configured", state["failure_reason"])
         self.assertEqual(names["MD"], "success")
         self.assertEqual(names["Guard"], "failed")
         self.assertIn("Guard ✗", text)
+        self.assertIn("FAILED", text)
 
     def test_zombie_dead_pid_is_failed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

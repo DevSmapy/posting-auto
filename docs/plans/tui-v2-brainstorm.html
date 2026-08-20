@@ -367,8 +367,9 @@ pid alive?<br>
 │         └─ ≥ hang  (Publish 30m) → 수동 확인. <span class="c-hang">! SUSPECT HANG</span><br>
 └─ no  → monitor.ended?<br>
           ├─ yes → COMPLETE / FAILED (오늘과 동일, reason 우선)<br>
-          ├─ draft &amp; no lock → <span class="c-run">RUNNING</span> (Approve 대기)<br>
-          └─ no  → <span class="c-fail">FAILED</span>  Reason: ended missing (pid dead / no live lock)
+          ├─ lock 있고 pid dead → <span class="c-fail">FAILED</span> (draft 포함)<br>
+          ├─ draft &amp; lock 없음 → <span class="c-run">RUNNING</span> (Approve 대기)<br>
+          └─ no  → <span class="c-fail">FAILED</span>  Reason: ended missing (no live lock)
       </div>
       <p class="note">activity age = min(last_event_age, last_artifact_age). PNG가 늘어나면 event가 없어도 stale이 풀립니다.</p>
     </section>
@@ -422,7 +423,7 @@ pid alive?<br>
       <div class="card rec">
         <ol class="lockin">
           <li><strong>라이브 hang:</strong> STATUS는 <code>RUNNING</code>. 둘째 줄 배너 <code>! STALE?</code> / <code>! SUSPECT HANG  {n}m since last event</code>.</li>
-          <li><strong>좀비:</strong> live lock 없고 <code>ended</code> 없음 → non-draft는 <code>FAILED</code>, <code>draft</code>는 <code>RUNNING</code> 유지. reason은 <code>_fail_reason</code> 우선, 없으면 <code>ended missing (pid dead)</code> / <code>ended missing (no live lock)</code>.</li>
+          <li><strong>좀비:</strong> <code>ended</code> 없을 때 — lock 있고 pid dead면 <code>FAILED</code> (draft 포함). lock 없을 때만 draft는 <code>RUNNING</code>, non-draft는 <code>FAILED</code>. reason은 <code>_fail_reason</code> 우선, 없으면 <code>ended missing (pid dead)</code> / <code>ended missing (no live lock)</code>.</li>
           <li><strong>pid:</strong> 헤더에 <code>pid=N ✓</code> 또는 <code>pid=N dead</code>. dead lock JSON은 버리지 않음.</li>
           <li><strong>Publish strip:</strong> <code>MD Cards Guard R2 IG</code>. 채널 3행은 유지. emit 없음.</li>
           <li><strong>stale 입력:</strong> event timestamp와 artifact mtime 중 더 최근. Publish hang 임계 30m.</li>
