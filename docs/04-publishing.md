@@ -51,9 +51,9 @@ flowchart TD
 | 4 | Postgres `seen_urls` | 이미 쓴 URL 제외 |
 | 5 | Content loop | Ollama 랭킹+layered story → `attempts/content-NN/` |
 | 6 | ① 내용 게이트 | 텍스트만. ✅ Approve / 🔀 Rerank / ✍️ Rewrite (`CONTENT_RETRY_MAX`) |
-| 7 | Render loop | 선택 `briefing.json` → `renders/render-NN/cards/` PNG |
-| 8 | ② 렌더 게이트 | 이미지 확인. ✅ Approve / 🔁 Re-render (`RENDER_RETRY_MAX`) |
-| 9a | Approve | `briefing.md` 저장 (블로그 수동 붙여넣기) |
+| 7 | Render loop | 선택 `briefing.json` → `renders/render-NN/cards/` PNG + `renders/render-NN/infographic/` |
+| 8 | ② 렌더 게이트 | 이미지 확인 (인포그래픽이 카드보다 먼저). ✅ Approve / 🔁 Re-render (`RENDER_RETRY_MAX`) |
+| 9a | Approve | `briefing.md` + `infographic.png` 저장 (블로그 수동 붙여넣기) |
 | 9b | Postgres | **즉시** `seen_urls` insert (알림·IG 실패와 무관; 기록 삭제 없음) |
 | 9c | `PUBLISH_CARDS=1` | 동일 PNG → R2 → (`PUBLISH_MODE`) Instagram carousel |
 | 9d | `final/publish_ready/` | 카드 PNG·캡션·manifest (나중에 CLI/n8n 게시) |
@@ -87,7 +87,7 @@ Rerank는 이번 run의 이전 content attempt URL을 제외한 뒤 재랭킹한
 ### 미리보기에 포함
 
 - 제목, 시장 한줄, 선정 뉴스, 슬라이드 headline
-- **카드 PNG 첨부** (생성 실패 시 텍스트만 + 경고)
+- **블로그 인포그래픽 + 카드 PNG 첨부** (생성 실패 시 텍스트만 + 경고)
 - Approve / Skip 조작법
 
 | 선택 | 동작 |
@@ -120,6 +120,34 @@ Slack: `uv run python scripts/smoke_slack.py` (`NOTIFY_CHANNEL=slack`)
 | `briefing.md` | 에디터에 붙여넣기 (권장) |
 | `briefing.html` | HTML이 필요할 때 |
 | `briefing.json` | LLM 원본 구조 |
+| `infographic.png` | 썸네일 겸 본문 상단 요약 이미지 (1080×1080) |
+| `humanize_result.json` | 한국어 자연화 진단·적용·롤백 기록 |
+
+### 블로그 인포그래픽
+
+렌더 attempt마다 `renders/render-NN/infographic/`에 `infographic.html` · `infographic.png` · `infographic.json`(픽토그램 선택 근거)을 만듭니다. 렌더 게이트에서 카드보다 **먼저** 첨부되지만 `card_png_paths`에는 들어가지 않아 캐러셀 장수는 그대로입니다.
+
+Approve하면 승인된 한 장이 run 루트(`briefing.md` 옆)와 `final/infographic.png`로 복사되고 cleanup 후에도 남습니다.
+
+```text
+output/<run_id>/
+├── briefing.md          # 제목 바로 아래 ![브리핑 인포그래픽](infographic.png)
+├── infographic.png
+└── final/
+    ├── briefing.md
+    ├── infographic.png  # cards/ 밖 — 인스타 패키지에 포함되지 않음
+    └── cards/
+```
+
+**티스토리 수동 첨부 (현행 유지)**
+
+1. `final/briefing.md`를 티스토리 에디터의 마크다운 모드에 붙여넣습니다.
+2. `final/infographic.png`를 제목 바로 아래 이미지 자리에 업로드합니다.
+3. 같은 PNG를 대표 이미지(썸네일)로 지정합니다.
+
+인포그래픽 렌더가 실패한 날에는 마크다운에 이미지 링크를 **넣지 않습니다**(깨진 이미지 방지). 카드 렌더와 발행은 그대로 진행됩니다.
+
+템플릿 슬롯·픽토그램 카탈로그: [05. 카드 템플릿](05-card-templates.md#3-블로그-인포그래픽-templatescardsinfographic).
 
 ---
 

@@ -290,10 +290,12 @@ def _first_line(values: Any) -> str:
 
 def _next_watch(briefing: Mapping[str, Any]) -> str:
     for event in briefing.get("upcoming_events") or []:
-        if isinstance(event, Mapping):
-            title = str(event.get("title") or "").strip()
-            if title:
-                return title
+        # Markdown/HTML assembly accepts bare strings here too; stay in step.
+        title = str(
+            (event.get("title") if isinstance(event, Mapping) else event) or ""
+        ).strip()
+        if title:
+            return title
     for story in briefing.get("stories") or []:
         watch = str((story or {}).get("watch_next") or "").strip()
         if watch:
