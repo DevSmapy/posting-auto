@@ -73,6 +73,7 @@ from story_quality import (  # noqa: E402
 from editorial import (  # noqa: E402
     auto_publish_enabled,
     human_gates_enabled,
+    humanize_stories,
     run_editorial_loop,
 )
 from editorial.validator import quality_gate_briefing  # noqa: E402
@@ -1172,6 +1173,29 @@ def summarize_story_layers(
         raise
 
 
+def humanize_story_language(
+    stories: list[dict[str, Any]],
+    articles: list[dict[str, Any]],
+    now: datetime,
+    run_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Conditional Korean post-edit; runs before card/markdown surfaces are built."""
+    by_url = {a.get("link"): a for a in articles if a.get("link")}
+
+    def polish(story: dict[str, Any], issues: list[str]) -> dict[str, Any]:
+        article = by_url.get(story.get("source_url")) or {}
+        polished, _raw = polish_story_llm(story, issues, article, now)
+        return polished
+
+    cleaned, result = humanize_stories(stories, polish=polish, run_dir=run_dir)
+    if result["flagged"]:
+        print(
+            f"   humanize flagged={result['flagged']} "
+            f"applied={result['applied']} rolled_back={result['rolled_back']}"
+        )
+    return cleaned
+
+
 def build_briefing(
     articles: list[dict[str, Any]],
     now: datetime,
@@ -1214,6 +1238,7 @@ def build_briefing(
             encoding="utf-8",
         )
 
+    stories = humanize_story_language(stories, articles, now, run_dir)
     briefing = assemble_briefing_from_stories(stories, now)
     if llm_ok == 0:
         mode = "heuristic"
