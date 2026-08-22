@@ -39,6 +39,8 @@ from cards import (  # noqa: E402
     CardRenderer,
     InstagramPost,
     Slide,
+    validate_visual_tags,
+    visual_tag_options,
 )
 from notify import GateAction, GateStage, get_notifier, resolve_channel  # noqa: E402
 from notify.approve_copy import (  # noqa: E402
@@ -1039,6 +1041,7 @@ def summarize_story_fact_llm(article: dict[str, Any], now: datetime) -> tuple[di
         read_prompt("story_fact_user.md")
         .replace("{{date}}", now.strftime("%Y-%m-%d"))
         .replace("{{article_json}}", json.dumps(payload, ensure_ascii=False, indent=2))
+        .replace("{{visual_tag_options}}", ", ".join(visual_tag_options()))
     )
     parsed, raw = ollama_chat(
         read_prompt("story_fact_system.md"),
@@ -1136,6 +1139,10 @@ def summarize_story_layers(
     try:
         fact, fact_raw = summarize_story_fact_llm(article, now)
         debug["fact"] = {"parsed": fact, "raw": fact_raw}
+        # The fact layer is the only place tags are proposed; carry them past the
+        # translate/polish schemas, which drop unknown keys.
+        visual_tags, rejected_tags = validate_visual_tags(fact.get("visual_tags"))
+        debug["visual_tags"] = {"kept": visual_tags, "rejected": rejected_tags}
 
         translated, translated_raw = translate_story_fact_llm(fact, article, now)
         debug["translated"] = {"parsed": translated, "raw": translated_raw}
@@ -1144,6 +1151,7 @@ def summarize_story_layers(
         issues = validate_story_fields(repaired)
         debug["initial_issues"] = list(issues)
         if not issues:
+            repaired["visual_tags"] = visual_tags
             debug["final"] = dict(repaired)
             return repaired, debug
 
@@ -1156,6 +1164,7 @@ def summarize_story_layers(
             raise RuntimeError(
                 "story quality failed after polish: " + ", ".join(final_issues[:6])
             )
+        polished["visual_tags"] = visual_tags
         debug["final"] = dict(polished)
         return polished, debug
     except Exception as exc:  # noqa: BLE001
