@@ -6,3 +6,7 @@
 ```json
 {{article_json}}
 ```
+
+visual_tags에 쓸 수 있는 ID (이 목록 밖의 값은 코드가 버린다):
+
+{{visual_tag_options}}

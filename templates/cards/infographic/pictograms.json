@@ -1,0 +1,354 @@
+{
+  "version": 1,
+  "generic_id": "generic",
+  "sprite": "pictograms.svg",
+  "symbol_prefix": "pg-",
+  "notes": "priority is a tie-breaker: lower wins. Sector-specific icons outrank market instruments, which outrank directional/abstract icons.",
+  "pictograms": [
+    {
+      "id": "semiconductor",
+      "group": "industry",
+      "priority": 10,
+      "tags_ko": ["반도체", "메모리", "디램", "파운드리", "웨이퍼", "낸드"],
+      "tags_en": ["semiconductor", "chip", "foundry", "hbm", "dram"]
+    },
+    {
+      "id": "ai",
+      "group": "industry",
+      "priority": 10,
+      "tags_ko": ["인공지능", "생성형", "챗봇", "데이터센터", "대규모 언어모델"],
+      "tags_en": ["ai", "llm", "gpu"]
+    },
+    {
+      "id": "battery",
+      "group": "industry",
+      "priority": 10,
+      "tags_ko": ["배터리", "이차전지", "2차전지", "양극재", "음극재"],
+      "tags_en": ["battery"]
+    },
+    {
+      "id": "automobile",
+      "group": "industry",
+      "priority": 10,
+      "tags_ko": ["자동차", "완성차", "전기차", "내연기관"],
+      "tags_en": ["automotive"]
+    },
+    {
+      "id": "shipbuilding",
+      "group": "industry",
+      "priority": 10,
+      "tags_ko": ["조선업", "조선소", "선박", "수주 잔량"],
+      "tags_en": ["shipbuilding"]
+    },
+    {
+      "id": "steel",
+      "group": "industry",
+      "priority": 10,
+      "tags_ko": ["철강", "제철", "열연", "냉연"],
+      "tags_en": ["steel"]
+    },
+    {
+      "id": "chemical",
+      "group": "industry",
+      "priority": 10,
+      "tags_ko": ["석유화학", "정밀화학", "화학업계", "소재 산업"],
+      "tags_en": ["chemical", "petrochemical"]
+    },
+    {
+      "id": "bio",
+      "group": "industry",
+      "priority": 10,
+      "tags_ko": ["바이오", "제약", "신약", "임상", "의약품"],
+      "tags_en": ["biotech", "pharma"]
+    },
+    {
+      "id": "energy",
+      "group": "industry",
+      "priority": 12,
+      "tags_ko": ["에너지", "전력", "원전", "재생에너지", "태양광", "전기요금"],
+      "tags_en": ["energy", "power grid"]
+    },
+    {
+      "id": "telecom",
+      "group": "industry",
+      "priority": 12,
+      "tags_ko": ["통신사", "이동통신", "네트워크 투자", "주파수"],
+      "tags_en": ["telecom", "5g"]
+    },
+    {
+      "id": "real-estate",
+      "group": "realestate",
+      "priority": 12,
+      "tags_ko": ["부동산", "집값", "아파트", "분양", "주택시장", "매매가"],
+      "tags_en": ["real estate", "housing"]
+    },
+    {
+      "id": "housing-lease",
+      "group": "realestate",
+      "priority": 12,
+      "tags_ko": ["전세", "월세", "임대차", "보증금", "임차인"],
+      "tags_en": ["lease"]
+    },
+    {
+      "id": "construction",
+      "group": "realestate",
+      "priority": 12,
+      "tags_ko": ["건설사", "시공", "착공", "재건축", "재개발", "건설업"],
+      "tags_en": ["construction"]
+    },
+    {
+      "id": "tariff",
+      "group": "international",
+      "priority": 12,
+      "tags_ko": ["관세", "무역장벽", "보호무역", "통상 압박"],
+      "tags_en": ["tariff"]
+    },
+    {
+      "id": "shipping",
+      "group": "international",
+      "priority": 12,
+      "tags_ko": ["해운", "물류", "운임", "컨테이너", "항만"],
+      "tags_en": ["shipping", "logistics", "freight"]
+    },
+    {
+      "id": "employment",
+      "group": "society",
+      "priority": 14,
+      "tags_ko": ["고용", "취업", "실업", "일자리", "채용", "임금"],
+      "tags_en": ["employment", "unemployment"]
+    },
+    {
+      "id": "population",
+      "group": "society",
+      "priority": 14,
+      "tags_ko": ["인구", "출산율", "고령화", "저출생", "이민"],
+      "tags_en": ["population", "birth rate"]
+    },
+    {
+      "id": "consumer",
+      "group": "society",
+      "priority": 14,
+      "tags_ko": ["소비", "소비자", "내수", "유통업", "소비심리"],
+      "tags_en": ["consumer", "retail sales"]
+    },
+    {
+      "id": "welfare",
+      "group": "society",
+      "priority": 14,
+      "tags_ko": ["복지", "지원금", "보조금", "건강보험", "의료비"],
+      "tags_en": ["welfare", "subsidy"]
+    },
+    {
+      "id": "trade",
+      "group": "international",
+      "priority": 14,
+      "tags_ko": ["무역", "수출", "수입", "교역", "무역수지"],
+      "tags_en": ["trade", "export", "import"]
+    },
+    {
+      "id": "loan",
+      "group": "finance",
+      "priority": 16,
+      "tags_ko": ["대출", "가계부채", "주택담보대출", "연체", "차입"],
+      "tags_en": ["mortgage"]
+    },
+    {
+      "id": "insurance",
+      "group": "finance",
+      "priority": 16,
+      "tags_ko": ["보험", "보험사", "손해율", "보장성"],
+      "tags_en": ["insurance"]
+    },
+    {
+      "id": "pension",
+      "group": "finance",
+      "priority": 16,
+      "tags_ko": ["연금", "국민연금", "퇴직연금"],
+      "tags_en": ["pension"]
+    },
+    {
+      "id": "payment",
+      "group": "finance",
+      "priority": 16,
+      "tags_ko": ["결제", "신용카드", "간편결제", "핀테크"],
+      "tags_en": ["payment", "fintech"]
+    },
+    {
+      "id": "central-bank",
+      "group": "policy",
+      "priority": 18,
+      "tags_ko": ["한국은행", "한은", "연준", "중앙은행", "연방준비제도"],
+      "tags_en": ["fed", "fomc", "ecb", "central bank"]
+    },
+    {
+      "id": "tax",
+      "group": "policy",
+      "priority": 18,
+      "tags_ko": ["세금", "세제", "과세", "증세", "감세", "세율"],
+      "tags_en": ["tax"]
+    },
+    {
+      "id": "court",
+      "group": "policy",
+      "priority": 18,
+      "tags_ko": ["법원", "판결", "소송", "기소", "헌법재판소", "위헌"],
+      "tags_en": ["court", "lawsuit"]
+    },
+    {
+      "id": "bank",
+      "group": "finance",
+      "priority": 18,
+      "tags_ko": ["은행", "시중은행", "금융권", "예금"],
+      "tags_en": ["bank"]
+    },
+    {
+      "id": "fund",
+      "group": "finance",
+      "priority": 18,
+      "tags_ko": ["펀드", "자산운용", "포트폴리오", "상장지수펀드"],
+      "tags_en": ["etf", "fund"]
+    },
+    {
+      "id": "parliament",
+      "group": "policy",
+      "priority": 20,
+      "tags_ko": ["국회", "법안", "입법", "여야", "본회의"],
+      "tags_en": ["parliament"]
+    },
+    {
+      "id": "regulation",
+      "group": "policy",
+      "priority": 20,
+      "tags_ko": ["규제", "제재", "단속", "감독당국", "가이드라인"],
+      "tags_en": ["regulation", "sanction"]
+    },
+    {
+      "id": "budget",
+      "group": "policy",
+      "priority": 20,
+      "tags_ko": ["예산", "재정", "추경", "국고"],
+      "tags_en": ["budget", "fiscal"]
+    },
+    {
+      "id": "investment",
+      "group": "finance",
+      "priority": 20,
+      "tags_ko": ["투자", "순매수", "자금 유입", "설비투자"],
+      "tags_en": ["investment", "inflow"]
+    },
+    {
+      "id": "oil",
+      "group": "market",
+      "priority": 20,
+      "tags_ko": ["유가", "원유", "석유", "정유"],
+      "tags_en": ["crude oil", "oil price"]
+    },
+    {
+      "id": "gold",
+      "group": "market",
+      "priority": 20,
+      "tags_ko": ["금값", "금 가격", "귀금속", "금 시세"],
+      "tags_en": ["gold price"]
+    },
+    {
+      "id": "policy",
+      "group": "policy",
+      "priority": 22,
+      "tags_ko": ["정책", "대책", "제도 개편", "방안 발표", "로드맵"],
+      "tags_en": ["policy"]
+    },
+    {
+      "id": "government",
+      "group": "policy",
+      "priority": 22,
+      "tags_ko": ["정부", "기획재정부", "기재부", "산업통상자원부", "관계부처"],
+      "tags_en": ["ministry"]
+    },
+    {
+      "id": "interest-rate",
+      "group": "market",
+      "priority": 25,
+      "tags_ko": ["금리", "기준금리", "이자율", "통화정책"],
+      "tags_en": ["interest rate", "rate hike", "rate cut"]
+    },
+    {
+      "id": "inflation",
+      "group": "market",
+      "priority": 25,
+      "tags_ko": ["물가", "인플레이션", "소비자물가", "생활비"],
+      "tags_en": ["inflation", "cpi"]
+    },
+    {
+      "id": "exchange-rate",
+      "group": "market",
+      "priority": 25,
+      "tags_ko": ["환율", "원화", "달러", "외환"],
+      "tags_en": ["exchange rate"]
+    },
+    {
+      "id": "commodity",
+      "group": "market",
+      "priority": 25,
+      "tags_ko": ["원자재", "곡물", "구리", "니켈", "리튬"],
+      "tags_en": ["commodity"]
+    },
+    {
+      "id": "stock-market",
+      "group": "market",
+      "priority": 30,
+      "tags_ko": ["증시", "코스피", "코스닥", "주식시장", "상장", "시가총액"],
+      "tags_en": ["kospi", "kosdaq", "equity"]
+    },
+    {
+      "id": "bond",
+      "group": "market",
+      "priority": 30,
+      "tags_ko": ["채권", "국채", "회사채", "발행 금리"],
+      "tags_en": ["bond", "treasury"]
+    },
+    {
+      "id": "global",
+      "group": "international",
+      "priority": 34,
+      "tags_ko": ["국제", "글로벌", "해외 시장", "세계 경제", "주요국"],
+      "tags_en": ["global"]
+    },
+    {
+      "id": "economic-indicator",
+      "group": "market",
+      "priority": 35,
+      "tags_ko": ["경제지표", "성장률", "국내총생산", "경기 둔화", "경기 침체", "경기 회복"],
+      "tags_en": ["gdp"]
+    },
+    {
+      "id": "trend-up",
+      "group": "market",
+      "priority": 40,
+      "directional": true,
+      "tags_ko": ["상승", "급등", "오름세", "반등", "강세", "증가세"],
+      "tags_en": ["rally", "rebound", "surge"]
+    },
+    {
+      "id": "trend-down",
+      "group": "market",
+      "priority": 40,
+      "directional": true,
+      "tags_ko": ["하락", "급락", "내림세", "약세", "감소세", "하락세"],
+      "tags_en": ["selloff", "slump", "plunge"]
+    },
+    {
+      "id": "volatility",
+      "group": "market",
+      "priority": 42,
+      "tags_ko": ["변동성", "불확실성", "혼조", "출렁"],
+      "tags_en": ["volatility"]
+    },
+    {
+      "id": "generic",
+      "group": "fallback",
+      "priority": 90,
+      "tags_ko": [],
+      "tags_en": []
+    }
+  ]
+}
