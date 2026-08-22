@@ -84,6 +84,18 @@ class AssembleBlogMarkdownTest(unittest.TestCase):
         self.assertIn("### 관련 키워드", md)
         self.assertIn("투자 또는 의사결정을 위한 전문적인 조언이 아닙니다", md)
 
+    def test_infographic_sits_directly_under_the_title(self) -> None:
+        lines = assemble_blog_markdown(
+            BRIEFING_V2, infographic_name="infographic.png"
+        ).splitlines()
+        self.assertTrue(lines[0].startswith("# "))
+        self.assertEqual("![브리핑 인포그래픽](infographic.png)", lines[2])
+
+    def test_no_image_link_when_the_render_failed(self) -> None:
+        md = assemble_blog_markdown(BRIEFING_V2)
+        self.assertNotIn("![", md)
+        self.assertNotIn("infographic.png", md)
+
     def test_v1_backward_compat(self) -> None:
         md = assemble_blog_markdown(BRIEFING_V1)
         self.assertIn("v1 요약 본문", md)

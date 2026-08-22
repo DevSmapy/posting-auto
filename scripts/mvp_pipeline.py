@@ -15,6 +15,7 @@ import html
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -39,6 +40,7 @@ from cards import (  # noqa: E402
     CardRenderer,
     InstagramPost,
     Slide,
+    export_infographic,
     validate_visual_tags,
     visual_tag_options,
 )
@@ -895,11 +897,25 @@ def assemble_blog_html(briefing: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
-def assemble_blog_markdown(briefing: dict[str, Any]) -> str:
-    """티스토리 등 에디터에 수동 붙여넣기용 Markdown."""
+BLOG_INFOGRAPHIC_NAME = "infographic.png"
+BLOG_INFOGRAPHIC_ALT = "브리핑 인포그래픽"
+
+
+def assemble_blog_markdown(
+    briefing: dict[str, Any], *, infographic_name: str = ""
+) -> str:
+    """티스토리 등 에디터에 수동 붙여넣기용 Markdown.
+
+    ``infographic_name``이 비어 있으면 이미지 링크를 넣지 않는다. 렌더가 실패한
+    날에는 깨진 이미지 대신 텍스트만 남긴다.
+    """
     title = (briefing.get("title") or "오늘의 경제 브리핑").strip()
     tags = briefing.get("blog_tags") or []
     lines: list[str] = [f"# {title}", ""]
+
+    if infographic_name:
+        lines.append(f"![{BLOG_INFOGRAPHIC_ALT}]({infographic_name})")
+        lines.append("")
 
     intro = (briefing.get("intro") or "").strip()
     if intro:
@@ -1509,12 +1525,59 @@ def _existing_ig_media_id(run_dir: Path) -> str | None:
     return None
 
 
+def render_infographic_for_approve(
+    briefing: dict[str, Any],
+    run_dir: Path,
+    now: datetime,
+) -> Path | None:
+    """Render the blog infographic. Failure never blocks the Instagram cards."""
+    print("==> Render blog infographic (1080×1080)")
+    try:
+        result = export_infographic(
+            briefing,
+            run_dir / "infographic",
+            brand=CardFormatConfig.from_env().brand,
+            date=now.strftime("%Y.%m.%d"),
+        )
+    except Exception as exc:  # noqa: BLE001
+        print(f"   !! infographic render failed: {exc}")
+        return None
+    return result["png"]
+
+
+def infographic_png(run_dir: Path) -> Path | None:
+    path = Path(run_dir) / "infographic" / BLOG_INFOGRAPHIC_NAME
+    return path if path.is_file() else None
+
+
+def adopt_infographic(run_dir: Path, source: Path | None = None) -> str:
+    """Copy the approved infographic next to briefing.md and return its link name.
+
+    An empty return means markdown must not link an image at all.
+    """
+    found = Path(source) if source else infographic_png(run_dir)
+    if found is None or not found.is_file():
+        print("   !! infographic missing — markdown keeps text only")
+        return ""
+    dest = Path(run_dir) / BLOG_INFOGRAPHIC_NAME
+    if found.resolve() != dest.resolve():
+        shutil.copy2(found, dest)
+    return BLOG_INFOGRAPHIC_NAME
+
+
+def gate_image_paths(run_dir: Path, card_pngs: list[Path]) -> list[Path]:
+    """Show the infographic first at the render gate, but keep it out of the cards."""
+    found = infographic_png(run_dir)
+    return [found, *card_pngs] if found else list(card_pngs)
+
+
 def render_cards_for_approve(
     briefing: dict[str, Any],
     run_dir: Path,
     now: datetime,
 ) -> list[Path]:
     """Render card PNG/HTML before Approve so operators can review slides."""
+    render_infographic_for_approve(briefing, run_dir, now)
     cards_dir = run_dir / "cards"
     cards_dir.mkdir(exist_ok=True)
     print("==> Render cards for Approve preview (HTML/PNG + caption)")
@@ -1549,6 +1612,7 @@ def run_publish(
     live_publish: bool = False,
     editorial_decision: dict[str, Any] | None = None,
     preflight: dict[str, Any] | None = None,
+    infographic_path: Path | None = None,
 ) -> dict[str, Any]:
     """Write package artifacts, optionally publish to Instagram, record seen_urls.
 
@@ -1563,7 +1627,9 @@ def run_publish(
     emit(stage="PUBLISH", event="publish started")
     picked_rows = _picked_for_briefing(picked, briefing)
     print("==> Write briefing markdown (manual paste)")
-    md = assemble_blog_markdown(briefing)
+    md = assemble_blog_markdown(
+        briefing, infographic_name=adopt_infographic(run_dir, infographic_path)
+    )
     md_path = run_dir / "briefing.md"
     md_path.write_text(md, encoding="utf-8")
     export_ref = str(md_path.resolve())
@@ -2117,7 +2183,7 @@ def run_draft_two_stage(
             action = notifier.wait_for_gate(
                 GateStage.RENDER,
                 preview,
-                image_paths=card_pngs,
+                image_paths=gate_image_paths(render_dir, card_pngs),
                 remaining=draft_store.manifest.render_remaining,
                 max_retries=draft_store.manifest.render_max,
                 run_id=run_dir.name,
@@ -2185,6 +2251,10 @@ def _finish_draft_after_render_approve(
 ) -> int:
     ensure_aux_before_publish()
     store.reopen()
+    try:
+        approved_infographic = infographic_png(draft_store.render_dir())
+    except RuntimeError:
+        approved_infographic = None
     run_publish(
         briefing,
         picked,
@@ -2194,12 +2264,14 @@ def _finish_draft_after_render_approve(
         notifier,
         generation_mode=generation_mode,
         card_png_paths=card_pngs,
+        infographic_path=approved_infographic,
     )
     draft_store.copy_into_final(
         briefing=briefing,
         md_path=run_dir / "briefing.md",
         html_path=run_dir / "briefing.html",
         card_pngs=card_pngs,
+        infographic_png=approved_infographic,
     )
 
     selected_label = (
@@ -2328,7 +2400,7 @@ def resume_parked_draft(
         action = notifier.wait_for_gate(
             GateStage.RENDER,
             preview,
-            image_paths=card_pngs,
+            image_paths=gate_image_paths(render_dir, card_pngs),
             remaining=draft_store.manifest.render_remaining,
             max_retries=draft_store.manifest.render_max,
             run_id=run_dir.name,
@@ -2395,7 +2467,7 @@ def resume_parked_draft(
     action = notifier.wait_for_gate(
         GateStage.RENDER,
         preview,
-        image_paths=card_pngs,
+        image_paths=gate_image_paths(render_dir, card_pngs),
         remaining=draft_store.manifest.render_remaining,
         max_retries=draft_store.manifest.render_max,
         run_id=run_dir.name,

@@ -12,7 +12,11 @@ from unittest.mock import MagicMock, patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from mvp_pipeline import run_publish  # noqa: E402
+from mvp_pipeline import (  # noqa: E402
+    adopt_infographic,
+    gate_image_paths,
+    run_publish,
+)
 from publish import PublishCardsResult, PublishConfig  # noqa: E402
 
 
@@ -74,6 +78,79 @@ class _FakeNotifier:
 
     def send_file(self, path: Path, caption: str = "") -> None:
         self.files.append(path)
+
+
+class InfographicHandoffTest(unittest.TestCase):
+    """The infographic rides beside briefing.md, never inside the card list."""
+
+    def test_gate_shows_the_infographic_first_without_joining_the_cards(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            render_dir = Path(tmp)
+            (render_dir / "infographic").mkdir()
+            info = render_dir / "infographic" / "infographic.png"
+            info.write_bytes(b"png")
+            cards = [render_dir / "slide-01.png", render_dir / "slide-02.png"]
+            self.assertEqual([info, *cards], gate_image_paths(render_dir, cards))
+            self.assertEqual(2, len(cards))
+
+    def test_gate_falls_back_to_cards_only_when_the_render_failed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cards = [Path(tmp) / "slide-01.png"]
+            self.assertEqual(cards, gate_image_paths(Path(tmp), cards))
+
+    def test_approved_render_is_copied_next_to_the_markdown(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            render_dir = Path(tmp) / "renders" / "render-02"
+            (render_dir / "infographic").mkdir(parents=True)
+            run_dir.mkdir()
+            source = render_dir / "infographic" / "infographic.png"
+            source.write_bytes(b"png")
+            self.assertEqual("infographic.png", adopt_infographic(run_dir, source))
+            self.assertEqual(b"png", (run_dir / "infographic.png").read_bytes())
+
+    def test_missing_render_yields_no_markdown_link(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual("", adopt_infographic(Path(tmp)))
+            self.assertFalse((Path(tmp) / "infographic.png").exists())
+
+    def test_run_publish_links_the_image_it_copied(self) -> None:
+        notifier = _FakeNotifier()
+        store = _FakeStore()
+        now = datetime(2026, 7, 28, tzinfo=timezone.utc)
+        cfg = PublishConfig(
+            publish_cards=False,
+            ig_user_id="",
+            meta_access_token="",
+            r2_endpoint="",
+            r2_access_key_id="",
+            r2_secret_access_key="",
+            r2_bucket="",
+            r2_public_base_url="",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            source = run_dir / "renders" / "infographic.png"
+            source.parent.mkdir(parents=True)
+            source.write_bytes(b"png")
+            with (
+                patch("mvp_pipeline.assemble_blog_html", return_value="<p>x</p>"),
+                patch("mvp_pipeline.PublishConfig.from_env", return_value=cfg),
+            ):
+                run_publish(
+                    _briefing(),
+                    _picked(),
+                    now,
+                    run_dir,
+                    store,  # type: ignore[arg-type]
+                    notifier,
+                    persist_seen="never",
+                    editorial_decision={"decision": "publish", "story_count": 3},
+                    infographic_path=source,
+                )
+            md = (run_dir / "briefing.md").read_text(encoding="utf-8")
+            self.assertIn("![브리핑 인포그래픽](infographic.png)", md)
+            self.assertTrue((run_dir / "infographic.png").is_file())
 
 
 class RunPublishTest(unittest.TestCase):
