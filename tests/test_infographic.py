@@ -233,6 +233,17 @@ class TemplateTest(unittest.TestCase):
         # NEXT is fed by upcoming_events, so it survives an empty market_impact.
         self.assertEqual("", fields["impact_4_state"])
 
+    def test_next_cell_reads_bare_string_events_like_the_markdown_does(self) -> None:
+        fields, _ = build_infographic_fields(
+            dict(BRIEFING, upcoming_events=["다음 주 연준 의사록 공개"])
+        )
+        self.assertEqual("다음 주 연준 의사록 공개", fields["impact_4_body"])
+        self.assertEqual("", fields["impact_4_state"])
+
+    def test_next_cell_falls_back_to_watch_next(self) -> None:
+        fields, _ = build_infographic_fields(dict(BRIEFING, upcoming_events=[]))
+        self.assertEqual("다음 분기 실적을 확인하세요.", fields["impact_4_body"])
+
     def test_html_has_no_unfilled_slots_and_escapes_content(self) -> None:
         document, fields, _ = render_infographic_html(
             dict(BRIEFING, title="<script>alert(1)</script> 위험"), date="2026.08.22"

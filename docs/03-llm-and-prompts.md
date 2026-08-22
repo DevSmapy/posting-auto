@@ -123,9 +123,12 @@ warm은 스토리와 **같은 `options`(num_ctx/num_thread)** 로 호출해 runn
   "watch_next": "Watch the Fed.",
   "one_liner_hint": "Inflation eased and rate expectations moved.",
   "entities": ["Fed"],
-  "tone_flags": ["macro"]
+  "tone_flags": ["macro"],
+  "visual_tags": ["inflation"]
 }
 ```
+
+`visual_tags`는 블로그 인포그래픽 픽토그램 **후보**입니다. 프롬프트가 허용 ID 목록을 주입하고, 목록 밖 값은 story 실패로 보지 않고 버립니다. 최종 아이콘은 코드가 정합니다 → [05. 카드 템플릿](05-card-templates.md#픽토그램-카탈로그)
 
 #### 2) Translation layer
 
@@ -146,6 +149,14 @@ Fact layer 결과를 `TARGET_LANGUAGE` / `TARGET_LOCALE` 기준의 story JSON �
 - `one_liner` 품질 검사
 
 validator 실패 시에만 좁은 범위 LLM rewrite를 1회 시도합니다. 이후에도 실패하면 **story 단위 heuristic fallback**으로 내려갑니다.
+
+#### 4) 조건부 한국어 자연화
+
+Envelope 조립 **직전**에 [`scripts/editorial/humanizer.py`](../scripts/editorial/humanizer.py)가 완성된 story를 규칙으로 진단합니다. 번역투·이중 피동·상투적 마무리·반복 접속사 등 오탐이 낮은 규칙만 씁니다.
+
+- 문제가 있는 story만 기존 `polish_story_llm()`으로 **최대 1회** 윤문합니다. 깨끗하거나 `BRIEFING_MODE=heuristic`이면 LLM 호출이 늘지 않습니다.
+- 윤문 후 `source_name` / `source_url` / 수치·날짜·인용이 그대로인지, 문자 bigram 변경률이 30% 이내인지 확인하고 어기면 원문으로 롤백합니다.
+- 진단 규칙·적용·롤백 사유는 `humanize_result.json`에 남고, 사실·품질 판단은 기존 editorial reviewer가 계속 담당합니다.
 
 ### Envelope 조립
 
