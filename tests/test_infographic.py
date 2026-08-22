@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -11,13 +13,46 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from cards.infographic import (  # noqa: E402
     GENERIC_ID,
+    LIMITS,
+    build_infographic_fields,
+    export_infographic,
     load_catalog,
+    render_infographic_html,
     resolve_pictogram,
     resolve_pictograms,
     sprite_symbol_ids,
     validate_visual_tags,
     visual_tag_options,
 )
+
+
+BRIEFING = {
+    "title": "반도체와 금리가 함께 움직인 하루 | 오늘의 경제 브리핑 (2026-08-22)",
+    "intro": "오늘 아침 경제·시장에서 주목할 이슈를 정리했습니다. 각 이슈의 배경도 함께 봅니다.",
+    "insight": "성장 기대는 살아 있지만 금리가 속도를 결정합니다. 다음 지표를 봅시다.",
+    "stories": [
+        {
+            "headline": "반도체 수요 회복 기대가 커졌습니다",
+            "one_liner": "고부가 메모리 주문이 늘었습니다.",
+            "what_happened": "메모리 가격이 올랐습니다.",
+            "watch_next": "다음 분기 실적을 확인하세요.",
+        },
+        {
+            "headline": "한국은행이 기준금리를 동결했습니다",
+            "one_liner": "정책 신호를 확인할 시점입니다.",
+        },
+        {
+            "headline": "아파트 분양 물량이 줄었습니다",
+            "one_liner": "공급 일정이 밀렸습니다.",
+        },
+    ],
+    "market_impact": {
+        "positive": ["수출 기업 실적 기대가 살아 있습니다."],
+        "neutral": ["단기 변동성은 이어질 수 있습니다."],
+        "negative": ["금융비용 부담이 남아 있습니다."],
+    },
+    "upcoming_events": [{"date": "", "title": "주요 지표 발표", "description": ""}],
+}
 
 
 def story(**fields: object) -> dict[str, object]:
@@ -144,6 +179,110 @@ class ResolverTest(unittest.TestCase):
         match = resolve_pictogram({"headline": "국채 발행 확대"})
         self.assertEqual("bond", match.id)
         self.assertEqual((), match.dropped_tags)
+
+
+class TemplateTest(unittest.TestCase):
+    def test_briefing_maps_onto_every_slot(self) -> None:
+        fields, matches = build_infographic_fields(BRIEFING, date="2026.08.22")
+        self.assertEqual("반도체와 금리가 함께 움직인 하루", fields["title"])
+        self.assertEqual("오늘 아침 경제·시장에서 주목할 이슈를 정리했습니다.", fields["intro"])
+        self.assertEqual("성장 기대는 살아 있지만 금리가 속도를 결정합니다.", fields["insight"])
+        self.assertEqual(
+            ["semiconductor", "central-bank", "real-estate"], [m.id for m in matches]
+        )
+        self.assertEqual("pg-semiconductor", fields["story_1_icon"])
+        self.assertEqual("01", fields["story_1_index"])
+        self.assertEqual("수출 기업 실적 기대가 살아 있습니다.", fields["impact_1_body"])
+        self.assertEqual("주요 지표 발표", fields["impact_4_body"])
+
+    def test_every_slot_respects_its_character_budget(self) -> None:
+        long_briefing = dict(
+            BRIEFING,
+            title="가" * 200,
+            intro="나" * 200,
+            insight="다" * 200,
+            stories=[{"headline": "라" * 200, "one_liner": "마" * 200}],
+            market_impact={"positive": ["바" * 200], "neutral": [], "negative": []},
+        )
+        fields, _ = build_infographic_fields(long_briefing)
+        for key, limit in (
+            ("title", LIMITS["title"]),
+            ("intro", LIMITS["intro"]),
+            ("insight", LIMITS["insight"]),
+            ("story_1_title", LIMITS["story_title"]),
+            ("story_1_body", LIMITS["story_body"]),
+            ("impact_1_body", LIMITS["impact_body"]),
+        ):
+            self.assertLessEqual(len(fields[key]), limit, key)
+            self.assertTrue(fields[key].endswith("…"), key)
+
+    def test_missing_stories_hide_their_row_instead_of_faking_copy(self) -> None:
+        fields, _ = build_infographic_fields(dict(BRIEFING, stories=BRIEFING["stories"][:1]))
+        self.assertEqual("", fields["story_1_state"])
+        self.assertEqual("is-empty", fields["story_2_state"])
+        self.assertEqual("", fields["story_2_title"])
+        self.assertEqual("pg-generic", fields["story_2_icon"])
+
+    def test_empty_impact_buckets_hide_their_cell(self) -> None:
+        fields, _ = build_infographic_fields(
+            dict(BRIEFING, market_impact={"positive": [], "neutral": [], "negative": []})
+        )
+        self.assertEqual("is-empty", fields["impact_1_state"])
+        self.assertEqual("is-empty", fields["impact_2_state"])
+        self.assertEqual("is-empty", fields["impact_3_state"])
+        # NEXT is fed by upcoming_events, so it survives an empty market_impact.
+        self.assertEqual("", fields["impact_4_state"])
+
+    def test_html_has_no_unfilled_slots_and_escapes_content(self) -> None:
+        document, fields, _ = render_infographic_html(
+            dict(BRIEFING, title="<script>alert(1)</script> 위험"), date="2026.08.22"
+        )
+        self.assertNotIn("{{", document)
+        self.assertNotIn("<script>alert(1)</script>", document)
+        self.assertIn("&lt;script&gt;", document)
+        self.assertIn('href="#pg-semiconductor"', document)
+        self.assertIn("2026.08.22", document)
+        self.assertEqual("2026.08.22", fields["date"])
+
+    def test_html_inlines_the_sprite_and_css_without_remote_assets(self) -> None:
+        document, _, _ = render_infographic_html(BRIEFING)
+        self.assertIn('<symbol id="pg-semiconductor"', document)
+        self.assertIn("--color-primary", document)
+        # Browserless has no network; the render must not wait on a font or icon fetch.
+        self.assertNotIn("@import", document)
+        self.assertNotIn("<link", document)
+        self.assertNotIn("url(http", document)
+        self.assertNotIn("<img", document)
+
+    def test_export_writes_html_meta_and_survives_png_failure(self) -> None:
+        class Boom:
+            def screenshot_html(self, _document: str, _out: Path) -> None:
+                raise RuntimeError("no chrome")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "infographic"
+            result = export_infographic(
+                BRIEFING, out, date="2026.08.22", renderer=Boom()
+            )
+            self.assertTrue(result["html"].exists())
+            self.assertIsNone(result["png"])
+            meta = json.loads(result["meta"].read_text(encoding="utf-8"))
+            self.assertEqual({"width": 1080, "height": 1080}, meta["canvas"])
+            self.assertEqual("no chrome", meta["error"])
+            self.assertEqual("semiconductor", meta["pictograms"][0]["id"])
+
+    def test_export_records_the_png_when_rendering_succeeds(self) -> None:
+        class Stub:
+            def screenshot_html(self, _document: str, out: Path) -> None:
+                out.write_bytes(b"png")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "infographic"
+            result = export_infographic(BRIEFING, out, renderer=Stub())
+            self.assertEqual(out / "infographic.png", result["png"])
+            meta = json.loads(result["meta"].read_text(encoding="utf-8"))
+            self.assertEqual("infographic.png", meta["png"])
+            self.assertEqual("", meta["error"])
 
 
 if __name__ == "__main__":
