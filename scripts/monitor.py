@@ -27,6 +27,7 @@ _PUBLISH_ARTIFACTS = (
     "image_urls.json",
     "creation_id.json",
     "publish_result.json",
+    "website_result.json",
 )
 
 TZ = ZoneInfo(os.getenv("NEWS_TIMEZONE", "Asia/Seoul"))
@@ -395,6 +396,7 @@ def _publish_rows(run_dir: Path, *, running: bool) -> list[dict[str, Any]]:
     md = (run_dir / "briefing.md").is_file()
     result = _read_json(run_dir / "publish_result.json")
     guard = _read_json(run_dir / "publish_guard.json")
+    site = _read_json(run_dir / "website_result.json")
     ig_id = None
     if isinstance(result, dict):
         ig_id = result.get("ig_media_id")
@@ -406,8 +408,20 @@ def _publish_rows(run_dir: Path, *, running: bool) -> list[dict[str, Any]]:
     elif running:
         ig_status = "pending"
     else:
-        ig_status = "skipped"
+        ig_status = "paused"
+    if isinstance(site, dict):
+        site_status = str(site.get("status") or "skipped")
+        if site_status == "dry_run":
+            site_status = "success"
+        site_id = site.get("url")
+    elif running:
+        site_status = "pending"
+        site_id = None
+    else:
+        site_status = "skipped"
+        site_id = None
     return [
+        {"channel": "Website", "status": site_status, "id": site_id},
         {"channel": "Markdown", "status": md_status, "id": None},
         {"channel": "Instagram", "status": ig_status, "id": ig_id},
         {"channel": "Tistory", "status": "skipped", "id": None},
@@ -418,18 +432,24 @@ def _publish_steps(run_dir: Path, *, running: bool) -> list[dict[str, Any]]:
     pngs = list((run_dir / "cards").glob("*.png")) if (run_dir / "cards").is_dir() else []
     guard = _read_json(run_dir / "publish_guard.json")
     guard_failed = isinstance(guard, dict) and guard.get("ok") is False
+    site = _read_json(run_dir / "website_result.json")
+    site_done = isinstance(site, dict) and site.get("status") in {"success", "dry_run"}
+    site_failed = isinstance(site, dict) and site.get("status") == "failed"
     checks = [
         ("MD", (run_dir / "briefing.md").is_file()),
         ("Cards", bool(pngs)),
         ("Guard", (run_dir / "publish_guard.json").is_file()),
         ("R2", (run_dir / "image_urls.json").is_file()),
         ("IG", (run_dir / "publish_result.json").is_file()),
+        ("Website", site_done),
     ]
     rows: list[dict[str, Any]] = []
     saw_running = False
     for name, done in checks:
         status = "pending"
         if name == "Guard" and guard_failed:
+            status = "failed"
+        elif name == "Website" and site_failed:
             status = "failed"
         elif done:
             status = "success"
@@ -504,6 +524,9 @@ def _fail_reason(run_dir: Path | None, editorial: Any, monitor: dict[str, Any] |
         if isinstance(guard, dict) and guard.get("ok") is False:
             blockers = guard.get("blockers") or []
             return "publish_guard: " + ", ".join(str(b) for b in blockers[:4])
+        site = _read_json(run_dir / "website_result.json")
+        if isinstance(site, dict) and site.get("status") == "failed":
+            return "website: " + str(site.get("error_type") or site.get("detail") or "failed")
         manifest = _read_json(run_dir / "manifest.json")
         if isinstance(manifest, dict) and manifest.get("status") == "parked":
             return f"parked:{manifest.get('parked_stage') or '?'}"
