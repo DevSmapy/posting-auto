@@ -1,0 +1,33 @@
+---
+import Base from '../layouts/Base.astro';
+import { formatDate, postPath, publishedPosts } from '../lib/posts';
+
+const posts = await publishedPosts();
+const [lead, ...rest] = posts;
+---
+<Base title="장전 브리핑">
+  {lead ? (
+    <article class="card lead-card">
+      <p class="kicker">{lead.data.category} · {formatDate(lead.data.published_at)}</p>
+      <h2><a href={postPath(lead)}>{lead.data.title}</a></h2>
+      <p class="lede">{lead.data.description}</p>
+      <p class="meta">{lead.data.sources.length}개 출처</p>
+    </article>
+  ) : (
+    <p>아직 발행된 글이 없습니다.</p>
+  )}
+
+  {rest.length > 0 && (
+    <section>
+      <h2>최근 글</h2>
+      <ul class="post-list">
+        {rest.map((post) => (
+          <li>
+            <p class="kicker">{post.data.category} · {formatDate(post.data.published_at)}</p>
+            <a class="title" href={postPath(post)}>{post.data.title}</a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )}
+</Base>

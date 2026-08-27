@@ -1,0 +1,39 @@
+---
+import { render } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+import { formatDate, postPath, publishedPosts } from '../../lib/posts';
+
+export async function getStaticPaths() {
+  const posts = await publishedPosts();
+  return posts.map((post) => ({
+    params: { slug: post.id },
+    props: { post },
+  }));
+}
+
+const { post } = Astro.props;
+const { Content } = await render(post);
+---
+<Base title={post.data.title} description={post.data.description} canonicalPath={postPath(post)}>
+  <article>
+    <p class="kicker">{post.data.category} · {formatDate(post.data.published_at)}</p>
+    <h1>{post.data.title}</h1>
+    <p class="meta">오늘의 경제 브리핑</p>
+    <div class="prose">
+      <Content />
+    </div>
+    {post.data.sources.length > 0 && (
+      <section class="sources">
+        <h2>출처</h2>
+        <ul>
+          {post.data.sources.map((source) => (
+            <li>
+              {source.url ? <a href={source.url}>{source.title}</a> : source.title}
+            </li>
+          ))}
+        </ul>
+      </section>
+    )}
+    <p class="disclaimer">정보 안내용이며 투자 권유가 아닙니다. 로그인·댓글·광고는 이 페이지에 없습니다.</p>
+  </article>
+</Base>
