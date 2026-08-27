@@ -4,6 +4,7 @@ from .config import PublishConfig
 from .instagram import InstagramCarouselPublisher, caption_from_briefing
 from .pipeline import PublishCardsPipeline, PublishCardsResult
 from .r2 import R2Uploader
+from .website import WebsitePublisher
 from .ready import (
     PublishReadyPackage,
     ensure_publish_ready_from_run,
@@ -17,6 +18,7 @@ __all__ = [
     "PublishCardsResult",
     "PublishConfig",
     "PublishReadyPackage",
+    "WebsitePublisher",
     "R2Uploader",
     "caption_from_briefing",
     "ensure_publish_ready_from_run",
