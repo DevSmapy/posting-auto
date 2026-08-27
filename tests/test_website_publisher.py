@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import unittest
 from datetime import datetime
@@ -13,7 +14,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from publish.website import WebsitePublisher, article_slug, render_post  # noqa: E402
+from publish.website import (  # noqa: E402
+    WebsitePublisher,
+    article_slug,
+    maybe_verify_deploy,
+    render_post,
+)
 from test_assemble_blog import BRIEFING_V2  # noqa: E402
 
 from mvp_pipeline import assemble_blog_markdown  # noqa: E402
@@ -102,6 +108,31 @@ class WebsitePublisherTest(unittest.TestCase):
         result = publisher.publish({})
         self.assertEqual(result.status, "failed")
         self.assertEqual(result.error_type, "CONTENT_WRITE_FAILED")
+
+    def test_verify_skipped_without_site_url(self) -> None:
+        with patch.dict(os.environ, {"SITE_BASE_URL": ""}, clear=False):
+            self.assertIsNone(maybe_verify_deploy("/articles/x", "제목"))
+
+    def test_verify_checks_status_and_title(self) -> None:
+        class _Resp:
+            status = 200
+
+            def read(self) -> bytes:
+                return "<h1>확인제목</h1>".encode()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):  # noqa: ANN002
+                return None
+
+        with patch.dict(os.environ, {"SITE_BASE_URL": "https://briefing.example"}, clear=False):
+            with patch("publish.website.urlopen", return_value=_Resp()):
+                result = maybe_verify_deploy("/articles/x", "확인제목")
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.status, "success")
+
 
 
 if __name__ == "__main__":

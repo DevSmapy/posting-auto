@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 from .protocol import PublishResult
@@ -190,3 +194,180 @@ class WebsitePublisher:
             published_url=f"/articles/{dest.stem}",
             detail=str(dest),
         )
+
+
+def posts_dir_from_env() -> Path:
+    raw = os.getenv("WEBSITE_POSTS_DIR", "").strip()
+    return Path(raw) if raw else DEFAULT_POSTS_DIR
+
+
+def website_publish_enabled() -> bool:
+    return os.getenv("WEBSITE_PUBLISH", "1").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+
+
+def write_website_result(run_dir: Path, payload: dict[str, Any]) -> Path:
+    path = run_dir / "website_result.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
+def maybe_git_push(post_path: Path) -> PublishResult | None:
+    """Commit and push the post file when WEBSITE_GIT_PUSH=1. Skip otherwise."""
+    flag = os.getenv("WEBSITE_GIT_PUSH", "0").strip().lower()
+    if flag not in {"1", "true", "yes", "on"}:
+        return None
+    cwd = REPO_ROOT
+    rel = os.path.relpath(post_path, cwd)
+    add = subprocess.run(
+        ["git", "add", "--", rel],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if add.returncode != 0:
+        return PublishResult(
+            channel="website",
+            status="failed",
+            error_type="GIT_COMMIT_FAILED",
+            detail=add.stderr.strip() or add.stdout.strip() or "git add failed",
+        )
+    commit = subprocess.run(
+        ["git", "commit", "-m", f"publish: {post_path.stem}"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if commit.returncode != 0:
+        return PublishResult(
+            channel="website",
+            status="failed",
+            error_type="GIT_COMMIT_FAILED",
+            detail=commit.stderr.strip() or commit.stdout.strip() or "git commit failed",
+        )
+    push = subprocess.run(
+        ["git", "push"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if push.returncode != 0:
+        return PublishResult(
+            channel="website",
+            status="failed",
+            error_type="GIT_PUSH_FAILED",
+            detail=push.stderr.strip() or push.stdout.strip() or "git push failed",
+        )
+    return None
+
+
+def maybe_verify_deploy(published_url: str, title: str) -> PublishResult | None:
+    base = os.getenv("SITE_BASE_URL", "").strip().rstrip("/")
+    if not base or not published_url:
+        return None
+    url = f"{base}{published_url if published_url.startswith('/') else '/' + published_url}/"
+    try:
+        with urlopen(Request(url, method="GET"), timeout=15) as resp:
+            status = getattr(resp, "status", 200)
+            body = resp.read().decode("utf-8", errors="replace")
+    except HTTPError as exc:
+        return PublishResult(
+            channel="website",
+            status="failed",
+            error_type="DEPLOY_VERIFY_FAILED",
+            published_url=url,
+            detail=f"HTTP {exc.code}",
+        )
+    except URLError as exc:
+        return PublishResult(
+            channel="website",
+            status="failed",
+            error_type="DEPLOY_VERIFY_FAILED",
+            published_url=url,
+            detail=str(exc.reason),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return PublishResult(
+            channel="website",
+            status="failed",
+            error_type="DEPLOY_VERIFY_FAILED",
+            published_url=url,
+            detail=str(exc),
+        )
+    if status != 200 or title not in body:
+        return PublishResult(
+            channel="website",
+            status="failed",
+            error_type="DEPLOY_VERIFY_FAILED",
+            published_url=url,
+            detail=f"status={status} title_found={title in body}",
+        )
+    return PublishResult(
+        channel="website",
+        status="success",
+        published_url=url,
+        detail="verified",
+    )
+
+
+def publish_approved_briefing(
+    briefing: dict[str, Any],
+    markdown: str,
+    run_dir: Path,
+    *,
+    now: datetime | None = None,
+    dry_run: bool | None = None,
+) -> dict[str, Any]:
+    """Write site Markdown, optionally git-push and verify the live URL."""
+    if not website_publish_enabled():
+        payload = {"status": "skipped", "error_type": None, "url": None, "path": None}
+        write_website_result(run_dir, payload)
+        return payload
+    if dry_run is None:
+        dry_run = os.getenv("WEBSITE_DRY_RUN", "0").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+    publisher = WebsitePublisher(posts_dir_from_env())
+    result = publisher.publish(
+        {"briefing": briefing, "markdown": markdown, "now": now, "dry_run": dry_run}
+    )
+    payload: dict[str, Any] = {
+        "status": result.status,
+        "error_type": result.error_type,
+        "url": result.published_url,
+        "path": result.detail,
+        "verified": False,
+    }
+    if result.status == "failed":
+        write_website_result(run_dir, payload)
+        return payload
+    if result.status == "success" and result.detail:
+        git_fail = maybe_git_push(Path(result.detail))
+        if git_fail is not None:
+            payload["status"] = git_fail.status
+            payload["error_type"] = git_fail.error_type
+            payload["detail"] = git_fail.detail
+            write_website_result(run_dir, payload)
+            return payload
+        verify = maybe_verify_deploy(result.published_url or "", display_title(briefing))
+        if verify is not None:
+            payload["verified"] = verify.status == "success"
+            payload["live_url"] = verify.published_url
+            if verify.status == "failed":
+                payload["status"] = verify.status
+                payload["error_type"] = verify.error_type
+                payload["detail"] = verify.detail
+                write_website_result(run_dir, payload)
+                return payload
+    write_website_result(run_dir, payload)
+    return payload
