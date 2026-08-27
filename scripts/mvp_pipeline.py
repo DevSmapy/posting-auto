@@ -59,6 +59,7 @@ from publish import (  # noqa: E402
     PublishCardsPipeline,
     PublishConfig,
 )
+from publish.website import publish_approved_briefing  # noqa: E402
 from seen_urls import SeenUrlsStore  # noqa: E402
 from story_quality import (  # noqa: E402
     deterministic_story_repair,
@@ -1539,6 +1540,28 @@ def run_publish(
         briefing.get("blog_html") or assemble_blog_html(briefing), encoding="utf-8"
     )
 
+    website_result = publish_approved_briefing(
+        briefing, md, run_dir, now=now
+    )
+    if website_result.get("status") == "failed":
+        print(
+            f"   !! website publish failed: "
+            f"{website_result.get('error_type')} {website_result.get('detail') or ''}"
+        )
+        if live_publish:
+            _notify_stage(
+                notifier,
+                "ACTION REQUIRED\nWebsite publish failed.\n"
+                f"{website_result.get('error_type')}: {website_result.get('detail') or website_result}",
+            )
+            print("Done (publish blocked: website).")
+            return {
+                "ok": False,
+                "reason": "website_failed",
+                "error_type": website_result.get("error_type"),
+                "website": website_result,
+            }
+
     if persist_seen == "after_export":
         n = store.record_published(
             picked_rows, tistory_post_id=export_ref, ig_media_id=None
@@ -1646,7 +1669,12 @@ def run_publish(
                     return {"ok": False, "reason": "pipeline_error", "error": str(exc)}
                 _notify_stage(notifier, msg)
 
-    if live_publish and not publish_cfg.package_only and not ig_media_id:
+    if (
+        live_publish
+        and publish_cfg.publish_cards
+        and not publish_cfg.package_only
+        and not ig_media_id
+    ):
         _notify_stage(
             notifier,
             "ACTION REQUIRED\nLive publish produced no Instagram media_id.\n"
@@ -1719,6 +1747,7 @@ def run_publish(
         "ok": True,
         "reason": "published" if ig_media_id else "exported",
         "ig_media_id": ig_media_id,
+        "website": website_result,
     }
 
 def content_retry_max() -> int:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 import unittest
@@ -77,6 +78,18 @@ class _FakeNotifier:
 
 
 class RunPublishTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._posts_tmp = tempfile.TemporaryDirectory()
+        self._prev_posts = os.environ.get("WEBSITE_POSTS_DIR")
+        os.environ["WEBSITE_POSTS_DIR"] = self._posts_tmp.name
+
+    def tearDown(self) -> None:
+        if self._prev_posts is None:
+            os.environ.pop("WEBSITE_POSTS_DIR", None)
+        else:
+            os.environ["WEBSITE_POSTS_DIR"] = self._prev_posts
+        self._posts_tmp.cleanup()
+
     def test_reuses_pngs_and_records_seen_on_ig_skip(self) -> None:
         notifier = _FakeNotifier()
         store = _FakeStore()
@@ -671,6 +684,115 @@ class NotifyAfterDeadlineTest(unittest.TestCase):
             wrapped.send_text("two")
         self.assertEqual(calls, ["wait", "one", "two"])
         self.assertEqual(wrapped.other(), "passthrough")
+
+
+class WebsiteRunPublishTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._posts_tmp = tempfile.TemporaryDirectory()
+        self._prev_posts = os.environ.get("WEBSITE_POSTS_DIR")
+        os.environ["WEBSITE_POSTS_DIR"] = self._posts_tmp.name
+
+    def tearDown(self) -> None:
+        if self._prev_posts is None:
+            os.environ.pop("WEBSITE_POSTS_DIR", None)
+        else:
+            os.environ["WEBSITE_POSTS_DIR"] = self._prev_posts
+        self._posts_tmp.cleanup()
+
+    def test_writes_website_post_and_keeps_briefing_md(self) -> None:
+        notifier = _FakeNotifier()
+        store = _FakeStore()
+        now = datetime(2026, 7, 28, tzinfo=timezone.utc)
+        cfg = PublishConfig(publish_cards=False)
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            with (
+                patch("mvp_pipeline.assemble_blog_markdown", return_value="# md\n본문"),
+                patch("mvp_pipeline.assemble_blog_html", return_value="<p>x</p>"),
+                patch("mvp_pipeline.PublishConfig.from_env", return_value=cfg),
+            ):
+                outcome = run_publish(
+                    _briefing(),
+                    _picked(),
+                    now,
+                    run_dir,
+                    store,  # type: ignore[arg-type]
+                    notifier,
+                    persist_seen="never",
+                )
+            self.assertTrue(outcome.get("ok"))
+            self.assertTrue((run_dir / "briefing.md").is_file())
+            self.assertTrue((run_dir / "website_result.json").is_file())
+            self.assertTrue(list(Path(self._posts_tmp.name).glob("*.md")))
+
+    def test_website_failure_keeps_briefing_and_blocks_live(self) -> None:
+        notifier = _FakeNotifier()
+        store = _FakeStore()
+        now = datetime(2026, 7, 28, tzinfo=timezone.utc)
+        cfg = PublishConfig(publish_cards=False)
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            with (
+                patch("mvp_pipeline.assemble_blog_markdown", return_value="# md"),
+                patch("mvp_pipeline.assemble_blog_html", return_value="<p>x</p>"),
+                patch("mvp_pipeline.PublishConfig.from_env", return_value=cfg),
+                patch(
+                    "mvp_pipeline.publish_approved_briefing",
+                    return_value={
+                        "status": "failed",
+                        "error_type": "CONTENT_WRITE_FAILED",
+                        "detail": "disk",
+                    },
+                ),
+            ):
+                outcome = run_publish(
+                    _briefing(),
+                    _picked(),
+                    now,
+                    run_dir,
+                    store,  # type: ignore[arg-type]
+                    notifier,
+                    persist_seen="never",
+                    live_publish=True,
+                    editorial_decision={"decision": "publish"},
+                )
+            self.assertFalse(outcome.get("ok"))
+            self.assertEqual(outcome.get("reason"), "website_failed")
+            self.assertTrue((run_dir / "briefing.md").is_file())
+
+    def test_live_without_cards_does_not_require_instagram(self) -> None:
+        notifier = _FakeNotifier()
+        store = _FakeStore()
+        now = datetime(2026, 7, 28, tzinfo=timezone.utc)
+        self._prev_reviewer = os.environ.get("EDITORIAL_LLM_REVIEWER")
+        os.environ["EDITORIAL_LLM_REVIEWER"] = "1"
+        cfg = PublishConfig(publish_cards=False)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                run_dir = Path(tmp)
+                with (
+                    patch("mvp_pipeline.assemble_blog_markdown", return_value="# md"),
+                    patch("mvp_pipeline.assemble_blog_html", return_value="<p>x</p>"),
+                    patch("mvp_pipeline.PublishConfig.from_env", return_value=cfg),
+                ):
+                    outcome = run_publish(
+                        _briefing(),
+                        _picked(),
+                        now,
+                        run_dir,
+                        store,  # type: ignore[arg-type]
+                        notifier,
+                        persist_seen="never",
+                        live_publish=True,
+                        editorial_decision={"decision": "publish"},
+                    )
+                self.assertTrue(outcome.get("ok"), outcome)
+                self.assertNotEqual(outcome.get("reason"), "missing_ig_media_id")
+        finally:
+            if self._prev_reviewer is None:
+                os.environ.pop("EDITORIAL_LLM_REVIEWER", None)
+            else:
+                os.environ["EDITORIAL_LLM_REVIEWER"] = self._prev_reviewer
 
 
 if __name__ == "__main__":
