@@ -1,0 +1,20 @@
+---
+import Base from '../../layouts/Base.astro';
+import { formatDate, postPath, publishedPosts } from '../../lib/posts';
+
+const posts = await publishedPosts();
+---
+<Base title="글" description="발행된 브리핑 목록" canonicalPath="/articles/">
+  <p class="kicker">목록</p>
+  <h1>글</h1>
+  <p class="meta">최신 글부터 보여 줍니다. 초안과 실패분은 여기에 없습니다.</p>
+  <ul class="post-list">
+    {posts.map((post) => (
+      <li>
+        <p class="kicker">{post.data.category} · {formatDate(post.data.published_at)}</p>
+        <a class="title" href={postPath(post)}>{post.data.title}</a>
+        <p class="meta">{post.data.description}</p>
+      </li>
+    ))}
+  </ul>
+</Base>

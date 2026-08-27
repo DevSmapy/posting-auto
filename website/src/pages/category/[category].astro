@@ -1,0 +1,30 @@
+---
+import Base from '../../layouts/Base.astro';
+import { categoriesOf, formatDate, postPath, publishedPosts } from '../../lib/posts';
+
+export async function getStaticPaths() {
+  const posts = await publishedPosts();
+  return categoriesOf(posts).map((category) => ({
+    params: { category },
+    props: {
+      category,
+      posts: posts.filter((post) => post.data.category === category),
+    },
+  }));
+}
+
+const { category, posts } = Astro.props;
+---
+<Base title={category} description={`${category} 글 목록`} canonicalPath={`/category/${category}/`}>
+  <p class="kicker">분류</p>
+  <h1>{category}</h1>
+  <ul class="post-list">
+    {posts.map((post) => (
+      <li>
+        <p class="kicker">{formatDate(post.data.published_at)}</p>
+        <a class="title" href={postPath(post)}>{post.data.title}</a>
+        <p class="meta">{post.data.description}</p>
+      </li>
+    ))}
+  </ul>
+</Base>
