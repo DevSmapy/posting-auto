@@ -19,6 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_POSTS_DIR = REPO_ROOT / "website" / "src" / "content" / "posts"
 SEOUL = ZoneInfo("Asia/Seoul")
 GENERIC_TAGS = {"경제", "브리핑", "증시"}
+KINDS = {"briefing", "note"}
 _SLUG_STRIP = re.compile(r"[^\w]+", re.UNICODE)
 
 
@@ -27,8 +28,8 @@ def _yaml_quote(value: str) -> str:
 
 
 def display_title(briefing: dict[str, Any]) -> str:
-    raw = (briefing.get("title") or "오늘의 경제 브리핑").strip()
-    return raw.split("|", 1)[0].strip() or "오늘의 경제 브리핑"
+    raw = (briefing.get("title") or "오늘의 브리핑").strip()
+    return raw.split("|", 1)[0].strip() or "오늘의 브리핑"
 
 
 def description_of(briefing: dict[str, Any]) -> str:
@@ -44,6 +45,11 @@ def category_of(briefing: dict[str, Any]) -> str:
         if text and text not in GENERIC_TAGS:
             return text
     return "시장"
+
+
+def kind_of(briefing: dict[str, Any]) -> str:
+    raw = str(briefing.get("kind") or "briefing").strip().lower()
+    return raw if raw in KINDS else "briefing"
 
 
 def sources_of(briefing: dict[str, Any]) -> list[dict[str, str]]:
@@ -122,6 +128,7 @@ def render_post(briefing: dict[str, Any], markdown: str | None = None, now: date
         f"description: {_yaml_quote(description_of(briefing))}",
         f"published_at: {_yaml_quote(when.isoformat())}",
         f"category: {_yaml_quote(category_of(briefing))}",
+        f"kind: {_yaml_quote(kind_of(briefing))}",
         "tags:",
     ]
     if tags:

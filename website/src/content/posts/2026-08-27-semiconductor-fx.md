@@ -3,6 +3,7 @@ title: "반도체와 환율이 동시에 열린 하루"
 description: "수출 업종은 실적 기대를 다시 반영하고, 환율은 수입 물가와 수급 이야기를 같이 연다."
 published_at: "2026-08-27T07:00:00+09:00"
 category: "시장"
+kind: "briefing"
 tags:
   - 경제
   - 반도체

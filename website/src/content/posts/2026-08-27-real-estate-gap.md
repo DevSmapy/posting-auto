@@ -3,6 +3,7 @@ title: "부동산 대기 수요와 거래 공백"
 description: "같은 날 시장 브리핑과 별도로, 정책 공백기의 부동산 관측점을 정리한다."
 published_at: "2026-08-27T07:30:00+09:00"
 category: "부동산"
+kind: "briefing"
 tags:
   - 경제
   - 부동산
