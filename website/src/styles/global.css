@@ -153,6 +153,20 @@ h2 {
   font-size: 1.2rem;
 }
 
+.cover {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1200 / 630;
+  object-fit: cover;
+  border-radius: var(--radius-card);
+  margin: 0.5rem 0 0.7rem;
+  background: var(--color-ceramic);
+}
+
+.article-cover {
+  margin: 0 0 1.2rem;
+}
+
 .tags {
   display: flex;
   flex-wrap: wrap;

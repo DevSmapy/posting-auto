@@ -14,10 +14,16 @@ export async function getStaticPaths() {
 const { post } = Astro.props;
 const { Content } = await render(post);
 ---
-<Base title={post.data.title} description={post.data.description} canonicalPath={postPath(post)}>
+<Base
+  title={post.data.title}
+  description={post.data.description}
+  canonicalPath={postPath(post)}
+  ogImage={post.data.cover}
+>
   <article>
     <p class="kicker">{post.data.category} · {formatDate(post.data.published_at)}</p>
     <h1>{post.data.title}</h1>
+    {post.data.cover && <img class="cover article-cover" src={post.data.cover} alt="" />}
     {post.data.tags.length > 0 && (
       <p class="tags">
         {post.data.tags.map((tag) => (
