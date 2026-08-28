@@ -22,6 +22,11 @@ const { category, posts } = Astro.props;
     {posts.map((post) => (
       <li>
         <p class="kicker">{formatDate(post.data.published_at)}</p>
+        {post.data.cover && (
+          <a href={postPath(post)}>
+            <img class="cover" src={post.data.cover} alt="" />
+          </a>
+        )}
         <a class="title" href={postPath(post)}>{post.data.title}</a>
         <p class="meta">{post.data.description}</p>
       </li>
