@@ -1,7 +1,7 @@
 ---
 import { render } from 'astro:content';
 import Base from '../../layouts/Base.astro';
-import { formatDate, postPath, publishedPosts } from '../../lib/posts';
+import { postKicker, postPath, publishedPosts } from '../../lib/posts';
 
 export async function getStaticPaths() {
   const posts = await publishedPosts();
@@ -21,7 +21,7 @@ const { Content } = await render(post);
   ogImage={post.data.cover}
 >
   <article>
-    <p class="kicker">{post.data.category} · {formatDate(post.data.published_at)}</p>
+    <p class="kicker">{postKicker(post)}</p>
     <h1>{post.data.title}</h1>
     {post.data.cover && <img class="cover article-cover" src={post.data.cover} alt="" />}
     {post.data.tags.length > 0 && (

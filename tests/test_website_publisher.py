@@ -49,6 +49,7 @@ class WebsitePublisherTest(unittest.TestCase):
             text = written.read_text(encoding="utf-8")
             self.assertIn("title: \"금리·반도체·AI가 동시에 흔든 하루\"", text)
             self.assertIn("category: \"시장\"", text)
+            self.assertIn("kind: \"briefing\"", text)
             self.assertIn("status: \"published\"", text)
             self.assertIn("한국은행이 기준금리를 인상했습니다", text)
             self.assertTrue(briefing_md.is_file())
@@ -108,6 +109,23 @@ class WebsitePublisherTest(unittest.TestCase):
         result = publisher.publish({})
         self.assertEqual(result.status, "failed")
         self.assertEqual(result.error_type, "CONTENT_WRITE_FAILED")
+
+    def test_kind_note_is_written(self) -> None:
+        briefing = dict(BRIEFING_V2)
+        briefing["kind"] = "note"
+        briefing["title"] = "지하철 파업 예고"
+        with TemporaryDirectory() as tmp:
+            publisher = WebsitePublisher(Path(tmp) / "posts")
+            result = publisher.publish({"briefing": briefing})
+            self.assertEqual(result.status, "success")
+            text = Path(result.detail or "").read_text(encoding="utf-8")
+            self.assertIn("kind: \"note\"", text)
+
+    def test_unknown_kind_falls_back_to_briefing(self) -> None:
+        briefing = dict(BRIEFING_V2)
+        briefing["kind"] = "flash"
+        _, rendered = render_post(briefing)
+        self.assertIn("kind: \"briefing\"", rendered)
 
     def test_verify_skipped_without_site_url(self) -> None:
         with patch.dict(os.environ, {"SITE_BASE_URL": ""}, clear=False):

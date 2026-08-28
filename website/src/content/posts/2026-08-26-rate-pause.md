@@ -3,6 +3,7 @@ title: "금리는 쉬고, 해석은 쉬지 않았다"
 description: "동결 자체보다 메시지 온도가 시장 해석을 갈랐다."
 published_at: "2026-08-26T07:00:00+09:00"
 category: "거시"
+kind: "briefing"
 tags:
   - 경제
   - 금리

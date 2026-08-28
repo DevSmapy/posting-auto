@@ -1,6 +1,6 @@
 ---
 import Base from '../../layouts/Base.astro';
-import { categoriesOf, formatDate, postPath, publishedPosts } from '../../lib/posts';
+import { categoriesOf, postKicker, postPath, publishedPosts } from '../../lib/posts';
 
 export async function getStaticPaths() {
   const posts = await publishedPosts();
@@ -21,7 +21,7 @@ const { category, posts } = Astro.props;
   <ul class="post-list">
     {posts.map((post) => (
       <li>
-        <p class="kicker">{formatDate(post.data.published_at)}</p>
+        <p class="kicker">{postKicker(post)}</p>
         {post.data.cover && (
           <a href={postPath(post)}>
             <img class="cover" src={post.data.cover} alt="" />

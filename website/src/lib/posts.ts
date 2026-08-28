@@ -6,6 +6,14 @@ export function postPath(post: Post): string {
   return `/articles/${post.id}`;
 }
 
+export function postKicker(post: Post): string {
+  const base = `${post.data.category} · ${formatDate(post.data.published_at)}`;
+  if (post.data.kind === 'note') {
+    return `${base} · 단신`;
+  }
+  return base;
+}
+
 export function formatDate(value: Date): string {
   return new Intl.DateTimeFormat('ko-KR', {
     timeZone: 'Asia/Seoul',
