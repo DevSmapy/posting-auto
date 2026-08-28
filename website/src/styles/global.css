@@ -149,18 +149,24 @@ h2 {
   padding: 1.2rem 1.4rem;
 }
 
-.lead-card {
-  margin-bottom: 1.6rem;
+.home-stream .title {
+  font-size: 1.2rem;
 }
 
-.lead-card h2 {
-  font-size: 1.7rem;
-  font-weight: 600;
-  color: var(--color-green);
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 1.2rem;
 }
 
-.lead-card h2 a {
-  color: inherit;
+.tags span {
+  display: inline-block;
+  padding: 0.15rem 0.65rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-ceramic);
+  color: var(--color-muted);
+  font-size: 0.8rem;
 }
 
 .post-list {

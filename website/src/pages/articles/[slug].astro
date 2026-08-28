@@ -18,7 +18,13 @@ const { Content } = await render(post);
   <article>
     <p class="kicker">{post.data.category} · {formatDate(post.data.published_at)}</p>
     <h1>{post.data.title}</h1>
-    <p class="meta">오늘의 경제 브리핑</p>
+    {post.data.tags.length > 0 && (
+      <p class="tags">
+        {post.data.tags.map((tag) => (
+          <span>{tag}</span>
+        ))}
+      </p>
+    )}
     <div class="prose">
       <Content />
     </div>

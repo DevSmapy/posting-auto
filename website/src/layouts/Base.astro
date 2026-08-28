@@ -1,19 +1,22 @@
 ---
 import '../styles/global.css';
 import { categoriesOf, publishedPosts } from '../lib/posts';
+import { SITE_NAME, SITE_TAGLINE } from '../lib/site';
 
 interface Props {
   title: string;
   description?: string;
   canonicalPath?: string;
+  ogImage?: string;
 }
 
 const posts = await publishedPosts();
 const categories = categoriesOf(posts);
-const { title, description = '한국 경제와 시사. 매일 아침, 오늘 무엇이 중요한지.', canonicalPath = Astro.url.pathname } = Astro.props;
+const { title, description = SITE_TAGLINE, canonicalPath = Astro.url.pathname, ogImage } = Astro.props;
 const site = Astro.site ?? new URL('https://briefing.example');
 const canonical = new URL(canonicalPath, site).toString();
-const pageTitle = title.includes('장전 브리핑') ? title : `${title} · 장전 브리핑`;
+const pageTitle = title.includes(SITE_NAME) ? title : `${title} · ${SITE_NAME}`;
+const image = ogImage ? new URL(ogImage, site).toString() : undefined;
 ---
 <!doctype html>
 <html lang="ko">
@@ -23,22 +26,24 @@ const pageTitle = title.includes('장전 브리핑') ? title : `${title} · 장�
     <title>{pageTitle}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
-    <link rel="alternate" type="application/rss+xml" title="장전 브리핑" href={new URL('/rss.xml', site).toString()} />
+    <link rel="alternate" type="application/rss+xml" title={SITE_NAME} href={new URL('/rss.xml', site).toString()} />
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="ko_KR" />
     <meta property="og:title" content={pageTitle} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
+    {image && <meta property="og:image" content={image} />}
     <link rel="icon" href="/favicon.svg" />
   </head>
   <body>
     <header class="site-header">
       <div class="wrap">
-        <a class="masthead" href="/">장전 브리핑</a>
-        <p class="tagline">한국 경제 · 시사. 매일 아침, 오늘 무엇이 중요한지.</p>
+        <a class="masthead" href="/">{SITE_NAME}</a>
+        <p class="tagline">{SITE_TAGLINE}</p>
         <nav class="nav" aria-label="주요 메뉴">
           <a href="/">홈</a>
           <a href="/articles/">글</a>
+          <a href="/about/">소개</a>
           {categories.map((category) => (
             <a href={`/category/${category}/`}>{category}</a>
           ))}

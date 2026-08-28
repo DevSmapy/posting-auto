@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { publishedPosts, postPath } from '../lib/posts';
+import { SITE_NAME, SITE_TAGLINE } from '../lib/site';
 
 export const GET: APIRoute = async ({ site }) => {
   const origin = (site ?? new URL('https://briefing.example')).toString().replace(/\/$/, '');
@@ -20,9 +21,9 @@ export const GET: APIRoute = async ({ site }) => {
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
   <channel>
-    <title>장전 브리핑</title>
+    <title>${escapeXml(SITE_NAME)}</title>
     <link>${origin}/</link>
-    <description>한국 경제와 시사. 매일 아침, 오늘 무엇이 중요한지.</description>
+    <description>${escapeXml(SITE_TAGLINE)}</description>
     <language>ko</language>
 ${items}
   </channel>
