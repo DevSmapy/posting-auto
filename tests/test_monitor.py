@@ -391,6 +391,26 @@ class MonitorStateTest(unittest.TestCase):
         self.assertEqual(ig["status"], "paused")
         self.assertIn("GIT_PUSH_FAILED", state["failure_reason"])
 
+    def test_website_skipped_is_not_pending(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            run = _run(out)
+            (run / "briefing.md").write_text("# md\n", encoding="utf-8")
+            _write(
+                run / "website_result.json",
+                {"status": "skipped", "error_type": None, "url": None, "path": None},
+            )
+            _write(
+                run / "monitor.json",
+                {"ended": True, "ok": True, "run_id": run.name, "mode": "autonomous"},
+            )
+            state = read_state(output=out, lock_file=Path(tmp) / "no.lock", probe=False)
+        website = [p for p in state["publish"] if p["channel"] == "Website"][0]
+        self.assertEqual(website["status"], "skipped")
+        steps = {row["name"]: row["status"] for row in state["publish_steps"]}
+        self.assertEqual(steps["Website"], "skipped")
+        self.assertNotEqual(steps["Website"], "pending")
+
     def test_zombie_dead_pid_is_failed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)

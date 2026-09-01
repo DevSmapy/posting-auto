@@ -188,6 +188,12 @@ class AssembleBlogMarkdownTest(unittest.TestCase):
         mixed = preview_text(BRIEFING_V2, [], generation_mode="mixed")
         self.assertIn("생성: mixed", mixed)
 
+    def test_markdown_embeds_infographic_only_when_named(self) -> None:
+        plain = assemble_blog_markdown(BRIEFING_V2)
+        self.assertNotIn("infographic.png", plain)
+        md = assemble_blog_markdown(BRIEFING_V2, infographic_name="infographic.png")
+        self.assertIn("![브리핑 인포그래픽](infographic.png)", md)
+
     def test_assemble_core_summary_from_one_liners(self) -> None:
         stories = [
             {

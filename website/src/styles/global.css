@@ -163,8 +163,34 @@ h2 {
   background: var(--color-ceramic);
 }
 
+.cover.graphic {
+  aspect-ratio: 1 / 1;
+  max-width: 22rem;
+  object-fit: contain;
+}
+
 .article-cover {
   margin: 0 0 1.2rem;
+}
+
+.infographic {
+  margin: 0 0 1.4rem;
+}
+
+.infographic img {
+  display: block;
+  width: 100%;
+  max-width: 36rem;
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  border-radius: var(--radius-card);
+  background: var(--color-ceramic);
+}
+
+.infographic figcaption {
+  margin-top: 0.45rem;
+  color: var(--color-muted);
+  font-size: 0.85rem;
 }
 
 .tags {
