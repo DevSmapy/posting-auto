@@ -1,6 +1,7 @@
 ---
 import { render } from 'astro:content';
 import Base from '../../layouts/Base.astro';
+import { isHttpUrl } from '../../lib/httpUrl';
 import { postKicker, postPath, publishedPosts } from '../../lib/posts';
 
 export async function getStaticPaths() {
@@ -40,7 +41,7 @@ const { Content } = await render(post);
         <ul>
           {post.data.sources.map((source) => (
             <li>
-              {source.url ? <a href={source.url}>{source.title}</a> : source.title}
+              {isHttpUrl(source.url) ? <a href={source.url}>{source.title}</a> : source.title}
             </li>
           ))}
         </ul>

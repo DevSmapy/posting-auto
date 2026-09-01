@@ -1,5 +1,6 @@
 import { defineCollection, z } from 'astro:content';
 import { glob } from 'astro/loaders';
+import { isHttpUrl } from './lib/httpUrl';
 
 const posts = defineCollection({
   loader: glob({ pattern: '**/*.md', base: './src/content/posts' }),
@@ -15,7 +16,12 @@ const posts = defineCollection({
       .array(
         z.object({
           title: z.string(),
-          url: z.string().optional(),
+          url: z
+            .string()
+            .refine((value) => isHttpUrl(value), {
+              message: 'sources.url must use http or https',
+            })
+            .optional(),
         }),
       )
       .default([]),

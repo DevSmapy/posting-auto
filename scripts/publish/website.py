@@ -245,7 +245,7 @@ def maybe_git_push(post_path: Path) -> PublishResult | None:
             detail=add.stderr.strip() or add.stdout.strip() or "git add failed",
         )
     commit = subprocess.run(
-        ["git", "commit", "-m", f"publish: {post_path.stem}"],
+        ["git", "commit", "-m", f"publish: {post_path.stem}", "--only", "--", rel],
         cwd=cwd,
         capture_output=True,
         text=True,

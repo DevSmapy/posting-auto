@@ -18,7 +18,7 @@ The surfaces breathe through rounded geometry. Every button is a 50px full-pill.
 - Floating "Frap" circular CTA (`56px`, Green Accent fill, layered shadow stack) — the product's signature elevation element
 - Gift-card surfaces designed as **photographed physical product** — every card is a distinct illustrated photograph rather than a generated graphic
 - 12px card radius + whisper-soft shadows keep content cards flat-plus-hint-of-lift
-- Rem-based spacing scale anchored at 1.6rem (~16px) = `--space-3`, stepping to 6.4rem (~64px)
+- Rem-based spacing scale anchored at 1.6rem (25.6px) = `--space-3`, stepping to 6.4rem (102.4px)
 
 **Color-block page rhythm:** Cream hero → White content sections → Dark-green (`#1E3932`) feature band with white text → Cream utility zone → Dark-green (`#1E3932`) footer with gold / white text — an espresso-dark bookend around the bright body.
 
@@ -73,14 +73,17 @@ Two parallel translucent scales for overlay and secondary-text use:
 
 No structural gradient tokens observed. Surface hierarchy is solid-color-block throughout — the system relies on its five-tier cream/green surface palette rather than gradients.
 
+**Exception — Rewards status cards:** the colored gradient ring and top stripe (Bronze / Silver / Gold) are the only documented gradient fills. Do not add gradient fills anywhere else.
+
 ## 3. Typography Rules
 
 ### Font Family
 
-- **Primary:** `SoDoSans, "Helvetica Neue", Helvetica, Arial, sans-serif` — Starbucks' proprietary corporate typeface, used across nearly every surface
-- **Loading Fallback:** `"Helvetica Neue", Helvetica, Arial, sans-serif` — what users see before SoDoSans loads
-- **Rewards Serif:** `"Lander Tall", "Iowan Old Style", Georgia, serif` — used on specific Rewards-page headline moments for a warm editorial feel
-- **Careers Script:** `"Kalam", "Comic Sans MS", cursive` — used exclusively for Careers-page "cup name" decorative touches, referencing the hand-written names on Starbucks cups
+**This publication site (shipped):**
+- **Primary:** `"Pretendard Variable", Pretendard, system-ui, sans-serif` — self-hosted variable font at `/fonts/PretendardVariable.woff2`
+- **Loading fallback:** `Pretendard, system-ui, sans-serif` — what users see before the variable face loads
+
+Starbucks source extraction (not loaded here): SoDoSans with `"Helvetica Neue", Helvetica, Arial, sans-serif`; Rewards serif `"Lander Tall", "Iowan Old Style", Georgia, serif`; Careers script `"Kalam", "Comic Sans MS", cursive`. Those faces stay source-site documentation only.
 
 No OpenType stylistic sets explicitly activated at `:root`.
 
@@ -94,9 +97,9 @@ No OpenType stylistic sets explicitly activated at `:root`.
 | H1 | 24px | 600 | 36px | -0.16px | Starbucks-Green primary heading |
 | H2 | 24px | 400 | 36px | -0.16px | Regular-weight section title in Text Black |
 | Body Large | 19px | 400–600 | 33.25px (~1.75) | -0.16px | Hero intro copy, feature-band body |
-| Body (text-3) | 1.6rem / 16px | 400 | 1.5 (24px) | -0.01em | Default body copy |
-| Small (text-2) | 1.4rem / ~14px | 400–600 | 1.5 | -0.01em | Button label, metadata, form labels |
-| Micro (text-1) | 1.3rem / ~13px | 400 | 1.5 | -0.01em | Active float-label state, caption micro-copy |
+| Body (text-3) | 1.6rem / 25.6px | 400 | 1.5 (24px) | -0.01em | Default body copy |
+| Small (text-2) | 1.4rem / 22.4px | 400–600 | 1.5 | -0.01em | Button label, metadata, form labels |
+| Micro (text-1) | 1.3rem / 20.8px | 400 | 1.5 | -0.01em | Active float-label state, caption micro-copy |
 | Button Label | 14–16px | 400–600 | 1.2 | -0.01em | All pill-button labels |
 
 **Letter-spacing tokens:**
@@ -112,20 +115,17 @@ No OpenType stylistic sets explicitly activated at `:root`.
 
 - **Tight negative tracking (`-0.01em`)** is applied almost universally — the entire product reads slightly compressed, which gives SoDoSans its confident presence without feeling squeezed.
 - **Weight shifts carry hierarchy, not size shifts.** H1 and H2 share the same 24px/36px size; only weight (600 vs 400) and color (Starbucks-Green vs Text Black) separate them.
-- **Size tokens use rem, anchored to `1rem = 10px`** on this site (via a `font-size: 62.5%` root trick). So `1.6rem` = 16px, `2.4rem` = 24px, etc. The scale is semantic (textSize-1 through textSize-10), not arbitrary pixel values.
+- **Size tokens use rem, anchored to `html { font-size: 16px }`** (`1rem = 16px`). So `1.6rem` = 25.6px, `2.4rem` = 38.4px. The scale is semantic (textSize-1 through textSize-10), not arbitrary pixel values. Do not use a `62.5%` / `1rem = 10px` root.
 - **Context-specific typeface swaps** — serif on Rewards, script on Careers — are deliberate and localized. Never mix them with the primary sans within the same surface.
 - **Body text never goes pure black** — it sits at `rgba(0,0,0,0.87)` to match the warm-neutral canvas temperature.
 
 ### Note on Font Substitutes
 
-SoDoSans is proprietary to Starbucks (licensed from House Industries, not publicly available). Reasonable open-source substitutes:
-- **Inter** (Google Fonts) — similar humanist geometric proportions, wide weight range
-- **Manrope** — slightly rounder, similar confident feel
-- **Nunito Sans** — warmer, good for a "café" brand substitute
+SoDoSans is proprietary to Starbucks (licensed from House Industries, not publicly available). **This repo ships Pretendard Variable** (self-hosted, Korean-first; the Inter-class substitute actually in CSS). Do not load Inter, SoDoSans, or the Starbucks Helvetica stack on this site.
 
-If substituting, verify the tight `-0.01em` / `-0.16px` tracking still reads well; some open-source fonts need `-0.005em` instead.
+If substituting elsewhere, verify the tight `-0.01em` / `-0.16px` tracking still reads well; some open-source fonts need `-0.005em` instead.
 
-Lander Tall (the Rewards serif) is custom — open-source substitutes: **Iowan Old Style** (already in fallback), **Lora**, or **Source Serif Pro**. Kalam (Careers script) is available on Google Fonts directly.
+Lander Tall (the Rewards serif) is custom — open-source substitutes: **Iowan Old Style**, **Lora**, or **Source Serif Pro**. Kalam (Careers script) is available on Google Fonts. Neither is loaded here.
 
 ## 4. Component Stylings
 
@@ -136,8 +136,9 @@ Lander Tall (the Rewards serif) is custom — open-source substitutes: **Iowan O
 - Text: `#ffffff`
 - Border: `1px solid #00754A`
 - Radius: `50px` (full pill)
-- Padding: `7px 16px`
-- Font: SoDoSans, 16px, weight 600, letter-spacing `-0.01em`
+- Padding: `7px 16px` (visual; do not grow the painted pill to meet touch size)
+- Font: `"Pretendard Variable", Pretendard, system-ui, sans-serif`, 16px, weight 600, letter-spacing `-0.01em`
+- Touch target: minimum 44×44px hit box via an enlarged invisible hit area (or equivalent), including on mobile
 - Active state: `transform: scale(0.95)` via `--buttonActiveScale`
 - Transition: `all 0.2s ease`
 
@@ -214,9 +215,9 @@ Lander Tall (the Rewards serif) is custom — open-source substitutes: **Iowan O
 
 **Rewards Status Cards (Rewards page signature)**
 - Three-column grid: Bronze / Gold / Silver-ish — each a dark-green (`#1E3932`) panel with:
-  - Colored gradient/color header ring
+  - Colored gradient/color header ring (the only allowed gradient fill; see Gradient System)
   - Numbered "Level" badge
-  - Status title in large SoDoSans weight 600
+  - Status title in large weight 600 (source: SoDoSans; this site: Pretendard Variable)
   - Stars / benefits list in white/translucent-white text
   - Bottom "As you earn more stars…" progression caption
 
@@ -267,8 +268,8 @@ Lander Tall (the Rewards serif) is custom — open-source substitutes: **Iowan O
 - Typically horizontal tab group beneath the global nav
 
 **Mobile Nav**
-- Collapses to a hamburger drawer below tablet breakpoint
-- Frap floating button persists at bottom-right regardless of nav state
+- This publication site does **not** use a hamburger drawer. Global nav stays a wrapping flex row (`.nav { display: flex; flex-wrap: wrap }`) at every breakpoint, including xs — the same static links as desktop (home, articles, about, categories).
+- Frap floating button persists at bottom-right regardless of nav state (Frap behavior unchanged; this site does not ship a Frap control yet).
 
 ### Image Treatment
 
@@ -396,26 +397,26 @@ A repeating component cluster used on menu product pages (e.g., `/menu/product/4
 
 ### Spacing System
 
-Rem-based semantic scale (anchored `1rem = 10px`):
+Rem-based semantic scale (this repo: `html { font-size: 16px }`, so `1rem = 16px`):
 
 | Token | Rem | Pixels | Typical Use |
 |-------|-----|--------|-------------|
-| `--space-1` | `0.4rem` | 4px | Tightest inline padding |
-| `--space-2` | `0.8rem` | 8px | Small gap, button vertical padding |
-| `--space-3` | `1.6rem` | 16px | Default — card padding, outer gutter xs |
-| `--space-4` | `2.4rem` | 24px | Section inner spacing, outer gutter md |
-| `--space-5` | `3.2rem` | 32px | Major between-section spacing |
-| `--space-6` | `4rem` | 40px | Large gaps, outer gutter lg, header crate |
-| `--space-7` | `4.8rem` | 48px | Section-to-section spacing |
-| `--space-8` | `5.6rem` | 56px | Very large breathing — Frap height |
-| `--space-9` | `6.4rem` | 64px | Widest section padding |
+| `--space-1` | `0.4rem` | 6.4px | Tightest inline padding |
+| `--space-2` | `0.8rem` | 12.8px | Small gap, button vertical padding |
+| `--space-3` | `1.6rem` | 25.6px | Default — card padding, outer gutter xs |
+| `--space-4` | `2.4rem` | 38.4px | Section inner spacing, outer gutter md |
+| `--space-5` | `3.2rem` | 51.2px | Major between-section spacing |
+| `--space-6` | `4rem` | 64px | Large gaps, outer gutter lg, header crate |
+| `--space-7` | `4.8rem` | 76.8px | Section-to-section spacing |
+| `--space-8` | `5.6rem` | 89.6px | Very large breathing — Frap height token |
+| `--space-9` | `6.4rem` | 102.4px | Widest section padding |
 
 **Gutter tokens:**
-- `--outerGutter: 1.6rem` (16px, default / mobile)
-- `--outerGutterMedium: 2.4rem` (24px, tablet)
-- `--outerGutterLarge: 4.0rem` (40px, desktop)
+- `--outerGutter: 1.6rem` (25.6px, default / mobile)
+- `--outerGutterMedium: 2.4rem` (38.4px, tablet)
+- `--outerGutterLarge: 4.0rem` (64px, desktop)
 
-**Universal rhythm constant:** `1.6rem` (16px) appears across every page as the default outer gutter, card padding baseline, and text size 3 body — the system's most frequent spacing unit.
+**Universal rhythm constant:** `1.6rem` (25.6px) appears across every page as the default outer gutter, card padding baseline, and text size 3 body — the system's most frequent spacing unit.
 
 ### Grid & Container
 
@@ -476,7 +477,7 @@ Whitespace carries the feeling of "plenty of space in the café." Section paddin
 - Don't pick "one brand green" — the four-green system is intentional; using only `#006241` everywhere flattens the brand
 - Don't use Gold as a general-purpose accent — it's a Rewards signal only
 - Don't square the corners on buttons — the 50px pill is universal
-- Don't introduce gradient fills — the system is color-block throughout
+- Don't introduce gradient fills — the system is color-block throughout, except the documented Rewards status-card ring/stripe
 - Don't weight-contrast h1 and h2 by size — the hierarchy comes from weight + color (600 Starbucks-Green vs 400 Text Black)
 - Don't use pure black for body text — `rgba(0,0,0,0.87)` matches the warm canvas
 - Don't skip the `scale(0.95)` active feedback on buttons — it's a signature micro-interaction
@@ -491,7 +492,7 @@ Inferred from component width tokens and progressive nav heights:
 
 | Name | Width | Key Changes |
 |------|-------|-------------|
-| xs | < 480px | Global nav 64px; hamburger menu; single-column layouts; pill buttons full-width |
+| xs | < 480px | Global nav 64px; wrapping flex nav (no hamburger); single-column layouts; pill buttons full-width |
 | Mobile | 480–767px | Global nav 72px; gift-card grid 2-up; card padding tightens |
 | Tablet | 768–1023px | Global nav 83px; gift-card grid 3-up; hero split begins to appear |
 | Desktop | 1024–1439px | Global nav 99px; gift-card grid 4-up; full asymmetric hero 40/60 |
@@ -499,7 +500,7 @@ Inferred from component width tokens and progressive nav heights:
 
 ### Touch Targets
 
-- Pill buttons at `7px 16px` padding measure ~32px tall — below 44px WCAG AAA minimum for touch-only surfaces. On mobile, button padding may be visually expanded to meet the minimum.
+- Pill buttons keep visual padding at `7px 16px`. The hit box must be at least 44×44px on every breakpoint (enlarged invisible hit area, not a taller painted pill). Frap is unchanged.
 - Frap floating circular button at `56px` is well above minimum.
 - Frap uses `--frapTouchOffset: calc(-1 * .8rem)` to extend tap area 8px beyond visual edge.
 - Form float-label inputs grow their label font size on mobile (1.6rem base vs 1.9rem desktop) — easier to tap and read at arm's-length.
@@ -539,7 +540,7 @@ Inferred from component width tokens and progressive nav heights:
 
 ### Example Component Prompts
 
-1. "Create a primary Starbucks CTA pill button with Green Accent (`#00754A`) background, white text 'Explore our afternoon menu', SoDoSans font at 16px weight 600 with `-0.01em` letter-spacing, `50px` border-radius (full pill), `7px 16px` padding. Apply `transform: scale(0.95)` as the active state with a `0.2s ease` transition."
+1. "Create a primary CTA pill button with Green Accent (`#00754A`) background, white text 'Explore our afternoon menu', Pretendard Variable (`"Pretendard Variable", Pretendard, system-ui, sans-serif`) at 16px weight 600 with `-0.01em` letter-spacing, `50px` border-radius (full pill), visual padding `7px 16px`, and a minimum 44×44px hit box that does not change the painted size. Apply `transform: scale(0.95)` as the active state with a `0.2s ease` transition."
 
 2. "Design a content card with White (`#ffffff`) background at `12px` border-radius, layered shadow `0 0 0.5px rgba(0,0,0,0.14), 0 1px 1px rgba(0,0,0,0.24)`. Pad contents `16–24px` (`--space-3` to `--space-4`). Place on a Neutral Warm (`#f2f0eb`) page canvas with `16px` gap to siblings."
 
@@ -567,12 +568,12 @@ When refining existing screens generated with this design system:
 3. Use natural language descriptions ("warm cream canvas," "four-tier green system") alongside exact values
 4. Preserve the 50px pill + `scale(0.95)` active state universally
 5. Check that greens are mapped to their correct role (Green Accent for CTA, Starbucks Green for heading, House Green for band)
-6. Don't introduce gradients — the system is color-block
-7. Keep SoDoSans tracking at `-0.01em` / `-0.16px` across the board
+6. Don't introduce gradients — the system is color-block except the Rewards status-card ring/stripe
+7. Keep Pretendard Variable tracking at `-0.01em` / `-0.16px` across the board
 
 ### Known Gaps
 
-- SoDoSans is a proprietary typeface not available on Google Fonts — when implementing publicly, use Inter or Manrope as a substitute and document the swap
+- SoDoSans is a proprietary typeface not available on Google Fonts — this repo uses self-hosted Pretendard Variable (`"Pretendard Variable", Pretendard, system-ui, sans-serif`), not Inter
 - Lander Tall (Rewards serif) is also custom — substitute with Iowan Old Style, Lora, or Source Serif Pro
 - Specific per-component animation timings beyond the few documented (`--duration: 0.4s`, `--iconTransition: all ease-out 0.2s`, `--expanderDuration: 300ms`) are not captured for every interactive surface
 - Form error-state full styling (red border weight, icon placement) visible on the tint token but not exhaustively extracted

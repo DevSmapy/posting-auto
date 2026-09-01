@@ -15,8 +15,10 @@ sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 from publish.website import (  # noqa: E402
+    REPO_ROOT,
     WebsitePublisher,
     article_slug,
+    maybe_git_push,
     maybe_verify_deploy,
     render_post,
 )
@@ -126,6 +128,29 @@ class WebsitePublisherTest(unittest.TestCase):
         briefing["kind"] = "flash"
         _, rendered = render_post(briefing)
         self.assertIn("kind: \"briefing\"", rendered)
+
+    def test_git_commit_only_the_post_path(self) -> None:
+        calls: list[list[str]] = []
+
+        class _Proc:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        def _run(cmd: list[str], **kwargs: object) -> _Proc:
+            calls.append(cmd)
+            return _Proc()
+
+        post = REPO_ROOT / "website" / "src" / "content" / "posts" / "sample.md"
+        rel = os.path.relpath(post, REPO_ROOT)
+        with patch.dict(os.environ, {"WEBSITE_GIT_PUSH": "1"}, clear=False):
+            with patch("publish.website.subprocess.run", side_effect=_run):
+                result = maybe_git_push(post)
+        self.assertIsNone(result)
+        commit = next(cmd for cmd in calls if cmd[:2] == ["git", "commit"])
+        self.assertIn("--only", commit)
+        self.assertEqual(commit[-2:], ["--", rel])
+        self.assertNotEqual(commit, ["git", "commit", "-m", f"publish: {post.stem}"])
 
     def test_verify_skipped_without_site_url(self) -> None:
         with patch.dict(os.environ, {"SITE_BASE_URL": ""}, clear=False):

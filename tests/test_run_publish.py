@@ -741,7 +741,7 @@ class WebsiteRunPublishTest(unittest.TestCase):
                     return_value={
                         "status": "failed",
                         "error_type": "CONTENT_WRITE_FAILED",
-                        "detail": "disk",
+                        "path": "disk",
                     },
                 ),
             ):
@@ -759,6 +759,46 @@ class WebsiteRunPublishTest(unittest.TestCase):
             self.assertFalse(outcome.get("ok"))
             self.assertEqual(outcome.get("reason"), "website_failed")
             self.assertTrue((run_dir / "briefing.md").is_file())
+            joined = "\n".join(notifier.texts)
+            self.assertIn("CONTENT_WRITE_FAILED", joined)
+            self.assertIn("disk", joined)
+
+    def test_website_failure_prefers_detail_over_path(self) -> None:
+        notifier = _FakeNotifier()
+        store = _FakeStore()
+        now = datetime(2026, 7, 28, tzinfo=timezone.utc)
+        cfg = PublishConfig(publish_cards=False)
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            with (
+                patch("mvp_pipeline.assemble_blog_markdown", return_value="# md"),
+                patch("mvp_pipeline.assemble_blog_html", return_value="<p>x</p>"),
+                patch("mvp_pipeline.PublishConfig.from_env", return_value=cfg),
+                patch(
+                    "mvp_pipeline.publish_approved_briefing",
+                    return_value={
+                        "status": "failed",
+                        "error_type": "GIT_COMMIT_FAILED",
+                        "detail": "index dirty",
+                        "path": "/tmp/post.md",
+                    },
+                ),
+            ):
+                outcome = run_publish(
+                    _briefing(),
+                    _picked(),
+                    now,
+                    run_dir,
+                    store,  # type: ignore[arg-type]
+                    notifier,
+                    persist_seen="never",
+                    live_publish=True,
+                    editorial_decision={"decision": "publish"},
+                )
+            self.assertFalse(outcome.get("ok"))
+            joined = "\n".join(notifier.texts)
+            self.assertIn("index dirty", joined)
+            self.assertNotIn("/tmp/post.md", joined)
 
     def test_live_without_cards_does_not_require_instagram(self) -> None:
         notifier = _FakeNotifier()

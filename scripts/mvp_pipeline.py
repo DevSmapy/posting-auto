@@ -1544,15 +1544,19 @@ def run_publish(
         briefing, md, run_dir, now=now
     )
     if website_result.get("status") == "failed":
+        website_fail_detail = (
+            website_result.get("detail") or website_result.get("path") or ""
+        )
         print(
             f"   !! website publish failed: "
-            f"{website_result.get('error_type')} {website_result.get('detail') or ''}"
+            f"{website_result.get('error_type')} {website_fail_detail}"
         )
         if live_publish:
             _notify_stage(
                 notifier,
                 "ACTION REQUIRED\nWebsite publish failed.\n"
-                f"{website_result.get('error_type')}: {website_result.get('detail') or website_result}",
+                f"{website_result.get('error_type')}: "
+                f"{website_fail_detail or website_result}",
             )
             print("Done (publish blocked: website).")
             return {
