@@ -17,10 +17,19 @@ const site = Astro.site ?? new URL('https://briefing.example');
 const canonical = new URL(canonicalPath, site).toString();
 const pageTitle = title.includes(SITE_NAME) ? title : `${title} · ${SITE_NAME}`;
 const image = ogImage ? new URL(ogImage, site).toString() : undefined;
-const currentPath = Astro.url.pathname.replace(/\/+$/, '') || '/';
+const currentPath = decodePath(Astro.url.pathname);
+
+function decodePath(value: string): string {
+  try {
+    value = decodeURI(value);
+  } catch {
+    // keep the raw path when it is not valid URI encoding
+  }
+  return value.replace(/\/+$/, '') || '/';
+}
 
 function navCurrent(href: string): 'page' | undefined {
-  const target = href.replace(/\/+$/, '') || '/';
+  const target = decodePath(href);
   if (target === '/') {
     return currentPath === '/' ? 'page' : undefined;
   }
