@@ -3,8 +3,13 @@ export const SITE_TAGLINE = '지금 중요한 일을 짧게 정리합니다.';
 
 export function isCurrentPath(href: string, pathname: string): boolean {
   const normalize = (value: string): string => {
-    const trimmed = value.trim() || '/';
-    const withLeading = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+    let decoded = value.trim() || '/';
+    try {
+      decoded = decodeURI(decoded);
+    } catch {
+      // keep the original if the path is malformed
+    }
+    const withLeading = decoded.startsWith('/') ? decoded : `/${decoded}`;
     if (withLeading.length > 1 && withLeading.endsWith('/')) {
       return withLeading.slice(0, -1);
     }
