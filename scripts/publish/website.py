@@ -19,9 +19,13 @@ from .protocol import PublishResult
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_POSTS_DIR = REPO_ROOT / "website" / "src" / "content" / "posts"
 SEOUL = ZoneInfo("Asia/Seoul")
-GENERIC_TAGS = {"경제", "브리핑", "증시"}
+GENERIC_TAGS = {"경제", "브리핑", "증시", "뉴스"}
 KINDS = {"briefing", "note"}
 _SLUG_STRIP = re.compile(r"[^\w]+", re.UNICODE)
+_PIPELINE_GRAPHIC = re.compile(
+    r"!\[[^\]]*\]\((?:[^)\s]*/)?infographic\.png(?:\s+\"[^\"]*\")?\)[ \t]*",
+    re.IGNORECASE,
+)
 
 
 def _yaml_quote(value: str) -> str:
@@ -125,7 +129,8 @@ def body_markdown(briefing: dict[str, Any], markdown: str | None = None) -> str:
         lines = lines[1:]
         if lines and not lines[0].strip():
             lines = lines[1:]
-    return "\n".join(lines).strip() + "\n"
+    text = _PIPELINE_GRAPHIC.sub("", "\n".join(lines))
+    return re.sub(r"\n{3,}", "\n\n", text).strip() + "\n"
 
 
 def render_post(

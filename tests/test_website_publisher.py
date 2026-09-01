@@ -141,6 +141,25 @@ class WebsitePublisherTest(unittest.TestCase):
         _, rendered = render_post(briefing)
         self.assertIn("kind: \"briefing\"", rendered)
 
+    def test_pipeline_news_tag_stays_in_market_category(self) -> None:
+        briefing = dict(BRIEFING_V2)
+        briefing["blog_tags"] = ["경제", "브리핑", "뉴스"]
+        _, rendered = render_post(briefing)
+        self.assertIn("category: \"시장\"", rendered)
+        self.assertIn("  - \"뉴스\"", rendered)
+
+    def test_strips_pipeline_infographic_embed_from_body(self) -> None:
+        md = (
+            "# 제목\n\n"
+            "![브리핑 인포그래픽](infographic.png)\n\n"
+            "오늘 아침 이슈를 정리했습니다.\n"
+        )
+        _, rendered = render_post(BRIEFING_V2, markdown=md)
+        _fm, body = rendered.split("\n---\n", 1)
+        self.assertNotIn("infographic.png", body)
+        self.assertNotIn("브리핑 인포그래픽", body)
+        self.assertIn("오늘 아침 이슈를 정리했습니다.", body)
+
     def test_verify_skipped_without_site_url(self) -> None:
         with patch.dict(os.environ, {"SITE_BASE_URL": ""}, clear=False):
             self.assertIsNone(maybe_verify_deploy("/articles/x", "제목"))
