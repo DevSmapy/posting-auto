@@ -17,6 +17,18 @@ const site = Astro.site ?? new URL('https://briefing.example');
 const canonical = new URL(canonicalPath, site).toString();
 const pageTitle = title.includes(SITE_NAME) ? title : `${title} · ${SITE_NAME}`;
 const image = ogImage ? new URL(ogImage, site).toString() : undefined;
+const currentPath = Astro.url.pathname.replace(/\/+$/, '') || '/';
+
+function navCurrent(href: string): 'page' | undefined {
+  const target = href.replace(/\/+$/, '') || '/';
+  if (target === '/') {
+    return currentPath === '/' ? 'page' : undefined;
+  }
+  if (target === '/articles') {
+    return currentPath === '/articles' || currentPath.startsWith('/articles/') ? 'page' : undefined;
+  }
+  return currentPath === target || currentPath.startsWith(`${target}/`) ? 'page' : undefined;
+}
 ---
 <!doctype html>
 <html lang="ko">
@@ -41,11 +53,11 @@ const image = ogImage ? new URL(ogImage, site).toString() : undefined;
         <a class="masthead" href="/">{SITE_NAME}</a>
         <p class="tagline">{SITE_TAGLINE}</p>
         <nav class="nav" aria-label="주요 메뉴">
-          <a href="/">홈</a>
-          <a href="/articles/">글</a>
-          <a href="/about/">소개</a>
+          <a href="/" aria-current={navCurrent('/')}>홈</a>
+          <a href="/articles/" aria-current={navCurrent('/articles/')}>글</a>
+          <a href="/about/" aria-current={navCurrent('/about/')}>소개</a>
           {categories.map((category) => (
-            <a href={`/category/${category}/`}>{category}</a>
+            <a href={`/category/${category}/`} aria-current={navCurrent(`/category/${category}/`)}>{category}</a>
           ))}
         </nav>
       </div>

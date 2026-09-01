@@ -435,6 +435,7 @@ def _publish_steps(run_dir: Path, *, running: bool) -> list[dict[str, Any]]:
     site = _read_json(run_dir / "website_result.json")
     site_done = isinstance(site, dict) and site.get("status") in {"success", "dry_run"}
     site_failed = isinstance(site, dict) and site.get("status") == "failed"
+    site_skipped = isinstance(site, dict) and site.get("status") == "skipped"
     checks = [
         ("MD", (run_dir / "briefing.md").is_file()),
         ("Cards", bool(pngs)),
@@ -451,6 +452,8 @@ def _publish_steps(run_dir: Path, *, running: bool) -> list[dict[str, Any]]:
             status = "failed"
         elif name == "Website" and site_failed:
             status = "failed"
+        elif name == "Website" and site_skipped:
+            status = "skipped"
         elif done:
             status = "success"
         elif running and not saw_running:

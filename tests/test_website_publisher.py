@@ -14,11 +14,16 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "tests"))
 
+from publish.protocol import PublishResult  # noqa: E402
 from publish.website import (  # noqa: E402
     WebsitePublisher,
     article_slug,
+    maybe_git_push,
     maybe_verify_deploy,
+    public_http_url,
+    publish_approved_briefing,
     render_post,
+    sources_of,
 )
 from test_assemble_blog import BRIEFING_V2  # noqa: E402
 
@@ -151,6 +156,77 @@ class WebsitePublisherTest(unittest.TestCase):
         assert result is not None
         self.assertEqual(result.status, "success")
 
+
+    def test_non_http_source_urls_are_dropped(self) -> None:
+        briefing = dict(BRIEFING_V2)
+        briefing["stories"] = [
+            {
+                **BRIEFING_V2["stories"][0],
+                "source_url": "javascript:alert(1)",
+            }
+        ]
+        briefing["sources"] = [{"title": "파일", "url": "file:///etc/passwd"}]
+        sources = sources_of(briefing)
+        self.assertEqual(sources[0]["title"], "연합뉴스")
+        self.assertNotIn("url", sources[0])
+        self.assertNotIn("url", sources[1])
+        _, rendered = render_post(briefing)
+        self.assertNotIn("javascript:", rendered)
+        self.assertNotIn("file://", rendered)
+
+    def test_http_source_urls_are_kept(self) -> None:
+        self.assertEqual(public_http_url("https://news.example/a"), "https://news.example/a")
+        self.assertIsNone(public_http_url("javascript:alert(1)"))
+        self.assertIsNone(public_http_url(""))
+
+    def test_write_failure_payload_includes_detail(self) -> None:
+        with TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            with patch.object(
+                WebsitePublisher,
+                "publish",
+                return_value=PublishResult(
+                    channel="website",
+                    status="failed",
+                    error_type="CONTENT_WRITE_FAILED",
+                    detail="disk",
+                ),
+            ):
+                payload = publish_approved_briefing({"title": "x"}, "md", run_dir)
+            self.assertEqual(payload["status"], "failed")
+            self.assertEqual(payload["detail"], "disk")
+            self.assertIsNone(payload.get("path"))
+            saved = (run_dir / "website_result.json").read_text(encoding="utf-8")
+            self.assertIn("disk", saved)
+
+    def test_git_push_commits_only_the_post(self) -> None:
+        calls: list[list[str]] = []
+
+        def fake_run(cmd, **kwargs):  # noqa: ANN001
+            calls.append(list(cmd))
+
+            class Result:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+
+            return Result()
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            post = root / "website" / "src" / "content" / "posts" / "note.md"
+            post.parent.mkdir(parents=True)
+            post.write_text("x\n", encoding="utf-8")
+            with (
+                patch.dict(os.environ, {"WEBSITE_GIT_PUSH": "1"}, clear=False),
+                patch("publish.website.REPO_ROOT", root),
+                patch("publish.website.subprocess.run", side_effect=fake_run),
+            ):
+                result = maybe_git_push(post)
+        self.assertIsNone(result)
+        commit = next(cmd for cmd in calls if cmd[:2] == ["git", "commit"])
+        self.assertEqual(commit[-2], "--")
+        self.assertEqual(commit[-1], "website/src/content/posts/note.md")
 
 
 if __name__ == "__main__":

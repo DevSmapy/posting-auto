@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
@@ -52,13 +53,24 @@ def kind_of(briefing: dict[str, Any]) -> str:
     return raw if raw in KINDS else "briefing"
 
 
+def public_http_url(value: str | None) -> str | None:
+    """Keep only http(s) URLs that can be safely used as public hrefs."""
+    raw = (value or "").strip()
+    if not raw:
+        return None
+    parsed = urlparse(raw)
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+        return None
+    return raw
+
+
 def sources_of(briefing: dict[str, Any]) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for story in briefing.get("stories") or []:
         if not isinstance(story, dict):
             continue
         title = (story.get("source_name") or story.get("headline") or "출처").strip()
-        url = (story.get("source_url") or "").strip()
+        url = public_http_url(str(story.get("source_url") or ""))
         item: dict[str, str] = {"title": title or "출처"}
         if url:
             item["url"] = url
@@ -66,7 +78,7 @@ def sources_of(briefing: dict[str, Any]) -> list[dict[str, str]]:
     for src in briefing.get("sources") or []:
         if isinstance(src, dict):
             title = (src.get("title") or src.get("name") or "출처").strip()
-            url = (src.get("url") or "").strip()
+            url = public_http_url(str(src.get("url") or ""))
             item = {"title": title or "출처"}
             if url:
                 item["url"] = url
@@ -245,7 +257,7 @@ def maybe_git_push(post_path: Path) -> PublishResult | None:
             detail=add.stderr.strip() or add.stdout.strip() or "git add failed",
         )
     commit = subprocess.run(
-        ["git", "commit", "-m", f"publish: {post_path.stem}"],
+        ["git", "commit", "-m", f"publish: {post_path.stem}", "--", rel],
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -348,14 +360,16 @@ def publish_approved_briefing(
     result = publisher.publish(
         {"briefing": briefing, "markdown": markdown, "now": now, "dry_run": dry_run}
     )
+    failed = result.status == "failed"
     payload: dict[str, Any] = {
         "status": result.status,
         "error_type": result.error_type,
         "url": result.published_url,
-        "path": result.detail,
+        "path": None if failed else result.detail,
         "verified": False,
     }
-    if result.status == "failed":
+    if failed:
+        payload["detail"] = result.detail
         write_website_result(run_dir, payload)
         return payload
     if result.status == "success" and result.detail:
