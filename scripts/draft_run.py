@@ -250,6 +250,7 @@ class DraftRunStore:
         md_path: Path | None = None,
         html_path: Path | None = None,
         card_pngs: list[Path] | None = None,
+        infographic_png: Path | None = None,
     ) -> None:
         from publish.ready import write_publish_ready_package
 
@@ -263,6 +264,8 @@ class DraftRunStore:
             shutil.copy2(md_path, final / "briefing.md")
         if html_path and html_path.is_file():
             shutil.copy2(html_path, final / "briefing.html")
+        if infographic_png and Path(infographic_png).is_file():
+            shutil.copy2(infographic_png, final / "infographic.png")
         cards_out = final / "cards"
         cards_out.mkdir(exist_ok=True)
         copied_pngs: list[Path] = []
