@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
@@ -18,9 +19,13 @@ from .protocol import PublishResult
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_POSTS_DIR = REPO_ROOT / "website" / "src" / "content" / "posts"
 SEOUL = ZoneInfo("Asia/Seoul")
-GENERIC_TAGS = {"경제", "브리핑", "증시"}
+GENERIC_TAGS = {"경제", "브리핑", "증시", "뉴스"}
 KINDS = {"briefing", "note"}
 _SLUG_STRIP = re.compile(r"[^\w]+", re.UNICODE)
+_PIPELINE_GRAPHIC = re.compile(
+    r"!\[[^\]]*\]\((?:[^)\s]*/)?infographic\.png(?:\s+\"[^\"]*\")?\)[ \t]*",
+    re.IGNORECASE,
+)
 
 
 def _yaml_quote(value: str) -> str:
@@ -52,13 +57,24 @@ def kind_of(briefing: dict[str, Any]) -> str:
     return raw if raw in KINDS else "briefing"
 
 
+def public_http_url(value: str | None) -> str | None:
+    """Keep only http(s) URLs that can be safely used as public hrefs."""
+    raw = (value or "").strip()
+    if not raw:
+        return None
+    parsed = urlparse(raw)
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+        return None
+    return raw
+
+
 def sources_of(briefing: dict[str, Any]) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for story in briefing.get("stories") or []:
         if not isinstance(story, dict):
             continue
         title = (story.get("source_name") or story.get("headline") or "출처").strip()
-        url = (story.get("source_url") or "").strip()
+        url = public_http_url(str(story.get("source_url") or ""))
         item: dict[str, str] = {"title": title or "출처"}
         if url:
             item["url"] = url
@@ -66,7 +82,7 @@ def sources_of(briefing: dict[str, Any]) -> list[dict[str, str]]:
     for src in briefing.get("sources") or []:
         if isinstance(src, dict):
             title = (src.get("title") or src.get("name") or "출처").strip()
-            url = (src.get("url") or "").strip()
+            url = public_http_url(str(src.get("url") or ""))
             item = {"title": title or "출처"}
             if url:
                 item["url"] = url
@@ -113,10 +129,16 @@ def body_markdown(briefing: dict[str, Any], markdown: str | None = None) -> str:
         lines = lines[1:]
         if lines and not lines[0].strip():
             lines = lines[1:]
-    return "\n".join(lines).strip() + "\n"
+    text = _PIPELINE_GRAPHIC.sub("", "\n".join(lines))
+    return re.sub(r"\n{3,}", "\n\n", text).strip() + "\n"
 
 
-def render_post(briefing: dict[str, Any], markdown: str | None = None, now: datetime | None = None) -> tuple[str, str]:
+def render_post(
+    briefing: dict[str, Any],
+    markdown: str | None = None,
+    now: datetime | None = None,
+    graphic: str | None = None,
+) -> tuple[str, str]:
     when = published_at_of(briefing, now)
     slug = article_slug(briefing, when)
     title = display_title(briefing)
@@ -143,6 +165,8 @@ def render_post(briefing: dict[str, Any], markdown: str | None = None, now: date
                 fm.append(f"    url: {_yaml_quote(src['url'])}")
     else:
         fm[-1] = "sources: []"
+    if graphic:
+        fm.append(f"graphic: {_yaml_quote(graphic)}")
     fm.append("status: \"published\"")
     fm.append("---")
     fm.append("")
@@ -163,8 +187,27 @@ def unique_post_path(posts_dir: Path, slug: str, title: str) -> Path:
 
 
 class WebsitePublisher:
-    def __init__(self, posts_dir: Path | None = None) -> None:
+    def __init__(
+        self,
+        posts_dir: Path | None = None,
+        images_dir: Path | None = None,
+        renderer: Any | None = None,
+    ) -> None:
         self.posts_dir = Path(posts_dir) if posts_dir else DEFAULT_POSTS_DIR
+        self.images_dir = Path(images_dir) if images_dir else images_dir_from_env(self.posts_dir)
+        self.renderer = renderer
+
+    def _want_graphic(self, content: dict[str, Any]) -> bool:
+        if "render_graphic" in content:
+            return bool(content["render_graphic"])
+        if self.renderer is not None:
+            return True
+        return os.getenv("WEBSITE_INFOGRAPHIC", "1").strip().lower() not in {
+            "0",
+            "false",
+            "no",
+            "off",
+        }
 
     def publish(self, content: dict[str, Any]) -> PublishResult:
         briefing = content.get("briefing")
@@ -183,8 +226,21 @@ class WebsitePublisher:
         if not isinstance(now, datetime):
             now = None
         try:
-            slug, rendered = render_post(briefing, markdown, now)
+            when = published_at_of(briefing, now)
+            slug = article_slug(briefing, when)
+            graphic = None
+            if not dry_run and self._want_graphic(content):
+                from .site_graphics import write_site_infographic
+
+                graphic = write_site_infographic(
+                    briefing,
+                    slug,
+                    self.images_dir,
+                    now=when,
+                    renderer=self.renderer,
+                )
             dest = unique_post_path(self.posts_dir, slug, display_title(briefing))
+            _, rendered = render_post(briefing, markdown, now, graphic=graphic)
             if not dry_run:
                 self.posts_dir.mkdir(parents=True, exist_ok=True)
                 dest.write_text(rendered, encoding="utf-8")
@@ -201,6 +257,19 @@ class WebsitePublisher:
             published_url=f"/articles/{dest.stem}",
             detail=str(dest),
         )
+
+
+def images_dir_from_env(posts_dir: Path | None = None) -> Path:
+    raw = os.getenv("WEBSITE_IMAGES_DIR", "").strip()
+    if raw:
+        return Path(raw)
+    posts = Path(posts_dir) if posts_dir else posts_dir_from_env()
+    default_posts = (REPO_ROOT / "website" / "src" / "content" / "posts").resolve()
+    try:
+        posts.resolve().relative_to(default_posts)
+    except ValueError:
+        return posts.resolve().parent / "images"
+    return REPO_ROOT / "website" / "public" / "images" / "posts"
 
 
 def posts_dir_from_env() -> Path:
@@ -223,15 +292,18 @@ def write_website_result(run_dir: Path, payload: dict[str, Any]) -> Path:
     return path
 
 
-def maybe_git_push(post_path: Path) -> PublishResult | None:
-    """Commit and push the post file when WEBSITE_GIT_PUSH=1. Skip otherwise."""
+def maybe_git_push(*paths: Path) -> PublishResult | None:
+    """Commit and push generated files when WEBSITE_GIT_PUSH=1. Skip otherwise."""
     flag = os.getenv("WEBSITE_GIT_PUSH", "0").strip().lower()
     if flag not in {"1", "true", "yes", "on"}:
         return None
+    files = [path for path in paths if path]
+    if not files:
+        return None
     cwd = REPO_ROOT
-    rel = os.path.relpath(post_path, cwd)
+    rels = [os.path.relpath(path, cwd) for path in files]
     add = subprocess.run(
-        ["git", "add", "--", rel],
+        ["git", "add", "--", *rels],
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -245,7 +317,7 @@ def maybe_git_push(post_path: Path) -> PublishResult | None:
             detail=add.stderr.strip() or add.stdout.strip() or "git add failed",
         )
     commit = subprocess.run(
-        ["git", "commit", "-m", f"publish: {post_path.stem}"],
+        ["git", "commit", "-m", f"publish: {files[0].stem}", "--", *rels],
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -348,18 +420,23 @@ def publish_approved_briefing(
     result = publisher.publish(
         {"briefing": briefing, "markdown": markdown, "now": now, "dry_run": dry_run}
     )
+    failed = result.status == "failed"
     payload: dict[str, Any] = {
         "status": result.status,
         "error_type": result.error_type,
         "url": result.published_url,
-        "path": result.detail,
+        "path": None if failed else result.detail,
         "verified": False,
     }
-    if result.status == "failed":
+    if failed:
+        payload["detail"] = result.detail
         write_website_result(run_dir, payload)
         return payload
     if result.status == "success" and result.detail:
-        git_fail = maybe_git_push(Path(result.detail))
+        post_path = Path(result.detail)
+        graphic = images_dir_from_env(posts_dir_from_env()) / f"{post_path.stem}-infographic.png"
+        extra = [graphic] if graphic.is_file() else []
+        git_fail = maybe_git_push(post_path, *extra)
         if git_fail is not None:
             payload["status"] = git_fail.status
             payload["error_type"] = git_fail.error_type

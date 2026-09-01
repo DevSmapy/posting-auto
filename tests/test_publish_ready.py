@@ -56,6 +56,23 @@ class PublishReadyPackageTest(unittest.TestCase):
             self.assertTrue((ready / "cards" / "slide-01.png").is_file())
             self.assertIn("hello", (ready / "instagram_post.txt").read_text(encoding="utf-8"))
 
+    def test_copy_into_final_keeps_infographic_beside_markdown(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = DraftRunStore(Path(tmp) / "run")
+            store.init_layout()
+            png = Path(tmp) / "slide-01.png"
+            png.write_bytes(b"x")
+            info = Path(tmp) / "info.png"
+            info.write_bytes(b"info")
+            store.copy_into_final(
+                briefing={"instagram_post": "hello", "title": "T"},
+                card_pngs=[png],
+                infographic_png=info,
+            )
+            self.assertTrue((store.final_dir / "infographic.png").is_file())
+            self.assertFalse((store.final_dir / "cards" / "infographic.png").exists())
+            self.assertTrue((store.final_dir / "cards" / "slide-01.png").is_file())
+
     def test_ensure_builds_when_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             run = Path(tmp) / "run"

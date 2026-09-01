@@ -219,13 +219,26 @@ class CardRenderer:
         with tempfile.TemporaryDirectory(prefix="cardnews-") as tmp:
             html_path = Path(tmp) / "slide.html"
             html_path.write_text(html_doc, encoding="utf-8")
+            font = (
+                Path(__file__).resolve().parents[2]
+                / "website"
+                / "public"
+                / "fonts"
+                / "PretendardVariable.woff2"
+            )
+            if font.is_file():
+                shutil.copyfile(font, Path(tmp) / font.name)
+            profile = Path(tmp) / "chrome-profile"
+            profile.mkdir()
             uri = html_path.resolve().as_uri()
             cmd = [
                 bin_name,
                 "--headless=new",
                 "--disable-gpu",
                 "--no-sandbox",
+                "--disable-dev-shm-usage",
                 "--hide-scrollbars",
+                f"--user-data-dir={profile}",
                 f"--window-size={self.config.width},{self.config.height}",
                 f"--screenshot={out_path.resolve()}",
                 uri,
@@ -236,9 +249,17 @@ class CardRenderer:
 
     @staticmethod
     def _find_chrome() -> str | None:
+        for candidate in (
+            Path("/usr/bin/google-chrome-stable"),
+            Path("/usr/bin/google-chrome"),
+            Path("/usr/bin/chromium"),
+            Path("/usr/bin/chromium-browser"),
+        ):
+            if candidate.is_file():
+                return str(candidate)
         for name in (
-            "google-chrome",
             "google-chrome-stable",
+            "google-chrome",
             "chromium",
             "chromium-browser",
         ):

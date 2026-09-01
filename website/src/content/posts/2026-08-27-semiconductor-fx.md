@@ -14,7 +14,7 @@ sources:
   - title: "원·달러 동향 관련 보도"
     url: "https://example.com/fx"
 status: "published"
-cover: "/images/posts/2026-08-27-semiconductor-fx.png"
+graphic: "/images/posts/2026-08-27-semiconductor-fx-infographic.png"
 ---
 
 오늘은 개별 뉴스를 나열하는 날보다, 두 재료가 같은 화면에 걸린 날이다. 반도체는 실적 기대를 다시 열고, 환율은 수입 물가와 수급 이야기를 같이 연다.

@@ -1,6 +1,7 @@
 ---
 import Base from '../../layouts/Base.astro';
-import { categoriesOf, postKicker, postPath, publishedPosts } from '../../lib/posts';
+import PostTeaser from '../../components/PostTeaser.astro';
+import { categoriesOf, publishedPosts } from '../../lib/posts';
 
 export async function getStaticPaths() {
   const posts = await publishedPosts();
@@ -19,17 +20,6 @@ const { category, posts } = Astro.props;
   <p class="kicker">분류</p>
   <h1>{category}</h1>
   <ul class="post-list">
-    {posts.map((post) => (
-      <li>
-        <p class="kicker">{postKicker(post)}</p>
-        {post.data.cover && (
-          <a href={postPath(post)}>
-            <img class="cover" src={post.data.cover} alt="" />
-          </a>
-        )}
-        <a class="title" href={postPath(post)}>{post.data.title}</a>
-        <p class="meta">{post.data.description}</p>
-      </li>
-    ))}
+    {posts.map((post) => <PostTeaser post={post} />)}
   </ul>
 </Base>

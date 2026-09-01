@@ -11,6 +11,7 @@ sources:
   - title: "지하철 파업 관련 보도"
     url: "https://example.com/transit"
 status: "published"
+graphic: "/images/posts/2026-08-27-transit-strike-infographic.png"
 ---
 
 협상 결렬 이후 부분 파업이 예고됐다. 전면 중단이 아니라, 어떤 노선이 어느 시간대에 빠지는지가 먼저 중요하다.
