@@ -19,4 +19,12 @@ npm run build
 - `WEBSITE_POSTS_DIR` 기본 `website/src/content/posts`
 - `WEBSITE_DRY_RUN=1`이면 파일을 쓰지 않음
 - `WEBSITE_GIT_PUSH=1`이면 글 파일 git commit/push
+- `WEBSITE_INFOGRAPHIC` 기본 `1`. 승인 글을 쓸 때 1080×1080 인포그래픽 PNG를 같이 만든다. Chrome이 없으면 글만 쓴다
+- `WEBSITE_IMAGES_DIR` 기본 `website/public/images/posts`
 - `SITE_BASE_URL`이 있으면 배포 URL을 HTTP로 확인
+
+픽스처 인포그래픽을 다시 그리려면:
+
+```bash
+uv run python -m publish.site_graphics
+```

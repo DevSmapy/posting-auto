@@ -25,6 +25,12 @@ const { Content } = await render(post);
     <p class="kicker">{postKicker(post)}</p>
     <h1>{post.data.title}</h1>
     {post.data.cover && <img class="cover article-cover" src={post.data.cover} alt="" />}
+    {post.data.graphic && (
+      <figure class="infographic">
+        <img src={post.data.graphic} alt={`${post.data.title} 인포그래픽`} />
+        <figcaption>한눈에 보기</figcaption>
+      </figure>
+    )}
     {post.data.tags.length > 0 && (
       <p class="tags">
         {post.data.tags.map((tag) => (

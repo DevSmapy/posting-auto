@@ -31,6 +31,15 @@ from mvp_pipeline import assemble_blog_markdown  # noqa: E402
 
 
 class WebsitePublisherTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._prev_graphic = os.environ.get("WEBSITE_INFOGRAPHIC")
+        os.environ["WEBSITE_INFOGRAPHIC"] = "0"
+
+    def tearDown(self) -> None:
+        if self._prev_graphic is None:
+            os.environ.pop("WEBSITE_INFOGRAPHIC", None)
+        else:
+            os.environ["WEBSITE_INFOGRAPHIC"] = self._prev_graphic
     def test_dry_run_does_not_write(self) -> None:
         with TemporaryDirectory() as tmp:
             posts = Path(tmp) / "posts"
@@ -227,6 +236,26 @@ class WebsitePublisherTest(unittest.TestCase):
         commit = next(cmd for cmd in calls if cmd[:2] == ["git", "commit"])
         self.assertEqual(commit[-2], "--")
         self.assertEqual(commit[-1], "website/src/content/posts/note.md")
+
+    def test_graphic_frontmatter_when_renderer_writes_png(self) -> None:
+        def fake_shot(html_doc: str, out_path: Path) -> None:
+            out_path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * 20)
+
+        from cards.renderer import CardRenderer
+
+        with TemporaryDirectory() as tmp:
+            posts = Path(tmp) / "posts"
+            images = Path(tmp) / "images"
+            publisher = WebsitePublisher(
+                posts, images_dir=images, renderer=CardRenderer(screenshot_fn=fake_shot)
+            )
+            result = publisher.publish({"briefing": BRIEFING_V2, "render_graphic": True})
+            self.assertEqual(result.status, "success")
+            text = Path(result.detail or "").read_text(encoding="utf-8")
+            self.assertIn("graphic: \"/images/posts/", text)
+            self.assertIn("-infographic.png", text)
+            pngs = list(images.glob("*-infographic.png"))
+            self.assertEqual(len(pngs), 1)
 
 
 if __name__ == "__main__":

@@ -11,6 +11,17 @@ from .bundles import (
 from .caption import InstagramCaptionBuilder
 from .config import CardFormatConfig
 from .copy import CardCopyRules
+from .infographic import (
+    PictogramMatch,
+    build_infographic_fields,
+    export_infographic,
+    load_catalog,
+    render_infographic_html,
+    resolve_pictogram,
+    resolve_pictograms,
+    validate_visual_tags,
+    visual_tag_options,
+)
 from .models import CardBundle, InstagramPost, Slide, SlideType
 from .editorial import EditorialCarouselTemplate, placeholder_content
 from .narrative import NarrativeAssembler
@@ -30,9 +41,18 @@ __all__ = [
     "Slide",
     "SlideType",
     "TemplateBundle",
+    "PictogramMatch",
+    "build_infographic_fields",
+    "export_infographic",
     "get_bundle",
     "list_bundles",
+    "load_catalog",
     "load_design_guide",
     "placeholder_content",
     "recommend_for_economy_society",
+    "render_infographic_html",
+    "resolve_pictogram",
+    "resolve_pictograms",
+    "validate_visual_tags",
+    "visual_tag_options",
 ]

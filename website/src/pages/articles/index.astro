@@ -1,6 +1,7 @@
 ---
 import Base from '../../layouts/Base.astro';
-import { postKicker, postPath, publishedPosts } from '../../lib/posts';
+import PostTeaser from '../../components/PostTeaser.astro';
+import { publishedPosts } from '../../lib/posts';
 
 const posts = await publishedPosts();
 ---
@@ -9,17 +10,6 @@ const posts = await publishedPosts();
   <h1>글</h1>
   <p class="meta">최신 글부터 보여 줍니다.</p>
   <ul class="post-list">
-    {posts.map((post) => (
-      <li>
-        <p class="kicker">{postKicker(post)}</p>
-        {post.data.cover && (
-          <a href={postPath(post)}>
-            <img class="cover" src={post.data.cover} alt="" />
-          </a>
-        )}
-        <a class="title" href={postPath(post)}>{post.data.title}</a>
-        <p class="meta">{post.data.description}</p>
-      </li>
-    ))}
+    {posts.map((post) => <PostTeaser post={post} />)}
   </ul>
 </Base>

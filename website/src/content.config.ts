@@ -11,6 +11,7 @@ const posts = defineCollection({
     category: z.string(),
     tags: z.array(z.string()).default([]),
     cover: z.string().optional(),
+    graphic: z.string().optional(),
     kind: z.enum(['briefing', 'note']).default('briefing'),
     sources: z
       .array(

@@ -12,6 +12,7 @@ sources:
     url: "https://example.com/rates"
 status: "published"
 cover: "/images/posts/2026-08-26-rate-pause.png"
+graphic: "/images/posts/2026-08-26-rate-pause-infographic.png"
 ---
 
 금리가 그대로여도 해석은 그대로이지 않다. 동결은 쉬는 결정처럼 보이지만, 다음에 무엇을 보라는 신호가 문장마다 달라진다.

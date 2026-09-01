@@ -12,6 +12,7 @@ sources:
     url: "https://example.com/housing"
 status: "published"
 cover: "/images/posts/2026-08-27-real-estate-gap.png"
+graphic: "/images/posts/2026-08-27-real-estate-gap-infographic.png"
 ---
 
 거래가 멈춘 것처럼 보여도, 대기 수요가 사라진 것은 아니다. 정책 공백기에는 가격보다 거래량과 대기 기간을 먼저 본다.
