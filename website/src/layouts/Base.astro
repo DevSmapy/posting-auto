@@ -1,7 +1,7 @@
 ---
 import '../styles/global.css';
 import { categoriesOf, publishedPosts } from '../lib/posts';
-import { SITE_NAME, SITE_TAGLINE } from '../lib/site';
+import { SITE_NAME, SITE_TAGLINE, isCurrentPath } from '../lib/site';
 
 interface Props {
   title: string;
@@ -17,27 +17,7 @@ const site = Astro.site ?? new URL('https://briefing.example');
 const canonical = new URL(canonicalPath, site).toString();
 const pageTitle = title.includes(SITE_NAME) ? title : `${title} · ${SITE_NAME}`;
 const image = ogImage ? new URL(ogImage, site).toString() : undefined;
-const currentPath = decodePath(Astro.url.pathname);
-
-function decodePath(value: string): string {
-  try {
-    value = decodeURI(value);
-  } catch {
-    // keep the raw path when it is not valid URI encoding
-  }
-  return value.replace(/\/+$/, '') || '/';
-}
-
-function navCurrent(href: string): 'page' | undefined {
-  const target = decodePath(href);
-  if (target === '/') {
-    return currentPath === '/' ? 'page' : undefined;
-  }
-  if (target === '/articles') {
-    return currentPath === '/articles' || currentPath.startsWith('/articles/') ? 'page' : undefined;
-  }
-  return currentPath === target || currentPath.startsWith(`${target}/`) ? 'page' : undefined;
-}
+const pathname = Astro.url.pathname;
 ---
 <!doctype html>
 <html lang="ko">
@@ -62,11 +42,14 @@ function navCurrent(href: string): 'page' | undefined {
         <a class="masthead" href="/">{SITE_NAME}</a>
         <p class="tagline">{SITE_TAGLINE}</p>
         <nav class="nav" aria-label="주요 메뉴">
-          <a href="/" aria-current={navCurrent('/')}>홈</a>
-          <a href="/articles/" aria-current={navCurrent('/articles/')}>글</a>
-          <a href="/about/" aria-current={navCurrent('/about/')}>소개</a>
+          <a href="/" aria-current={isCurrentPath('/', pathname) ? 'page' : undefined}>홈</a>
+          <a href="/articles/" aria-current={isCurrentPath('/articles/', pathname) ? 'page' : undefined}>글</a>
+          <a href="/about/" aria-current={isCurrentPath('/about/', pathname) ? 'page' : undefined}>소개</a>
           {categories.map((category) => (
-            <a href={`/category/${category}/`} aria-current={navCurrent(`/category/${category}/`)}>{category}</a>
+            <a
+              href={`/category/${category}/`}
+              aria-current={isCurrentPath(`/category/${category}/`, pathname) ? 'page' : undefined}
+            >{category}</a>
           ))}
         </nav>
       </div>

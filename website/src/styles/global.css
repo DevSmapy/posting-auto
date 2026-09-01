@@ -226,6 +226,7 @@ h2 {
 }
 
 .pill {
+  position: relative;
   display: inline-block;
   padding: 7px 16px;
   border-radius: var(--radius-pill);
@@ -233,6 +234,18 @@ h2 {
   color: var(--color-on-dark);
   font-size: 0.95rem;
   font-weight: 600;
+}
+
+.pill::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  min-width: 100%;
+  min-height: 100%;
+  transform: translate(-50%, -50%);
 }
 
 .pill:hover {

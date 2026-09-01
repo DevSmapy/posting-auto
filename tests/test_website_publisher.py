@@ -40,6 +40,7 @@ class WebsitePublisherTest(unittest.TestCase):
             os.environ.pop("WEBSITE_INFOGRAPHIC", None)
         else:
             os.environ["WEBSITE_INFOGRAPHIC"] = self._prev_graphic
+
     def test_dry_run_does_not_write(self) -> None:
         with TemporaryDirectory() as tmp:
             posts = Path(tmp) / "posts"
@@ -253,6 +254,7 @@ class WebsitePublisherTest(unittest.TestCase):
                 result = maybe_git_push(post)
         self.assertIsNone(result)
         commit = next(cmd for cmd in calls if cmd[:2] == ["git", "commit"])
+        self.assertIn("--only", commit)
         self.assertEqual(commit[-2], "--")
         self.assertEqual(commit[-1], "website/src/content/posts/note.md")
 
