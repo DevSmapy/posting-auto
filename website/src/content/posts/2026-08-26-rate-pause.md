@@ -11,7 +11,6 @@ sources:
   - title: "금리 결정 관련 보도"
     url: "https://example.com/rates"
 status: "published"
-cover: "/images/posts/2026-08-26-rate-pause.png"
 graphic: "/images/posts/2026-08-26-rate-pause-infographic.png"
 ---
 

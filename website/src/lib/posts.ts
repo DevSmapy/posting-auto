@@ -7,11 +7,11 @@ export function postPath(post: Post): string {
 }
 
 export function postVisual(post: Post): { src: string; kind: 'cover' | 'graphic' } | undefined {
-  if (post.data.cover) {
-    return { src: post.data.cover, kind: 'cover' };
-  }
   if (post.data.graphic) {
     return { src: post.data.graphic, kind: 'graphic' };
+  }
+  if (post.data.cover) {
+    return { src: post.data.cover, kind: 'cover' };
   }
   return undefined;
 }

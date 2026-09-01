@@ -11,7 +11,6 @@ sources:
   - title: "주택 거래 관련 보도"
     url: "https://example.com/housing"
 status: "published"
-cover: "/images/posts/2026-08-27-real-estate-gap.png"
 graphic: "/images/posts/2026-08-27-real-estate-gap-infographic.png"
 ---
 

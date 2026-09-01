@@ -14,7 +14,6 @@ sources:
   - title: "원·달러 동향 관련 보도"
     url: "https://example.com/fx"
 status: "published"
-cover: "/images/posts/2026-08-27-semiconductor-fx.png"
 graphic: "/images/posts/2026-08-27-semiconductor-fx-infographic.png"
 ---
 
