@@ -161,6 +161,16 @@ class WebsitePublisherTest(unittest.TestCase):
         self.assertNotIn("브리핑 인포그래픽", body)
         self.assertIn("오늘 아침 이슈를 정리했습니다.", body)
 
+    def test_keeps_site_path_infographic_embeds(self) -> None:
+        md = (
+            "# 제목\n\n"
+            "![브리핑 인포그래픽](/images/posts/2026-09-02-briefing-infographic.png)\n\n"
+            "오늘 아침 이슈를 정리했습니다.\n"
+        )
+        _, rendered = render_post(BRIEFING_V2, markdown=md)
+        _fm, body = rendered.split("\n---\n", 1)
+        self.assertIn("/images/posts/2026-09-02-briefing-infographic.png", body)
+
     def test_verify_skipped_without_site_url(self) -> None:
         with patch.dict(os.environ, {"SITE_BASE_URL": ""}, clear=False):
             self.assertIsNone(maybe_verify_deploy("/articles/x", "제목"))

@@ -23,7 +23,7 @@ GENERIC_TAGS = {"경제", "브리핑", "증시", "뉴스"}
 KINDS = {"briefing", "note"}
 _SLUG_STRIP = re.compile(r"[^\w]+", re.UNICODE)
 _PIPELINE_GRAPHIC = re.compile(
-    r"!\[[^\]]*\]\((?:[^)\s]*/)?infographic\.png(?:\s+\"[^\"]*\")?\)[ \t]*",
+    r"!\[[^\]]*\]\(\s*infographic\.png(?:\s+\"[^\"]*\")?\s*\)[ \t]*",
     re.IGNORECASE,
 )
 

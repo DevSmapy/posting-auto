@@ -1214,7 +1214,13 @@ def humanize_story_language(
         polished, _raw = polish_story_llm(story, issues, article, now)
         return polished
 
-    cleaned, result = humanize_stories(stories, polish=polish, run_dir=run_dir)
+    cleaned, result = humanize_stories(
+        stories,
+        polish=None
+        if env("BRIEFING_MODE", "llm").lower() == "heuristic"
+        else polish,
+        run_dir=run_dir,
+    )
     if result["flagged"]:
         print(
             f"   humanize flagged={result['flagged']} "

@@ -107,6 +107,23 @@ class FidelityGateTest(unittest.TestCase):
     def test_emptied_field_is_caught(self) -> None:
         self.assertIn("fields:emptied", fidelity_issues(CLEAN, story(watch_next="")))
 
+    def test_changed_direction_proper_nouns_and_facts_are_caught(self) -> None:
+        self.assertIn(
+            "direction:changed",
+            fidelity_issues(CLEAN, story(headline="한국은행이 기준금리를 인상했습니다")),
+        )
+        self.assertIn(
+            "proper_nouns:changed",
+            fidelity_issues(CLEAN, story(headline="연준이 기준금리를 동결했습니다")),
+        )
+        self.assertIn(
+            "facts:changed",
+            fidelity_issues(
+                CLEAN,
+                story(what_happened="한국은행 금융통화위원회가 기준금리를 3.50%로 했습니다."),
+            ),
+        )
+
     def test_gate_rejects_a_rewrite_past_the_change_budget(self) -> None:
         rewritten = story(
             headline="완전히 다른 문장",
@@ -235,6 +252,29 @@ class PipelineWiringTest(unittest.TestCase):
             self.assertTrue((Path(tmp) / "humanize_result.json").exists())
         self.assertEqual([articles[1]], seen)
         self.assertIn("가계 이자 부담", out[0]["why_important"])
+
+    def test_heuristic_briefing_mode_skips_the_polish_llm(self) -> None:
+        from datetime import datetime, timezone
+        from unittest.mock import patch
+
+        import mvp_pipeline
+
+        flagged = story(watch_next="향후 귀추가 주목됩니다.")
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict(os.environ, {"BRIEFING_MODE": "heuristic"}, clear=False):
+                with patch("mvp_pipeline.polish_story_llm") as polish_llm:
+                    out = mvp_pipeline.humanize_story_language(
+                        [flagged],
+                        [{"link": "https://example.com/a"}],
+                        datetime(2026, 8, 22, tzinfo=timezone.utc),
+                        Path(tmp),
+                    )
+                    polish_llm.assert_not_called()
+            saved = json.loads(
+                (Path(tmp) / "humanize_result.json").read_text(encoding="utf-8")
+            )
+        self.assertEqual(flagged, out[0])
+        self.assertEqual(["polish:disabled"], saved["stories"][0]["rollback_reason"])
 
 
 class EditorialPassWiringTest(unittest.TestCase):

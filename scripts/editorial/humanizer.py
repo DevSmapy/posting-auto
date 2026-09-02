@@ -35,6 +35,18 @@ MAX_CHANGE_RATE = 0.30
 _WS_RE = re.compile(r"\s+")
 _NUMBER_RE = re.compile(r"\d[\d,]*(?:\.\d+)?%?")
 _QUOTE_RE = re.compile(r"[\"“”'‘’]([^\"“”'‘’]{2,})[\"“”'‘’]")
+_DIRECTION_RE = re.compile(
+    r"(급등|급락|상승|하락|인상|인하|동결|증가|감소|확대|축소|강세|약세)"
+)
+_PROPER_RE = re.compile(
+    r"[A-Za-z][A-Za-z0-9.&'-]*"
+    r"|금통위|한은|연준|코스피|코스닥|나스닥"
+    r"|[가-힣]{2,}(?:은행|공사|위원회|전자|자동차|증권|거래소)"
+)
+_FACT_RE = re.compile(
+    r"\d[\d,]*(?:\.\d+)?%?[가-힣]{0,4}\s*"
+    r"(?:인상|인하|동결|유지|상승|하락|증가|감소|확대|축소)"
+)
 _CONNECTIVES = ("또한", "그러나", "하지만", "따라서", "이에 따라", "한편", "그리고")
 
 
@@ -134,6 +146,14 @@ def fidelity_issues(before: Mapping[str, Any], after: Mapping[str, Any]) -> list
         issues.append("numbers:changed")
     if Counter(_QUOTE_RE.findall(before_text)) != Counter(_QUOTE_RE.findall(after_text)):
         issues.append("quotes:changed")
+    if Counter(_DIRECTION_RE.findall(before_text)) != Counter(
+        _DIRECTION_RE.findall(after_text)
+    ):
+        issues.append("direction:changed")
+    if Counter(_PROPER_RE.findall(before_text)) != Counter(_PROPER_RE.findall(after_text)):
+        issues.append("proper_nouns:changed")
+    if Counter(_FACT_RE.findall(before_text)) != Counter(_FACT_RE.findall(after_text)):
+        issues.append("facts:changed")
     if any(not str(after.get(field) or "").strip() for field in STORY_FIELDS):
         issues.append("fields:emptied")
     return issues

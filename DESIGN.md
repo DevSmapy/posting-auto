@@ -502,7 +502,7 @@ Inferred from component width tokens and progressive nav heights:
 
 - Pill buttons keep visual padding at `7px 16px`. The hit box must be at least 44×44px on every breakpoint (enlarged invisible hit area, not a taller painted pill). Frap is unchanged.
 - Frap floating circular button at `56px` is well above minimum.
-- Frap uses `--frapTouchOffset: calc(-1 * .8rem)` to extend tap area 8px beyond visual edge.
+- Frap uses `--frapTouchOffset: calc(-1 * .8rem)` to extend tap area 12.8px beyond visual edge.
 - Form float-label inputs grow their label font size on mobile (1.6rem base vs 1.9rem desktop) — easier to tap and read at arm's-length.
 
 ### Collapsing Strategy
@@ -511,7 +511,7 @@ Inferred from component width tokens and progressive nav heights:
 - **Hero split collapses**: 40/60 asymmetric split → stacked (image top, content below) at mobile
 - **Gift-card grid**: 5-up → 4-up → 3-up → 2-up → 1-up across breakpoints with adjusted card widths
 - **Feature bands**: Stay full-width but text + imagery stack vertically on mobile
-- **Outer gutter scales**: 16px → 24px → 40px as viewport grows
+- **Outer gutter scales**: 25.6px → 38.4px → 64px as viewport grows
 - **Rewards 3-column status panels**: Stack to single column on mobile
 
 ### Image Behavior
@@ -542,7 +542,7 @@ Inferred from component width tokens and progressive nav heights:
 
 1. "Create a primary CTA pill button with Green Accent (`#00754A`) background, white text 'Explore our afternoon menu', Pretendard Variable (`"Pretendard Variable", Pretendard, system-ui, sans-serif`) at 16px weight 600 with `-0.01em` letter-spacing, `50px` border-radius (full pill), visual padding `7px 16px`, and a minimum 44×44px hit box that does not change the painted size. Apply `transform: scale(0.95)` as the active state with a `0.2s ease` transition."
 
-2. "Design a content card with White (`#ffffff`) background at `12px` border-radius, layered shadow `0 0 0.5px rgba(0,0,0,0.14), 0 1px 1px rgba(0,0,0,0.24)`. Pad contents `16–24px` (`--space-3` to `--space-4`). Place on a Neutral Warm (`#f2f0eb`) page canvas with `16px` gap to siblings."
+2. "Design a content card with White (`#ffffff`) background at `12px` border-radius, layered shadow `0 0 0.5px rgba(0,0,0,0.14), 0 1px 1px rgba(0,0,0,0.24)`. Pad contents `25.6–38.4px` (`--space-3` to `--space-4`). Place on a Neutral Warm (`#f2f0eb`) page canvas with `16px` gap to siblings."
 
 3. "Build the Frap floating circular order button — `56px` diameter, Green Accent (`#00754A`) fill, white shopping-bag icon centered. Layered shadow: `0 0 6px rgba(0,0,0,0.24)` + `0 8px 12px rgba(0,0,0,0.14)`. Fixed position bottom-right with `-0.8rem` touch offset. Active state collapses the ambient shadow to `0 8px 12px rgba(0,0,0,0)` with `scale(0.95)`."
 

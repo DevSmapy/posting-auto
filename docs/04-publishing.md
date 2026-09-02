@@ -125,7 +125,7 @@ Slack: `uv run python scripts/smoke_slack.py` (`NOTIFY_CHANNEL=slack`)
 
 ### 블로그 인포그래픽
 
-렌더 attempt마다 `renders/render-NN/infographic/`에 `infographic.html` · `infographic.png` · `infographic.json`(픽토그램 선택 근거)을 만듭니다. 렌더 게이트에서 카드보다 **먼저** 첨부되지만 `card_png_paths`에는 들어가지 않아 캐러셀 장수는 그대로입니다.
+렌더 attempt마다 `renders/render-NN/infographic/`에 `infographic.html`과 `infographic.json`(픽토그램 선택 근거)을 만듭니다. `infographic.png`는 PNG 렌더가 성공한 경우에만 생깁니다. 렌더 게이트에서 카드보다 **먼저** 첨부되지만 `card_png_paths`에는 들어가지 않아 캐러셀 장수는 그대로입니다.
 
 Approve하면 승인된 한 장이 run 루트(`briefing.md` 옆)와 `final/infographic.png`로 복사되고 cleanup 후에도 남습니다.
 
