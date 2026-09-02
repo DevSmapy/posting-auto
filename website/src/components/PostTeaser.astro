@@ -11,7 +11,7 @@ const visual = postVisual(post);
 <li>
   <p class="kicker">{postKicker(post)}</p>
   {visual && (
-    <a href={postPath(post)}>
+    <a href={postPath(post)} aria-label={post.data.title}>
       <img class={visual.kind === 'graphic' ? 'cover graphic' : 'cover'} src={visual.src} alt="" />
     </a>
   )}

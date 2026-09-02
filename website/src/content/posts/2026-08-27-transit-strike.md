@@ -9,7 +9,7 @@ tags:
   - 교통
 sources:
   - title: "지하철 파업 관련 보도"
-status: "published"
+status: "draft"
 graphic: "/images/posts/2026-08-27-transit-strike-infographic.png"
 ---
 

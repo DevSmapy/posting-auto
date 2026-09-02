@@ -2523,6 +2523,7 @@ def resume_parked_draft(
             draft_store.mark_parked("render")
             return 1
     elif infographic_png(render_dir) is None:
+        ensure_aux_before_publish()
         render_infographic_for_approve(briefing, render_dir, now)
     preview = preview_text(
         briefing,

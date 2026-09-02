@@ -6,6 +6,7 @@ code so the same briefing always renders the same image.
 
 from __future__ import annotations
 
+import base64
 import html
 import json
 import re
@@ -311,17 +312,22 @@ def _apply_css_vars(css: str, css_vars: Mapping[str, str] | None) -> str:
     return css
 
 
-def _with_local_font(document: str) -> str:
-    """Point the sheet at a local Pretendard file copied next to the HTML."""
-    if not PRETENDARD_PATH.is_file():
-        return document
-    face = (
+@lru_cache(maxsize=1)
+def _pretendard_face() -> str:
+    payload = base64.b64encode(PRETENDARD_PATH.read_bytes()).decode("ascii")
+    return (
         "@font-face{font-family:\"Pretendard Variable\";font-style:normal;"
         "font-weight:45 920;font-display:swap;"
-        "src:url(\"PretendardVariable.woff2\") format(\"woff2-variations\");}"
+        f"src:url(\"data:font/woff2;base64,{payload}\") format(\"woff2-variations\");}}"
         ":root{--font:\"Pretendard Variable\",sans-serif;}"
     )
-    return document.replace("</style>", face + "</style>", 1)
+
+
+def _with_local_font(document: str) -> str:
+    """Embed Pretendard so Browserless can resolve the face without a sibling file."""
+    if not PRETENDARD_PATH.is_file():
+        return document
+    return document.replace("</style>", _pretendard_face() + "</style>", 1)
 
 
 def build_infographic_fields(

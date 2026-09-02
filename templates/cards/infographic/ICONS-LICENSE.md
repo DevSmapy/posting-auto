@@ -17,7 +17,7 @@
 
 ## Lucide ISC License (업스트림 path 도입 시 적용)
 
-```
+```text
 ISC License
 
 Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2022 as part of Feather (MIT).

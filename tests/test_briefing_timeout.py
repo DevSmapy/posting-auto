@@ -688,6 +688,68 @@ class DraftApproveFlowTest(unittest.TestCase):
         )
         self.assertEqual("infographic.png", publish_kwargs[0]["infographic_path"].name)
 
+    def test_resume_restores_aux_before_missing_infographic(self) -> None:
+        from datetime import datetime, timezone
+
+        from draft_run import DraftRunStore
+        from mvp_pipeline import resume_parked_draft
+        from notify.base import GateAction
+
+        calls: list[str] = []
+
+        class _Store:
+            backend = "memory"
+
+            def filter_new(self, candidates):  # noqa: ANN001
+                return candidates
+
+            def reopen(self) -> None:
+                pass
+
+            def close(self) -> None:
+                pass
+
+        class _Notifier:
+            def wait_for_gate(self, stage, preview, **kwargs):  # noqa: ANN001
+                return GateAction.TIMEOUT
+
+            def send_text(self, text):  # noqa: ANN001
+                pass
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            store = DraftRunStore(run_dir)
+            store.init_layout()
+            content = store.new_content_attempt()
+            (content / "briefing.json").write_text(
+                '{"title": "t", "stories": []}', encoding="utf-8"
+            )
+            (content / "ranked.json").write_text("[]", encoding="utf-8")
+            store.set_selected_content(store.manifest.current_content)
+            render = store.new_render_attempt()
+            (render / "cards" / "slide-01.png").write_bytes(b"card")
+            store.mark_parked("render")
+            with (
+                patch("mvp_pipeline.ensure_runtime_before_llm"),
+                patch(
+                    "mvp_pipeline.ensure_aux_before_publish",
+                    side_effect=lambda: calls.append("aux"),
+                ),
+                patch(
+                    "mvp_pipeline.render_infographic_for_approve",
+                    side_effect=lambda *a, **k: calls.append("info"),
+                ),
+                patch("mvp_pipeline.preview_text", return_value="preview"),
+            ):
+                code = resume_parked_draft(
+                    run_dir,
+                    now=datetime(2026, 9, 2, tzinfo=timezone.utc),
+                    store=_Store(),
+                    notifier=_Notifier(),
+                )
+        self.assertEqual(0, code)
+        self.assertEqual(["aux", "info"], calls)
+
 
 if __name__ == "__main__":
     unittest.main()

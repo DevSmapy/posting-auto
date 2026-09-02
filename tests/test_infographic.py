@@ -306,6 +306,20 @@ class TemplateTest(unittest.TestCase):
             self.assertEqual("infographic.png", meta["png"])
             self.assertEqual("", meta["error"])
 
+    def test_png_screenshot_embeds_pretendard_as_data_url(self) -> None:
+        seen: list[str] = []
+
+        class Stub:
+            def screenshot_html(self, document: str, out: Path) -> None:
+                seen.append(document)
+                out.write_bytes(b"png")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            export_infographic(BRIEFING, Path(tmp) / "infographic", renderer=Stub())
+        self.assertTrue(seen)
+        self.assertIn("data:font/woff2;base64,", seen[0])
+        self.assertNotIn('url("PretendardVariable.woff2")', seen[0])
+
 
 if __name__ == "__main__":
     unittest.main()
