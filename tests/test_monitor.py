@@ -101,6 +101,10 @@ class MonitorStateTest(unittest.TestCase):
             )
             (run / "briefing.md").write_text("# hi\n", encoding="utf-8")
             _write(run / "publish_result.json", {"ig_media_id": "ig-1"})
+            _write(
+                run / "website_result.json",
+                {"status": "success", "url": "/articles/2026-08-20-hi"},
+            )
             _write(run / "monitor.json", {"ended": True, "ok": True, "run_id": run.name, "mode": "autonomous"})
             lock = Path(tmp) / "missing.lock"
             state = read_state(output=out, lock_file=lock, probe=False)
@@ -111,6 +115,9 @@ class MonitorStateTest(unittest.TestCase):
         self.assertEqual(ig["id"], "ig-1")
         tistory = [p for p in state["publish"] if p["channel"] == "Tistory"][0]
         self.assertEqual(tistory["status"], "skipped")
+        website = [p for p in state["publish"] if p["channel"] == "Website"][0]
+        self.assertEqual(website["status"], "success")
+        self.assertEqual(website["id"], "/articles/2026-08-20-hi")
         text = render_text(state)
         self.assertIn("COMPLETE", text)
         self.assertIn("미국 금리", text)
@@ -364,6 +371,46 @@ class MonitorStateTest(unittest.TestCase):
         self.assertIn("Guard ✗", text)
         self.assertIn("FAILED", text)
 
+    def test_website_failure_is_read_only_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            run = _run(out)
+            (run / "briefing.md").write_text("# md\n", encoding="utf-8")
+            _write(
+                run / "website_result.json",
+                {"status": "failed", "error_type": "GIT_PUSH_FAILED"},
+            )
+            _write(
+                run / "monitor.json",
+                {"ended": True, "ok": False, "run_id": run.name, "mode": "autonomous"},
+            )
+            state = read_state(output=out, lock_file=Path(tmp) / "no.lock", probe=False)
+        website = [p for p in state["publish"] if p["channel"] == "Website"][0]
+        self.assertEqual(website["status"], "failed")
+        ig = [p for p in state["publish"] if p["channel"] == "Instagram"][0]
+        self.assertEqual(ig["status"], "paused")
+        self.assertIn("GIT_PUSH_FAILED", state["failure_reason"])
+
+    def test_website_skipped_is_not_pending(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            run = _run(out)
+            (run / "briefing.md").write_text("# md\n", encoding="utf-8")
+            _write(
+                run / "website_result.json",
+                {"status": "skipped", "error_type": None, "url": None, "path": None},
+            )
+            _write(
+                run / "monitor.json",
+                {"ended": True, "ok": True, "run_id": run.name, "mode": "autonomous"},
+            )
+            state = read_state(output=out, lock_file=Path(tmp) / "no.lock", probe=False)
+        website = [p for p in state["publish"] if p["channel"] == "Website"][0]
+        self.assertEqual(website["status"], "skipped")
+        steps = {row["name"]: row["status"] for row in state["publish_steps"]}
+        self.assertEqual(steps["Website"], "skipped")
+        self.assertNotEqual(steps["Website"], "pending")
+
     def test_zombie_dead_pid_is_failed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
@@ -426,6 +473,31 @@ class MonitorStateTest(unittest.TestCase):
         self.assertEqual(names["Cards"], "success")
         self.assertEqual(names["R2"], "success")
         self.assertEqual(names["IG"], "success")
+
+    def test_publish_steps_website_skipped_not_running(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            run = _run(out)
+            (run / "briefing.md").write_text("# md\n", encoding="utf-8")
+            _write(run / "website_result.json", {"status": "skipped", "url": None, "path": None})
+            _write(
+                run / "monitor.json",
+                {
+                    "run_id": run.name,
+                    "mode": "autonomous",
+                    "stage": "PUBLISH",
+                    "events": [{"timestamp": datetime.now(timezone.utc).isoformat(), "message": "publish started"}],
+                },
+            )
+            lock = Path(tmp) / "lock.json"
+            _write(lock, {"pid": os.getpid(), "run_id": run.name, "started_at": datetime.now(timezone.utc).isoformat()})
+            state = read_state(output=out, lock_file=lock, probe=False)
+            names = {row["name"]: row["status"] for row in state["publish_steps"]}
+            website = [p for p in state["publish"] if p["channel"] == "Website"][0]
+        self.assertEqual(names["Website"], "skipped")
+        self.assertNotEqual(names["Website"], "running")
+        self.assertNotEqual(names["Website"], "pending")
+        self.assertEqual(website["status"], "skipped")
 
     def test_live_recent_activity_not_stale(self) -> None:
         now = datetime.now(timezone.utc)

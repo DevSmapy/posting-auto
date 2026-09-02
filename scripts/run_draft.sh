@@ -3,6 +3,7 @@
 #
 # Morning cron (cron_run_draft.sh): Wave 1 autonomous; 5-min poller + ops.json schedule.
 # Manual draft gates: ./scripts/run_draft.sh  (default MVP_MODE=draft)
+# Render gate attaches the 1080×1080 site infographic first, then Instagram cards.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

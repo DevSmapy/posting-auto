@@ -1,0 +1,18 @@
+---
+import Base from '../layouts/Base.astro';
+import { SITE_NAME, SITE_TAGLINE } from '../lib/site';
+---
+<Base title="소개" description={SITE_TAGLINE} canonicalPath="/about/">
+  <p class="kicker">소개</p>
+  <h1>{SITE_NAME}</h1>
+  <p class="lede">{SITE_TAGLINE}</p>
+  <div class="prose">
+    <p>
+      매일 아침 한 편만 올리는 경제 전용란이 아닙니다. 브리핑도 있고, 짧은 단신도 있습니다.
+      경제만이 아니라 사회·기술처럼 다른 주제도 올립니다.
+    </p>
+    <p>
+      정보 안내용이며 투자 권유가 아닙니다. 로그인·댓글·검색·광고는 없습니다.
+    </p>
+  </div>
+</Base>

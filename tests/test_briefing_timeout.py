@@ -259,6 +259,98 @@ class DraftApproveFlowTest(unittest.TestCase):
             ],
         )
 
+    def test_infographic_reaches_the_gate_and_survives_cleanup(self) -> None:
+        gate_images: list[list[Path]] = []
+        publish_kwargs: list[dict] = []
+
+        class _Store:
+            backend = "memory"
+
+            def filter_new(self, candidates):  # noqa: ANN001
+                return candidates
+
+            def reopen(self) -> None:
+                pass
+
+            def close(self) -> None:
+                pass
+
+        class _Notifier:
+            def wait_for_gate(self, stage, preview, **kwargs):  # noqa: ANN001
+                from notify.base import GateAction, GateStage
+
+                stage_s = GateStage(stage) if not isinstance(stage, GateStage) else stage
+                if stage_s == GateStage.RENDER:
+                    gate_images.append(list(kwargs.get("image_paths") or []))
+                if stage_s == GateStage.CLEANUP:
+                    return GateAction.KEEP_FINAL
+                return GateAction.APPROVE
+
+            def send_text(self, text):  # noqa: ANN001
+                pass
+
+        def _render(briefing, render_dir, now):  # noqa: ANN001
+            (render_dir / "infographic").mkdir(parents=True, exist_ok=True)
+            (render_dir / "infographic" / "infographic.png").write_bytes(b"info")
+            card = render_dir / "slide-01.png"
+            card.write_bytes(b"card")
+            return [card]
+
+        briefing = {"title": "draft", "slides": [], "core_summary": []}
+        picked = [{"title": "A", "score": 1, "link": "https://example.com/a"}]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "MVP_MODE": "draft",
+                        "OUTPUT_DIR": tmp,
+                        "CONTENT_RETRY_MAX": "3",
+                        "RENDER_RETRY_MAX": "3",
+                    },
+                    clear=False,
+                ),
+                patch("mvp_pipeline.OUTPUT", Path(tmp)),
+                patch("mvp_pipeline.ensure_runtime_before_llm"),
+                patch("mvp_pipeline.get_notifier", return_value=_Notifier()),
+                patch("mvp_pipeline.resolve_channel", return_value="slack"),
+                patch("mvp_pipeline.SeenUrlsStore", return_value=_Store()),
+                patch(
+                    "mvp_pipeline.fetch_candidates",
+                    return_value=[{"id": "1", "title": "A", "link": "https://example.com/a"}],
+                ),
+                patch("mvp_pipeline.rank_articles", return_value=picked),
+                patch("mvp_pipeline.build_briefing", return_value=(briefing, "llm")),
+                patch("mvp_pipeline.assemble_blog_html", return_value="<p>x</p>"),
+                patch("mvp_pipeline.render_cards_for_approve", side_effect=_render),
+                patch("mvp_pipeline.preview_text", return_value="preview"),
+                patch("mvp_pipeline.release_ollama_only"),
+                patch("mvp_pipeline.release_aux_only"),
+                patch("mvp_pipeline.ensure_aux_before_publish"),
+                patch("mvp_pipeline.wait_until_notify_send_at"),
+                patch(
+                    "mvp_pipeline.run_publish",
+                    side_effect=lambda *a, **kw: publish_kwargs.append(kw),
+                ),
+            ):
+                self.assertEqual(main(), 0)
+
+            final = next(Path(tmp).rglob("final"))
+            self.assertTrue((final / "infographic.png").is_file())
+            self.assertFalse((final / "cards" / "infographic.png").exists())
+
+        self.assertEqual(1, len(gate_images))
+        shown = gate_images[0]
+        self.assertEqual(2, len(shown))
+        self.assertEqual("infographic.png", shown[0].name)
+        self.assertEqual("slide-01.png", shown[1].name)
+        # The carousel count must not grow because of the infographic.
+        self.assertEqual(
+            ["slide-01.png"], [p.name for p in publish_kwargs[0]["card_png_paths"]]
+        )
+        self.assertEqual("infographic.png", publish_kwargs[0]["infographic_path"].name)
+
     def test_rewrite_keeps_ollama_until_content_stage_ends(self) -> None:
         calls: list[str] = []
         build_calls = 0
@@ -504,6 +596,159 @@ class DraftApproveFlowTest(unittest.TestCase):
         self.assertTrue(any("복구되었습니다" in t for t in texts))
         self.assertEqual(restores, [3])
         self.assertEqual(build_calls, 2)
+
+    def test_infographic_reaches_the_gate_and_survives_cleanup(self) -> None:
+        gate_images: list[list[Path]] = []
+        publish_kwargs: list[dict] = []
+
+        class _Store:
+            backend = "memory"
+
+            def filter_new(self, candidates):  # noqa: ANN001
+                return candidates
+
+            def reopen(self) -> None:
+                pass
+
+            def close(self) -> None:
+                pass
+
+        class _Notifier:
+            def wait_for_gate(self, stage, preview, **kwargs):  # noqa: ANN001
+                from notify.base import GateAction, GateStage
+
+                stage_s = GateStage(stage) if not isinstance(stage, GateStage) else stage
+                if stage_s == GateStage.RENDER:
+                    gate_images.append(list(kwargs.get("image_paths") or []))
+                if stage_s == GateStage.CLEANUP:
+                    return GateAction.KEEP_FINAL
+                return GateAction.APPROVE
+
+            def send_text(self, text):  # noqa: ANN001
+                pass
+
+        def _render(briefing, render_dir, now):  # noqa: ANN001
+            (render_dir / "infographic").mkdir(parents=True, exist_ok=True)
+            (render_dir / "infographic" / "infographic.png").write_bytes(b"info")
+            card = render_dir / "slide-01.png"
+            card.write_bytes(b"card")
+            return [card]
+
+        briefing = {"title": "draft", "slides": [], "core_summary": []}
+        picked = [{"title": "A", "score": 1, "link": "https://example.com/a"}]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "MVP_MODE": "draft",
+                        "OUTPUT_DIR": tmp,
+                        "CONTENT_RETRY_MAX": "3",
+                        "RENDER_RETRY_MAX": "3",
+                    },
+                    clear=False,
+                ),
+                patch("mvp_pipeline.OUTPUT", Path(tmp)),
+                patch("mvp_pipeline.ensure_runtime_before_llm"),
+                patch("mvp_pipeline.get_notifier", return_value=_Notifier()),
+                patch("mvp_pipeline.resolve_channel", return_value="slack"),
+                patch("mvp_pipeline.SeenUrlsStore", return_value=_Store()),
+                patch(
+                    "mvp_pipeline.fetch_candidates",
+                    return_value=[{"id": "1", "title": "A", "link": "https://example.com/a"}],
+                ),
+                patch("mvp_pipeline.rank_articles", return_value=picked),
+                patch("mvp_pipeline.build_briefing", return_value=(briefing, "llm")),
+                patch("mvp_pipeline.assemble_blog_html", return_value="<p>x</p>"),
+                patch("mvp_pipeline.render_cards_for_approve", side_effect=_render),
+                patch("mvp_pipeline.preview_text", return_value="preview"),
+                patch("mvp_pipeline.release_ollama_only"),
+                patch("mvp_pipeline.release_aux_only"),
+                patch("mvp_pipeline.ensure_aux_before_publish"),
+                patch("mvp_pipeline.wait_until_notify_send_at"),
+                patch(
+                    "mvp_pipeline.run_publish",
+                    side_effect=lambda *a, **kw: publish_kwargs.append(kw),
+                ),
+            ):
+                self.assertEqual(main(), 0)
+
+            final = next(Path(tmp).rglob("final"))
+            self.assertTrue((final / "infographic.png").is_file())
+            self.assertFalse((final / "cards" / "infographic.png").exists())
+
+        self.assertEqual(1, len(gate_images))
+        shown = gate_images[0]
+        self.assertEqual(2, len(shown))
+        self.assertEqual("infographic.png", shown[0].name)
+        self.assertEqual("slide-01.png", shown[1].name)
+        self.assertEqual(
+            ["slide-01.png"], [p.name for p in publish_kwargs[0]["card_png_paths"]]
+        )
+        self.assertEqual("infographic.png", publish_kwargs[0]["infographic_path"].name)
+
+    def test_resume_restores_aux_before_missing_infographic(self) -> None:
+        from datetime import datetime, timezone
+
+        from draft_run import DraftRunStore
+        from mvp_pipeline import resume_parked_draft
+        from notify.base import GateAction
+
+        calls: list[str] = []
+
+        class _Store:
+            backend = "memory"
+
+            def filter_new(self, candidates):  # noqa: ANN001
+                return candidates
+
+            def reopen(self) -> None:
+                pass
+
+            def close(self) -> None:
+                pass
+
+        class _Notifier:
+            def wait_for_gate(self, stage, preview, **kwargs):  # noqa: ANN001
+                return GateAction.TIMEOUT
+
+            def send_text(self, text):  # noqa: ANN001
+                pass
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            store = DraftRunStore(run_dir)
+            store.init_layout()
+            content = store.new_content_attempt()
+            (content / "briefing.json").write_text(
+                '{"title": "t", "stories": []}', encoding="utf-8"
+            )
+            (content / "ranked.json").write_text("[]", encoding="utf-8")
+            store.set_selected_content(store.manifest.current_content)
+            render = store.new_render_attempt()
+            (render / "cards" / "slide-01.png").write_bytes(b"card")
+            store.mark_parked("render")
+            with (
+                patch("mvp_pipeline.ensure_runtime_before_llm"),
+                patch(
+                    "mvp_pipeline.ensure_aux_before_publish",
+                    side_effect=lambda: calls.append("aux"),
+                ),
+                patch(
+                    "mvp_pipeline.render_infographic_for_approve",
+                    side_effect=lambda *a, **k: calls.append("info"),
+                ),
+                patch("mvp_pipeline.preview_text", return_value="preview"),
+            ):
+                code = resume_parked_draft(
+                    run_dir,
+                    now=datetime(2026, 9, 2, tzinfo=timezone.utc),
+                    store=_Store(),
+                    notifier=_Notifier(),
+                )
+        self.assertEqual(0, code)
+        self.assertEqual(["aux", "info"], calls)
 
 
 if __name__ == "__main__":

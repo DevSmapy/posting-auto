@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <style>{{DESIGN_SYSTEM_CSS}}</style>
+</head>
+<body>
+{{PICTOGRAM_SPRITE}}
+  <div class="sheet">
+    <header class="topbar">
+      <span class="kicker">{{kicker}}</span>
+      <span class="meta">{{date}} · {{brand}}</span>
+    </header>
+
+    <div class="main">
+      <section class="lead">
+        <div>
+          <span class="eyebrow">{{lead_label}}</span>
+          <h1 class="headline">{{title}}</h1>
+          <p class="intro">{{intro}}</p>
+        </div>
+        <div class="insight {{insight_state}}">
+          <span class="insight-label">{{insight_label}}</span>
+          <p class="insight-body">{{insight}}</p>
+        </div>
+      </section>
+
+      <section class="signals">
+        <span class="eyebrow">{{signals_label}}</span>
+        <div class="signal {{story_1_state}}">
+          <span class="badge"><svg class="pg"><use href="#{{story_1_icon}}"></use></svg></span>
+          <div>
+            <div class="signal-head">
+              <span class="signal-index">{{story_1_index}}</span>
+              <span class="signal-title">{{story_1_title}}</span>
+            </div>
+            <p class="signal-body">{{story_1_body}}</p>
+          </div>
+        </div>
+        <div class="signal {{story_2_state}}">
+          <span class="badge"><svg class="pg"><use href="#{{story_2_icon}}"></use></svg></span>
+          <div>
+            <div class="signal-head">
+              <span class="signal-index">{{story_2_index}}</span>
+              <span class="signal-title">{{story_2_title}}</span>
+            </div>
+            <p class="signal-body">{{story_2_body}}</p>
+          </div>
+        </div>
+        <div class="signal {{story_3_state}}">
+          <span class="badge"><svg class="pg"><use href="#{{story_3_icon}}"></use></svg></span>
+          <div>
+            <div class="signal-head">
+              <span class="signal-index">{{story_3_index}}</span>
+              <span class="signal-title">{{story_3_title}}</span>
+            </div>
+            <p class="signal-body">{{story_3_body}}</p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="impact">
+      <div class="cell is-accent {{impact_1_state}}">
+        <div class="cell-head">
+          <svg class="pg pg-sm"><use href="#{{impact_1_icon}}"></use></svg>
+          <span class="cell-label">{{impact_1_label}}</span>
+        </div>
+        <p class="cell-body">{{impact_1_body}}</p>
+      </div>
+      <div class="cell {{impact_2_state}}">
+        <div class="cell-head">
+          <svg class="pg pg-sm"><use href="#{{impact_2_icon}}"></use></svg>
+          <span class="cell-label">{{impact_2_label}}</span>
+        </div>
+        <p class="cell-body">{{impact_2_body}}</p>
+      </div>
+      <div class="cell {{impact_3_state}}">
+        <div class="cell-head">
+          <svg class="pg pg-sm"><use href="#{{impact_3_icon}}"></use></svg>
+          <span class="cell-label">{{impact_3_label}}</span>
+        </div>
+        <p class="cell-body">{{impact_3_body}}</p>
+      </div>
+      <div class="cell {{impact_4_state}}">
+        <div class="cell-head">
+          <svg class="pg pg-sm"><use href="#{{impact_4_icon}}"></use></svg>
+          <span class="cell-label">{{impact_4_label}}</span>
+        </div>
+        <p class="cell-body">{{impact_4_body}}</p>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

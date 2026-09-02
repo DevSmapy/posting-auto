@@ -61,6 +61,35 @@ class StoryLayersTest(unittest.TestCase):
         self.assertIn("fact", debug)
         self.assertIn("translated", debug)
 
+    def test_visual_tags_survive_the_translate_schema(self) -> None:
+        now = datetime(2026, 7, 28, tzinfo=timezone.utc)
+        fact = {
+            "headline_hint": "Rate pause",
+            "event": "Inflation eased.",
+            "cause": "Expectations shifted.",
+            "impact": "Markets repriced policy.",
+            "watch_next": "Watch the Fed.",
+            "one_liner_hint": "Inflation eased and rate expectations moved.",
+            "entities": ["Fed"],
+            "tone_flags": ["macro"],
+            "visual_tags": ["central-bank", "moon-rocket"],
+        }
+        translated = {
+            "headline": "금리 동결 기조가 이어졌습니다",
+            "what_happened": "미국 물가 지표가 둔화했습니다.",
+            "why_important": "금리 기대 경로를 바꿀 수 있습니다.",
+            "watch_next": "연준 발언과 국채 금리를 보세요.",
+            "one_liner": "물가 둔화가 금리 기대를 바꾸고 있습니다.",
+        }
+        with patch("mvp_pipeline.summarize_story_fact_llm", return_value=(fact, "fact-raw")):
+            with patch(
+                "mvp_pipeline.translate_story_fact_llm",
+                return_value=(translated, "translated-raw"),
+            ):
+                story, debug = summarize_story_layers(ARTICLE, now)
+        self.assertEqual(["central-bank"], story["visual_tags"])
+        self.assertEqual(["moon-rocket"], debug["visual_tags"]["rejected"])
+
     def test_summarize_story_layers_polish_repair(self) -> None:
         now = datetime(2026, 7, 28, tzinfo=timezone.utc)
         fact = {

@@ -1,0 +1,17 @@
+---
+import Base from '../layouts/Base.astro';
+import PostTeaser from '../components/PostTeaser.astro';
+import { publishedPosts } from '../lib/posts';
+import { SITE_NAME } from '../lib/site';
+
+const posts = await publishedPosts();
+---
+<Base title={SITE_NAME}>
+  {posts.length === 0 ? (
+    <p>아직 발행된 글이 없습니다.</p>
+  ) : (
+    <ul class="post-list home-stream">
+      {posts.map((post) => <PostTeaser post={post} />)}
+    </ul>
+  )}
+</Base>

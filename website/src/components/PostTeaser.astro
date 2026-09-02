@@ -1,0 +1,20 @@
+---
+import { postKicker, postPath, postVisual, type Post } from '../lib/posts';
+
+interface Props {
+  post: Post;
+}
+
+const { post } = Astro.props;
+const visual = postVisual(post);
+---
+<li>
+  <p class="kicker">{postKicker(post)}</p>
+  {visual && (
+    <a href={postPath(post)} aria-label={post.data.title}>
+      <img class={visual.kind === 'graphic' ? 'cover graphic' : 'cover'} src={visual.src} alt="" />
+    </a>
+  )}
+  <a class="title" href={postPath(post)}>{post.data.title}</a>
+  <p class="meta">{post.data.description}</p>
+</li>

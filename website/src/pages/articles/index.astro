@@ -1,0 +1,15 @@
+---
+import Base from '../../layouts/Base.astro';
+import PostTeaser from '../../components/PostTeaser.astro';
+import { publishedPosts } from '../../lib/posts';
+
+const posts = await publishedPosts();
+---
+<Base title="글" description="발행된 글 목록" canonicalPath="/articles/">
+  <p class="kicker">목록</p>
+  <h1>글</h1>
+  <p class="meta">최신 글부터 보여 줍니다.</p>
+  <ul class="post-list">
+    {posts.map((post) => <PostTeaser post={post} />)}
+  </ul>
+</Base>
