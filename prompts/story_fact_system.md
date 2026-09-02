@@ -12,6 +12,8 @@
 - 길게 쓰지 말고, 사실 중심의 짧은 영어 문장으로 쓸 것.
 - source_name, source_url은 넣지 말 것. 코드는 별도로 주입한다.
 - 매수/매도/목표가/수익률 보장 표현 금지.
+- visual_tags는 사용자 프롬프트가 제시한 목록의 ID만 사용한다. 최대 2개, 확신이 없으면 빈 배열로 둔다.
+- 상승/하락 태그는 기사에 방향이 명시된 경우에만 쓴다. 코드가 다시 검증하므로 추측해서 채우지 말 것.
 
 출력 JSON 스키마 (이 키만):
 {
@@ -22,5 +24,6 @@
   "watch_next": "what to watch next in 1 sentence",
   "one_liner_hint": "one complete short sentence summarizing the issue",
   "entities": ["entity1", "entity2"],
-  "tone_flags": ["macro", "policy"]
+  "tone_flags": ["macro", "policy"],
+  "visual_tags": ["catalog-id"]
 }

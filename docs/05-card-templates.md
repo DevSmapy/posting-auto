@@ -6,12 +6,13 @@
 
 ## 한눈에 보기
 
-저장소에는 **서로 다른 렌더 경로**가 두 갈래 있습니다. 이름이 비슷한 HTML이어도 역할이 다릅니다.
+저장소에는 **서로 다른 렌더 경로**가 세 갈래 있습니다. 이름이 비슷한 HTML이어도 역할이 다릅니다.
 
 | 경로 | 캔버스 | 스타일 | 용도 |
 |------|--------|--------|------|
 | [`templates/cards/*.html`](../templates/cards/) (루트) | 1080×1080 | 다크 | 파이프라인·내러티브 번들용 단순 슬라이드 |
 | [`templates/cards/editorial/`](../templates/cards/editorial/) | 1080×1350 | 라이트·에디토리얼 | **재사용 UI 템플릿** (플레이스홀더만) |
+| [`templates/cards/infographic/`](../templates/cards/infographic/) | 1080×1080 | 라이트·요약 | **블로그 인포그래픽 1장** (썸네일 겸 본문 상단) |
 
 ```mermaid
 flowchart LR
@@ -19,8 +20,10 @@ flowchart LR
   assembler[CardAssembler_or_Narrative]
   rootHtml[root_1080x1080_HTML]
   editorial[editorial_placeholders]
+  onepager[infographic_onepager]
   png[CardRenderer_PNG]
   briefing --> assembler --> rootHtml --> png
+  briefing --> onepager --> png
   editorial --> png
 ```
 
@@ -31,11 +34,17 @@ templates/cards/
 ├── disclaimer.html
 ├── hook.html
 ├── cta.html
-└── editorial/          # 에디토리얼 세트 (라이트)
+├── editorial/          # 에디토리얼 세트 (라이트)
+│   ├── design-system.css
+│   ├── 01-hook.html
+│   ├── …
+│   └── 08-cta.html
+└── infographic/        # 블로그 인포그래픽 1장
     ├── design-system.css
-    ├── 01-hook.html
-    ├── …
-    └── 08-cta.html
+    ├── onepager.html
+    ├── pictograms.svg
+    ├── pictograms.json
+    └── ICONS-LICENSE.md
 ```
 
 번들 메타(장수·역할·추천 주제)는 [`scripts/cards/bundles/*.json`](../scripts/cards/bundles/)에 있습니다.
@@ -140,7 +149,58 @@ uv run python scripts/preview_cardnews.py --bundle editorial_carousel
 
 ---
 
-## 3) 번들 카탈로그 (`scripts/cards/bundles/`)
+## 3) 블로그 인포그래픽 (`templates/cards/infographic/`)
+
+브리핑 전체를 **1080×1080 PNG 한 장**으로 요약합니다. 블로그 썸네일과 본문 상단 요약을 겸하며, 인스타 캐러셀과는 별개 산출물입니다(카드 장수·게시 순서에 영향 없음).
+
+### 레이아웃 슬롯
+
+| 영역 | 슬롯 | 내용 |
+|------|------|------|
+| 헤더 | `brand`, `date`, `kicker` | 브랜드·날짜·고정 라벨 |
+| 리드 | `title`, `intro` | 헤드라인 + 도입 한 줄 |
+| 대표 신호 3 | `story_N_index/title/body/icon` | stories 앞 3건 (원본 3~5건은 `briefing.md`에 그대로 유지) |
+| 영향 4칸 | `impact_N_label/body/icon` | `market_impact` 긍정/중립/부정 + 다음 관전 포인트 |
+| 인사이트 | `insight` | 한 줄 마무리 |
+
+모든 슬롯은 HTML escape → 글자 수 제한 → 빈 값이면 `is-empty` 폴백을 거칩니다. 외부 폰트·이미지 URL을 쓰지 않아 Browserless와 로컬 Chrome이 같은 결과를 냅니다.
+
+### 픽토그램 카탈로그
+
+이모지 대신 로컬 SVG sprite를 씁니다. [`pictograms.json`](../templates/cards/infographic/pictograms.json)에 **48종 + `generic` 폴백**이 있고, 각 항목은 `id`·한/영 태그·우선순위를 가지며 [`pictograms.svg`](../templates/cards/infographic/pictograms.svg)의 symbol ID와 1:1로 검증됩니다(테스트가 강제).
+
+| 그룹 | 예시 id |
+|------|---------|
+| 거시·지표 | `inflation`, `interest-rate`, `exchange-rate`, `economic-indicator`, `employment` |
+| 금융·시장 | `stock-market`, `bond`, `bank`, `central-bank`, `fund`, `investment`, `volatility` |
+| 정책·제도 | `policy`, `regulation`, `tax`, `budget`, `parliament`, `court`, `government` |
+| 산업 | `semiconductor`, `automobile`, `energy`, `shipbuilding`, `steel`, `chemical`, `bio`, `ai`, `telecom` |
+| 생활·부동산 | `real-estate`, `housing-lease`, `construction`, `consumer`, `loan`, `payment` |
+| 국제·기타 | `global`, `trade`, `tariff`, `oil`, `commodity`, `gold`, `shipping` |
+| 방향 | `trend-up`, `trend-down` (기사에 명시적 방향 키워드가 있을 때만) |
+
+선택은 **코드가 결정**합니다. fact-layer LLM은 `visual_tags`로 후보만 제안하고, 카탈로그에 없는 값은 story 실패로 보지 않고 버립니다.
+
+```text
+유효한 visual_tags → headline/source 주제어 → one_liner/body → generic
+(동점은 카탈로그 priority로 고정)
+```
+
+아이콘은 Lucide geometry 관례를 따라 직접 작성했습니다. 출처·라이선스 메모: [`ICONS-LICENSE.md`](../templates/cards/infographic/ICONS-LICENSE.md).
+
+### 렌더 · 산출물
+
+```python
+from cards import export_infographic
+export_infographic(briefing, render_dir / "infographic", brand="경제 브리핑", date="2026.08.23")
+# → infographic.html / infographic.png / infographic.json(선택 근거)
+```
+
+파이프라인 경로와 수동 첨부 절차는 [04. 발행·워크플로](04-publishing.md#블로그-인포그래픽)를 보세요.
+
+---
+
+## 4) 번들 카탈로그 (`scripts/cards/bundles/`)
 
 내러티브·운영 템플릿의 **스펙**(장수, role, 추천 주제)을 JSON으로 보관합니다.  
 HTML 파일 자체가 아니라 **어떤 슬라이드 순서로 글을 쓸지**에 대한 정의입니다.
@@ -163,7 +223,7 @@ uv run python scripts/preview_cardnews.py --list-bundles
 
 ---
 
-## 4) 새 템플릿을 추가할 때 (권장)
+## 5) 새 템플릿을 추가할 때 (권장)
 
 다른 도구·AI로 UI를 더 만들 경우, **에디토리얼 패턴을 복제**하는 것을 권장합니다.
 
@@ -177,11 +237,12 @@ uv run python scripts/preview_cardnews.py --list-bundles
 
 ---
 
-## 5) 관련 코드·문서
+## 6) 관련 코드·문서
 
 | 경로 | 설명 |
 |------|------|
 | [`scripts/cards/`](../scripts/cards/) | Assembler / Caption / Renderer / Editorial |
+| [`scripts/cards/infographic.py`](../scripts/cards/infographic.py) | 픽토그램 결정 + 인포그래픽 슬롯·PNG |
 | [`scripts/preview_cardnews.py`](../scripts/preview_cardnews.py) | 로컬 MVP 미리보기 CLI |
 | [`docs/04-publishing.md`](04-publishing.md) | 발행·캡션·`PUBLISH_CARDS` |
 | [`docs/00-mvp-quickstart.md`](00-mvp-quickstart.md) | 빠른 실행 |

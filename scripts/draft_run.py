@@ -264,6 +264,7 @@ class DraftRunStore:
             shutil.copy2(md_path, final / "briefing.md")
         if html_path and html_path.is_file():
             shutil.copy2(html_path, final / "briefing.html")
+        # Kept beside briefing.md, and out of the Instagram PNG list on purpose.
         if infographic_png and Path(infographic_png).is_file():
             shutil.copy2(infographic_png, final / "infographic.png")
         cards_out = final / "cards"

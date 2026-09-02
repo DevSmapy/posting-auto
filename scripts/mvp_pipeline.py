@@ -41,6 +41,8 @@ from cards import (  # noqa: E402
     InstagramPost,
     Slide,
     export_infographic,
+    validate_visual_tags,
+    visual_tag_options,
 )
 from notify import GateAction, GateStage, get_notifier, resolve_channel  # noqa: E402
 from notify.approve_copy import (  # noqa: E402
@@ -84,6 +86,7 @@ from story_quality import (  # noqa: E402
 from editorial import (  # noqa: E402
     auto_publish_enabled,
     human_gates_enabled,
+    humanize_stories,
     run_editorial_loop,
 )
 from editorial.validator import quality_gate_briefing  # noqa: E402
@@ -1066,6 +1069,7 @@ def summarize_story_fact_llm(article: dict[str, Any], now: datetime) -> tuple[di
         read_prompt("story_fact_user.md")
         .replace("{{date}}", now.strftime("%Y-%m-%d"))
         .replace("{{article_json}}", json.dumps(payload, ensure_ascii=False, indent=2))
+        .replace("{{visual_tag_options}}", ", ".join(visual_tag_options()))
     )
     parsed, raw = ollama_chat(
         read_prompt("story_fact_system.md"),
@@ -1163,6 +1167,10 @@ def summarize_story_layers(
     try:
         fact, fact_raw = summarize_story_fact_llm(article, now)
         debug["fact"] = {"parsed": fact, "raw": fact_raw}
+        # The fact layer is the only place tags are proposed; carry them past the
+        # translate/polish schemas, which drop unknown keys.
+        visual_tags, rejected_tags = validate_visual_tags(fact.get("visual_tags"))
+        debug["visual_tags"] = {"kept": visual_tags, "rejected": rejected_tags}
 
         translated, translated_raw = translate_story_fact_llm(fact, article, now)
         debug["translated"] = {"parsed": translated, "raw": translated_raw}
@@ -1171,6 +1179,7 @@ def summarize_story_layers(
         issues = validate_story_fields(repaired)
         debug["initial_issues"] = list(issues)
         if not issues:
+            repaired["visual_tags"] = visual_tags
             debug["final"] = dict(repaired)
             return repaired, debug
 
@@ -1183,11 +1192,35 @@ def summarize_story_layers(
             raise RuntimeError(
                 "story quality failed after polish: " + ", ".join(final_issues[:6])
             )
+        polished["visual_tags"] = visual_tags
         debug["final"] = dict(polished)
         return polished, debug
     except Exception as exc:  # noqa: BLE001
         _attach_story_debug(exc, debug)
         raise
+
+
+def humanize_story_language(
+    stories: list[dict[str, Any]],
+    articles: list[dict[str, Any]],
+    now: datetime,
+    run_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Conditional Korean post-edit; runs before card/markdown surfaces are built."""
+    by_url = {a.get("link"): a for a in articles if a.get("link")}
+
+    def polish(story: dict[str, Any], issues: list[str]) -> dict[str, Any]:
+        article = by_url.get(story.get("source_url")) or {}
+        polished, _raw = polish_story_llm(story, issues, article, now)
+        return polished
+
+    cleaned, result = humanize_stories(stories, polish=polish, run_dir=run_dir)
+    if result["flagged"]:
+        print(
+            f"   humanize flagged={result['flagged']} "
+            f"applied={result['applied']} rolled_back={result['rolled_back']}"
+        )
+    return cleaned
 
 
 def build_briefing(
@@ -1232,6 +1265,7 @@ def build_briefing(
             encoding="utf-8",
         )
 
+    stories = humanize_story_language(stories, articles, now, run_dir)
     briefing = assemble_briefing_from_stories(stories, now)
     if llm_ok == 0:
         mode = "heuristic"
@@ -1532,7 +1566,10 @@ def infographic_png(run_dir: Path) -> Path | None:
 
 
 def adopt_infographic(run_dir: Path, source: Path | None = None) -> str:
-    """Copy the approved infographic next to briefing.md and return its link name."""
+    """Copy the approved infographic next to briefing.md and return its link name.
+
+    An empty return means markdown must not link an image at all.
+    """
     found = Path(source) if source else infographic_png(run_dir)
     if found is None or not found.is_file():
         print("   !! infographic missing — markdown keeps text only")
