@@ -228,18 +228,20 @@ class WebsitePublisher:
         try:
             when = published_at_of(briefing, now)
             slug = article_slug(briefing, when)
+            dest = unique_post_path(self.posts_dir, slug, display_title(briefing))
             graphic = None
             if not dry_run and self._want_graphic(content):
                 from .site_graphics import write_site_infographic
 
+                source = content.get("graphic_png")
                 graphic = write_site_infographic(
                     briefing,
-                    slug,
+                    dest.stem,
                     self.images_dir,
                     now=when,
                     renderer=self.renderer,
+                    source_png=Path(source) if source else None,
                 )
-            dest = unique_post_path(self.posts_dir, slug, display_title(briefing))
             _, rendered = render_post(briefing, markdown, now, graphic=graphic)
             if not dry_run:
                 self.posts_dir.mkdir(parents=True, exist_ok=True)
@@ -403,6 +405,7 @@ def publish_approved_briefing(
     *,
     now: datetime | None = None,
     dry_run: bool | None = None,
+    infographic_path: Path | None = None,
 ) -> dict[str, Any]:
     """Write site Markdown, optionally git-push and verify the live URL."""
     if not website_publish_enabled():
@@ -418,7 +421,13 @@ def publish_approved_briefing(
         }
     publisher = WebsitePublisher(posts_dir_from_env())
     result = publisher.publish(
-        {"briefing": briefing, "markdown": markdown, "now": now, "dry_run": dry_run}
+        {
+            "briefing": briefing,
+            "markdown": markdown,
+            "now": now,
+            "dry_run": dry_run,
+            "graphic_png": infographic_path,
+        }
     )
     failed = result.status == "failed"
     payload: dict[str, Any] = {

@@ -278,6 +278,65 @@ class WebsitePublisherTest(unittest.TestCase):
             pngs = list(images.glob("*-infographic.png"))
             self.assertEqual(len(pngs), 1)
 
+    def test_approved_png_is_copied_instead_of_redrawn(self) -> None:
+        def boom(_html: str, _out: Path) -> None:
+            raise AssertionError("approved PNG should not be re-rendered")
+
+        from cards.renderer import CardRenderer
+
+        with TemporaryDirectory() as tmp:
+            posts = Path(tmp) / "posts"
+            images = Path(tmp) / "images"
+            approved = Path(tmp) / "approved.png"
+            approved.write_bytes(b"APPROVED")
+            publisher = WebsitePublisher(
+                posts, images_dir=images, renderer=CardRenderer(screenshot_fn=boom)
+            )
+            result = publisher.publish(
+                {
+                    "briefing": BRIEFING_V2,
+                    "render_graphic": True,
+                    "graphic_png": approved,
+                }
+            )
+            self.assertEqual(result.status, "success")
+            dest = Path(result.detail or "")
+            png = images / f"{dest.stem}-infographic.png"
+            self.assertEqual(png.read_bytes(), b"APPROVED")
+            text = dest.read_text(encoding="utf-8")
+            self.assertIn(f'graphic: "/images/posts/{dest.stem}-infographic.png"', text)
+
+    def test_slug_collision_writes_a_matching_infographic_filename(self) -> None:
+        def fake_shot(_html: str, out_path: Path) -> None:
+            out_path.write_bytes(b"NEW")
+
+        from cards.renderer import CardRenderer
+
+        with TemporaryDirectory() as tmp:
+            posts = Path(tmp) / "posts"
+            images = Path(tmp) / "images"
+            posts.mkdir()
+            images.mkdir()
+            slug, _rendered = render_post(BRIEFING_V2)
+            (posts / f"{slug}.md").write_text(
+                "---\ntitle: \"다른 글\"\n---\nkeep\n",
+                encoding="utf-8",
+            )
+            original_png = images / f"{slug}-infographic.png"
+            original_png.write_bytes(b"KEEP")
+            publisher = WebsitePublisher(
+                posts, images_dir=images, renderer=CardRenderer(screenshot_fn=fake_shot)
+            )
+            result = publisher.publish({"briefing": BRIEFING_V2, "render_graphic": True})
+            self.assertEqual(result.status, "success")
+            dest = Path(result.detail or "")
+            self.assertEqual(dest.name, f"{slug}-2.md")
+            self.assertEqual(original_png.read_bytes(), b"KEEP")
+            sibling = images / f"{slug}-2-infographic.png"
+            self.assertTrue(sibling.is_file())
+            text = dest.read_text(encoding="utf-8")
+            self.assertIn(f'graphic: "/images/posts/{slug}-2-infographic.png"', text)
+
 
 if __name__ == "__main__":
     unittest.main()

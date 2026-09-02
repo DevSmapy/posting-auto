@@ -1655,7 +1655,7 @@ def run_publish(
     )
 
     website_result = publish_approved_briefing(
-        briefing, md, run_dir, now=now
+        briefing, md, run_dir, now=now, infographic_path=infographic_path
     )
     if website_result.get("status") == "failed":
         website_detail = (
@@ -1921,6 +1921,13 @@ def apply_editorial_pass(
             polished, _raw = polish_story_llm(story, issues, article, now)
         out = _with_story_source(deterministic_story_repair(polished), article)
         out.pop("_fallback", None)
+        kept, _rejected = validate_visual_tags(
+            out.get("visual_tags") or story.get("visual_tags")
+        )
+        if kept:
+            out["visual_tags"] = kept
+        else:
+            out.pop("visual_tags", None)
         return out
 
     result = run_editorial_loop(
@@ -1933,6 +1940,12 @@ def apply_editorial_pass(
     decision = result.get("editor_decision") or {}
     out_briefing = result.get("briefing") or briefing
     if decision.get("decision") == "publish":
+        stories = [
+            s for s in (out_briefing.get("stories") or []) if isinstance(s, dict)
+        ]
+        stories = humanize_story_language(stories, picked, now, run_dir)
+        out_briefing = dict(out_briefing)
+        out_briefing["stories"] = stories
         out_briefing = rebuild_briefing_surfaces(out_briefing, now)
         result = dict(result)
         result["briefing"] = out_briefing

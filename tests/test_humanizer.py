@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -234,6 +235,89 @@ class PipelineWiringTest(unittest.TestCase):
             self.assertTrue((Path(tmp) / "humanize_result.json").exists())
         self.assertEqual([articles[1]], seen)
         self.assertIn("가계 이자 부담", out[0]["why_important"])
+
+
+class EditorialPassWiringTest(unittest.TestCase):
+    def test_rewrite_keeps_visual_tags_from_the_original_story(self) -> None:
+        from datetime import datetime, timezone
+        from unittest.mock import patch
+
+        import mvp_pipeline
+
+        original = story(visual_tags=["semiconductor", "rocket"])
+        briefing = {
+            "title": "t",
+            "stories": [original],
+            "intro": "intro",
+            "insight": "insight",
+        }
+
+        def fake_loop(briefing_in, rewrite_story=None, **_kwargs):  # noqa: ANN001
+            rewritten = rewrite_story(briefing_in["stories"][0], {"risk_flags": ["depth"]})
+            out = dict(briefing_in)
+            out["stories"] = [rewritten]
+            return {
+                "briefing": out,
+                "editor_decision": {"decision": "publish", "story_count": 1},
+                "revision_count": 1,
+            }
+
+        def fake_polish(story_in, _issues, _article, _now):  # noqa: ANN001
+            dropped = dict(story_in)
+            dropped.pop("visual_tags", None)
+            dropped["why_important"] = "환율이 수입 물가와 수출 채산성에 동시에 영향을 줍니다."
+            return dropped, "raw"
+
+        now = datetime(2026, 8, 22, tzinfo=timezone.utc)
+        with (
+            patch.dict(os.environ, {"BRIEFING_MODE": "llm"}, clear=False),
+            patch("mvp_pipeline.run_editorial_loop", side_effect=fake_loop),
+            patch("mvp_pipeline.polish_story_llm", side_effect=fake_polish),
+            patch("mvp_pipeline.humanize_story_language", side_effect=lambda stories, *a, **k: stories),
+        ):
+            out, _result = mvp_pipeline.apply_editorial_pass(
+                briefing, [{"link": original["source_url"]}], now, None
+            )
+        self.assertEqual(["semiconductor"], out["stories"][0]["visual_tags"])
+
+    def test_publish_humanizes_after_editorial_rewrite(self) -> None:
+        from datetime import datetime, timezone
+        from unittest.mock import patch
+
+        import mvp_pipeline
+
+        briefing = {"title": "t", "stories": [story()], "intro": "i", "insight": "n"}
+        order: list[str] = []
+
+        def fake_loop(briefing_in, rewrite_story=None, **_kwargs):  # noqa: ANN001
+            order.append("rewrite")
+            rewritten = rewrite_story(briefing_in["stories"][0], {"risk_flags": ["depth"]})
+            out = dict(briefing_in)
+            out["stories"] = [rewritten]
+            return {
+                "briefing": out,
+                "editor_decision": {"decision": "publish", "story_count": 1},
+                "revision_count": 1,
+            }
+
+        def fake_humanize(stories, *_args, **_kwargs):  # noqa: ANN001
+            order.append("humanize")
+            return stories
+
+        now = datetime(2026, 8, 22, tzinfo=timezone.utc)
+        with (
+            patch.dict(os.environ, {"BRIEFING_MODE": "llm"}, clear=False),
+            patch("mvp_pipeline.run_editorial_loop", side_effect=fake_loop),
+            patch(
+                "mvp_pipeline.polish_story_llm",
+                side_effect=lambda s, *a, **k: (dict(s), "raw"),
+            ),
+            patch("mvp_pipeline.humanize_story_language", side_effect=fake_humanize),
+        ):
+            mvp_pipeline.apply_editorial_pass(
+                briefing, [{"link": story()["source_url"]}], now, None
+            )
+        self.assertEqual(["rewrite", "humanize"], order)
 
 
 if __name__ == "__main__":

@@ -70,10 +70,18 @@ def write_site_infographic(
     *,
     now: datetime | None = None,
     renderer: CardRenderer | None = None,
+    source_png: Path | None = None,
 ) -> str | None:
-    """Write ``{slug}-infographic.png``. Return the public path, or None on skip."""
+    """Write ``{slug}-infographic.png``. Return the public path, or None on skip.
+
+    ``source_png`` copies an already-approved render instead of drawing again.
+    """
     dest_dir = Path(images_dir) if images_dir else DEFAULT_IMAGES_DIR
     dest_dir.mkdir(parents=True, exist_ok=True)
+    target = dest_dir / f"{slug}-infographic.png"
+    if source_png is not None and Path(source_png).is_file():
+        shutil.copyfile(source_png, target)
+        return graphic_relpath(slug)
     when = published_at_of(briefing, now).astimezone(SEOUL)
     date = f"{when.month}월 {when.day}일"
     work = dest_dir / f".{slug}-infographic-work"
@@ -90,7 +98,6 @@ def write_site_infographic(
     if not png or result.get("error"):
         shutil.rmtree(work, ignore_errors=True)
         return None
-    target = dest_dir / f"{slug}-infographic.png"
     shutil.copyfile(png, target)
     shutil.rmtree(work, ignore_errors=True)
     return graphic_relpath(slug)
