@@ -6,12 +6,14 @@
 cd website
 npm install
 npm run dev
+npm test
 SITE_BASE_URL=https://briefing.example npm run build
 ```
 
 - 글꼴: Pretendard Variable (`public/fonts`, SIL OFL)
 - 콘텐츠: `src/content/posts/*.md`
-- 사이트 URL: `SITE_BASE_URL`. `astro build`에는 필수(비어 있으면 실패). `astro dev`만 비어 있으면 `https://briefing.example`를 쓴다.
+- 사이트 URL: `SITE_BASE_URL`. `astro build`에는 필수이지만, Vercel 빌드는 `VERCEL_PROJECT_PRODUCTION_URL` / `VERCEL_URL`로 채운다. `astro dev`만 비어 있으면 `https://briefing.example`를 쓴다.
+- 호스팅: Vercel. 이 디렉터리가 프로젝트 루트다 (`vercel.json`). GitHub 앱을 연결하면 `main` 푸시가 프로덕션으로 올라간다.
 
 파이프라인 환경 변수:
 
